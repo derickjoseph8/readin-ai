@@ -1,0 +1,70 @@
+# ReadIn AI Backend - Docker Compose
+# Usage: docker-compose up -d
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: readin-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: readin
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-readin_secure_password}
+      POSTGRES_DB: readin_ai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U readin -d readin_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend
+  api:
+    build: .
+    container_name: readin-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://readin:${DB_PASSWORD:-readin_secure_password}@db:5432/readin_ai
+      JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_DAYS: 30
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      STRIPE_PRICE_MONTHLY: ${STRIPE_PRICE_MONTHLY}
+      TRIAL_DAYS: 7
+      TRIAL_DAILY_LIMIT: 10
+      APP_NAME: ReadIn AI
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Reverse Proxy (optional, for production)
+  nginx:
+    image: nginx:alpine
+    container_name: readin-nginx
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    profiles:
+      - production
+
+volumes:
+  postgres_data:

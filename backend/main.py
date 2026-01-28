@@ -1,0 +1,326 @@
+"""ReadIn AI Backend API - Authentication, Subscriptions, Usage Tracking."""
+
+import os
+from datetime import date, datetime
+from typing import Optional
+
+import stripe
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Header
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+
+from config import (
+    STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_MONTHLY,
+    TRIAL_DAILY_LIMIT, APP_NAME
+)
+from database import get_db, init_db
+from models import User, DailyUsage
+from schemas import (
+    UserCreate, UserLogin, Token, UserResponse, UserStatus,
+    CreateCheckoutSession, CheckoutSessionResponse, UsageResponse
+)
+from auth import (
+    hash_password, verify_password, create_access_token, get_current_user
+)
+from stripe_handler import (
+    create_checkout_session, create_billing_portal_session,
+    handle_checkout_completed, handle_subscription_updated,
+    handle_subscription_deleted
+)
+
+# Initialize FastAPI
+app = FastAPI(
+    title=f"{APP_NAME} API",
+    version="1.0.0",
+    description="Backend API for ReadIn AI - Real-time AI assistant for live conversations",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
+
+# Initialize Stripe
+if STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
+else:
+    print("WARNING: STRIPE_SECRET_KEY not configured. Payment features disabled.")
+
+# CORS - allow desktop app and web
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.on_event("startup")
+def startup():
+    """Initialize database and verify configuration on startup."""
+    print()
+    print("=" * 50)
+    print(f"  {APP_NAME} Backend Starting...")
+    print("=" * 50)
+
+    # Initialize database
+    try:
+        init_db()
+        print("  [OK] Database connected")
+    except Exception as e:
+        print(f"  [ERROR] Database connection failed: {e}")
+        raise
+
+    # Verify Stripe configuration
+    if STRIPE_SECRET_KEY:
+        try:
+            stripe.Account.retrieve()
+            print("  [OK] Stripe configured")
+        except stripe.error.AuthenticationError:
+            print("  [WARNING] Invalid Stripe API key")
+    else:
+        print("  [WARNING] Stripe not configured")
+
+    if STRIPE_WEBHOOK_SECRET:
+        print("  [OK] Stripe webhook secret configured")
+    else:
+        print("  [WARNING] Stripe webhook secret not configured")
+
+    if STRIPE_PRICE_MONTHLY:
+        print(f"  [OK] Stripe price ID: {STRIPE_PRICE_MONTHLY[:20]}...")
+    else:
+        print("  [WARNING] Stripe price ID not configured")
+
+    print()
+    print(f"  Trial: {TRIAL_DAILY_LIMIT} responses/day for 7 days")
+    print("  API Docs: http://localhost:8000/docs")
+    print("=" * 50)
+    print()
+
+
+# ============== Auth Endpoints ==============
+
+@app.post("/auth/register", response_model=Token)
+def register(user_data: UserCreate, db: Session = Depends(get_db)):
+    """Register a new user."""
+    # Check if email exists
+    existing = db.query(User).filter(User.email == user_data.email).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+
+    # Create user
+    user = User(
+        email=user_data.email,
+        hashed_password=hash_password(user_data.password),
+        full_name=user_data.full_name,
+        subscription_status="trial"
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    # Return token
+    token = create_access_token(user.id)
+    return Token(access_token=token)
+
+
+@app.post("/auth/login", response_model=Token)
+def login(credentials: UserLogin, db: Session = Depends(get_db)):
+    """Login and get access token."""
+    user = db.query(User).filter(User.email == credentials.email).first()
+
+    if not user or not verify_password(credentials.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+
+    token = create_access_token(user.id)
+    return Token(access_token=token)
+
+
+# ============== User Endpoints ==============
+
+@app.get("/user/me", response_model=UserResponse)
+def get_me(user: User = Depends(get_current_user)):
+    """Get current user info."""
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        subscription_status=user.subscription_status,
+        trial_days_remaining=user.trial_days_remaining,
+        is_active=user.is_active,
+        created_at=user.created_at
+    )
+
+
+@app.get("/user/status", response_model=UserStatus)
+def get_status(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get user status for desktop app - subscription and usage info."""
+    today = date.today()
+
+    # Get today's usage
+    usage = db.query(DailyUsage).filter(
+        DailyUsage.user_id == user.id,
+        DailyUsage.date == today
+    ).first()
+
+    daily_count = usage.response_count if usage else 0
+
+    # Determine limits
+    if user.subscription_status == "active":
+        daily_limit = None  # Unlimited
+        can_use = True
+    elif user.is_trial:
+        daily_limit = TRIAL_DAILY_LIMIT
+        can_use = daily_count < TRIAL_DAILY_LIMIT
+    else:
+        daily_limit = 0
+        can_use = False
+
+    return UserStatus(
+        is_active=user.is_active,
+        subscription_status=user.subscription_status,
+        trial_days_remaining=user.trial_days_remaining,
+        daily_usage=daily_count,
+        daily_limit=daily_limit,
+        can_use=can_use
+    )
+
+
+# ============== Usage Tracking ==============
+
+@app.post("/usage/increment", response_model=UsageResponse)
+def increment_usage(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Increment daily usage count. Called by desktop app after each AI response."""
+    today = date.today()
+
+    # Get or create today's usage record
+    usage = db.query(DailyUsage).filter(
+        DailyUsage.user_id == user.id,
+        DailyUsage.date == today
+    ).first()
+
+    if not usage:
+        usage = DailyUsage(user_id=user.id, date=today, response_count=0)
+        db.add(usage)
+
+    # Check limit for trial users
+    if user.subscription_status != "active" and user.is_trial:
+        if usage.response_count >= TRIAL_DAILY_LIMIT:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Daily limit of {TRIAL_DAILY_LIMIT} responses reached. Upgrade for unlimited access."
+            )
+
+    # Increment
+    usage.response_count += 1
+    db.commit()
+
+    # Calculate remaining
+    if user.subscription_status == "active":
+        limit = None
+        remaining = None
+    else:
+        limit = TRIAL_DAILY_LIMIT
+        remaining = max(0, TRIAL_DAILY_LIMIT - usage.response_count)
+
+    return UsageResponse(
+        date=str(today),
+        count=usage.response_count,
+        limit=limit,
+        remaining=remaining
+    )
+
+
+# ============== Subscription Endpoints ==============
+
+@app.post("/subscription/create-checkout", response_model=CheckoutSessionResponse)
+def create_checkout(
+    data: CreateCheckoutSession,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create Stripe checkout session for subscription."""
+    price_id = data.price_id or STRIPE_PRICE_MONTHLY
+
+    checkout_url = create_checkout_session(
+        user=user,
+        db=db,
+        success_url="https://getreadin.ai/success?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url="https://getreadin.ai/pricing"
+    )
+
+    return CheckoutSessionResponse(checkout_url=checkout_url)
+
+
+@app.post("/subscription/manage")
+def manage_subscription(user: User = Depends(get_current_user)):
+    """Get Stripe billing portal URL to manage subscription."""
+    portal_url = create_billing_portal_session(
+        user=user,
+        return_url="https://getreadin.ai/account"
+    )
+    return {"portal_url": portal_url}
+
+
+@app.get("/subscription/status")
+def subscription_status(user: User = Depends(get_current_user)):
+    """Get current subscription status."""
+    return {
+        "status": user.subscription_status,
+        "subscription_id": user.subscription_id,
+        "end_date": user.subscription_end_date.isoformat() if user.subscription_end_date else None,
+        "is_active": user.is_active
+    }
+
+
+# ============== Stripe Webhooks ==============
+
+@app.post("/webhooks/stripe")
+async def stripe_webhook(
+    request: Request,
+    stripe_signature: Optional[str] = Header(None, alias="Stripe-Signature"),
+    db: Session = Depends(get_db)
+):
+    """Handle Stripe webhook events."""
+    if not STRIPE_WEBHOOK_SECRET:
+        raise HTTPException(status_code=500, detail="Webhook secret not configured")
+
+    payload = await request.body()
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, stripe_signature, STRIPE_WEBHOOK_SECRET
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    # Handle events
+    if event["type"] == "checkout.session.completed":
+        handle_checkout_completed(event["data"]["object"], db)
+
+    elif event["type"] == "customer.subscription.updated":
+        handle_subscription_updated(event["data"]["object"], db)
+
+    elif event["type"] == "customer.subscription.deleted":
+        handle_subscription_deleted(event["data"]["object"], db)
+
+    return {"status": "ok"}
+
+
+# ============== Health Check ==============
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy", "app": APP_NAME}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

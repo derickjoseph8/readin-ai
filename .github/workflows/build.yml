@@ -1,0 +1,131 @@
+name: Build ReadIn AI
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build Windows executable
+        run: |
+          pyinstaller --clean --noconfirm build.spec
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReadInAI-Windows
+          path: dist/ReadInAI/
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+          brew install portaudio
+
+      - name: Build macOS app
+        run: |
+          pyinstaller --clean --noconfirm \
+            --name ReadInAI \
+            --windowed \
+            --add-data "assets:assets" \
+            --add-data "config.py:." \
+            main.py
+
+      - name: Create DMG
+        run: |
+          mkdir -p dist/dmg
+          cp -r "dist/ReadInAI.app" dist/dmg/
+          hdiutil create -volname "ReadIn AI" -srcfolder dist/dmg -ov -format UDZO dist/ReadInAI-macOS.dmg
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReadInAI-macOS
+          path: dist/ReadInAI-macOS.dmg
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libportaudio2 libasound2-dev libxcb-cursor0
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Build Linux executable
+        run: |
+          pyinstaller --clean --noconfirm \
+            --name ReadInAI \
+            --onedir \
+            --add-data "assets:assets" \
+            --add-data "config.py:." \
+            main.py
+
+      - name: Create tarball
+        run: |
+          cd dist
+          tar -czvf ReadInAI-Linux.tar.gz ReadInAI/
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReadInAI-Linux
+          path: dist/ReadInAI-Linux.tar.gz
+
+  release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ReadInAI-Windows/**
+            ReadInAI-macOS/**
+            ReadInAI-Linux/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
