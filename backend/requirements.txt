@@ -9,3 +9,15 @@ python-dotenv>=1.0.0
 pydantic[email]>=2.5.0
 psycopg2-binary>=2.9.9
 httpx>=0.26.0
+
+# ML/AI Services
+anthropic>=0.18.0
+
+# Email Service
+sendgrid>=6.10.0
+
+# Background Scheduler
+apscheduler>=3.10.0
+
+# Jinja2 for email templates
+jinja2>=3.1.0

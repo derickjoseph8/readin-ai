@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pre-Meeting Briefing</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: #ffffff;
+            margin: 20px auto;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .header .meeting-title {
+            margin-top: 10px;
+            font-size: 18px;
+            opacity: 0.9;
+        }
+        .time-badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+        .content {
+            padding: 30px;
+        }
+        h2 {
+            color: #1e40af;
+            font-size: 16px;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #3b82f6;
+            display: flex;
+            align-items: center;
+        }
+        h2 .icon {
+            margin-right: 10px;
+        }
+        .summary {
+            background: #eff6ff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        .participant-card {
+            background: #f9fafb;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #3b82f6;
+        }
+        .participant-name {
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 5px;
+        }
+        .participant-role {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .participant-insight {
+            font-size: 14px;
+            color: #4b5563;
+        }
+        .suggested-topics {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .topic-tag {
+            background: #dbeafe;
+            color: #1d4ed8;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        .talking-points {
+            list-style: none;
+            padding: 0;
+        }
+        .talking-points li {
+            padding: 12px 0 12px 30px;
+            position: relative;
+            border-bottom: 1px solid #eee;
+        }
+        .talking-points li:before {
+            content: "💬";
+            position: absolute;
+            left: 0;
+        }
+        .follow-ups {
+            background: #fef3c7;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .follow-ups ul {
+            margin: 10px 0 0 0;
+            padding-left: 20px;
+        }
+        .follow-ups li {
+            margin: 8px 0;
+        }
+        .avoid-section {
+            background: #fee2e2;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .avoid-section h3 {
+            color: #991b1b;
+            margin-top: 0;
+            font-size: 14px;
+        }
+        .avoid-section ul {
+            margin: 10px 0 0 0;
+            padding-left: 20px;
+        }
+        .questions {
+            background: #f0fdf4;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .questions ul {
+            margin: 10px 0 0 0;
+            padding-left: 20px;
+        }
+        .questions li {
+            margin: 8px 0;
+            color: #166534;
+        }
+        .prep-tips {
+            display: grid;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .prep-tip {
+            display: flex;
+            align-items: flex-start;
+            padding: 10px;
+            background: #fafafa;
+            border-radius: 6px;
+        }
+        .prep-tip .icon {
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+        .cta {
+            text-align: center;
+            margin-top: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #eff6ff, #dbeafe);
+            border-radius: 8px;
+        }
+        .cta p {
+            margin-bottom: 15px;
+            font-weight: 500;
+        }
+        .btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .footer {
+            background: #1a1a1a;
+            color: #999;
+            padding: 25px;
+            text-align: center;
+            font-size: 12px;
+        }
+        .footer a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Pre-Meeting Briefing</h1>
+            <div class="meeting-title">{{ meeting_title }}</div>
+            <div class="time-badge">⏰ Meeting starts at {{ meeting_time }}</div>
+        </div>
+
+        <div class="content">
+            <div class="summary">
+                <strong>Quick Summary:</strong>
+                <p style="margin-bottom: 0;">{{ summary }}</p>
+            </div>
+
+            {% if participants %}
+            <h2><span class="icon">👥</span> Participant Insights</h2>
+            {% for participant in participants %}
+            <div class="participant-card">
+                <div class="participant-name">{{ participant.name }}</div>
+                {% if participant.role %}
+                <div class="participant-role">{{ participant.role }} {% if participant.company %}at {{ participant.company }}{% endif %}</div>
+                {% endif %}
+                <div class="participant-insight">{{ participant.key_insight }}</div>
+                {% if participant.suggested_topics %}
+                <div class="suggested-topics">
+                    {% for topic in participant.suggested_topics %}
+                    <span class="topic-tag">{{ topic }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            {% if talking_points %}
+            <h2><span class="icon">🎯</span> Talking Points</h2>
+            <ul class="talking-points">
+                {% for point in talking_points %}
+                <li>{{ point }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
+            {% if follow_up_items %}
+            <h2><span class="icon">📌</span> Items to Follow Up</h2>
+            <div class="follow-ups">
+                <p style="margin-top: 0;"><strong>Address these from previous interactions:</strong></p>
+                <ul>
+                    {% for item in follow_up_items %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if questions_to_ask %}
+            <h2><span class="icon">❓</span> Questions to Consider</h2>
+            <div class="questions">
+                <ul>
+                    {% for question in questions_to_ask %}
+                    <li>{{ question }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if topics_to_avoid %}
+            <div class="avoid-section">
+                <h3>⚠️ Topics to Avoid (Already Covered)</h3>
+                <ul>
+                    {% for topic in topics_to_avoid %}
+                    <li>{{ topic }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if preparation_tips %}
+            <h2><span class="icon">💡</span> Preparation Tips</h2>
+            <div class="prep-tips">
+                {% for tip in preparation_tips %}
+                <div class="prep-tip">
+                    <span class="icon">✓</span>
+                    <span>{{ tip }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="cta">
+                <p>Ready for your meeting? Good luck!</p>
+                <a href="{{ app_url }}" class="btn">Open ReadIn AI</a>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>This briefing was generated based on your meeting history and participant data.</p>
+            <p>
+                <a href="{{ preferences_url }}">Briefing Preferences</a> |
+                <a href="https://getreadin.ai">Visit Website</a>
+            </p>
+            <p style="margin-top: 15px;">© {{ year }} ReadIn AI. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

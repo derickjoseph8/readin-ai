@@ -34,6 +34,9 @@ from routes import (
     conversations_router, tasks_router, briefings_router, interviews_router
 )
 
+# Import scheduler
+from services.scheduler import start_scheduler, stop_scheduler
+
 # Initialize FastAPI
 app = FastAPI(
     title=f"{APP_NAME} API",
@@ -104,12 +107,30 @@ def startup():
     else:
         print("  [WARNING] Stripe price ID not configured")
 
+    # Start background scheduler
+    try:
+        start_scheduler()
+        print("  [OK] Background scheduler started")
+    except Exception as e:
+        print(f"  [WARNING] Scheduler failed to start: {e}")
+
     print()
     print(f"  Trial: {TRIAL_DAILY_LIMIT} responses/day for 14 days")
     print("  Premium: $29.99/month - Unlimited responses")
     print("  API Docs: http://localhost:8000/docs")
     print("=" * 50)
     print()
+
+
+@app.on_event("shutdown")
+def shutdown():
+    """Clean up resources on shutdown."""
+    print("Shutting down...")
+    try:
+        stop_scheduler()
+        print("  [OK] Scheduler stopped")
+    except Exception as e:
+        print(f"  [WARNING] Error stopping scheduler: {e}")
 
 
 # ============== Auth Endpoints ==============
