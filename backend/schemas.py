@@ -42,7 +42,7 @@ class ProfessionBase(BaseModel):
 
 
 class ProfessionCreate(ProfessionBase):
-    terminology: Optional[Dict[str, Any]] = None
+    terminology: Optional[List[str]] = None
     common_topics: Optional[List[str]] = None
     system_prompt_additions: Optional[str] = None
     communication_style: Optional[str] = None
@@ -51,7 +51,7 @@ class ProfessionCreate(ProfessionBase):
 
 class ProfessionResponse(ProfessionBase):
     id: int
-    terminology: Optional[Dict[str, Any]] = None
+    terminology: Optional[List[str]] = None
     common_topics: Optional[List[str]] = None
     communication_style: Optional[str] = None
     icon: Optional[str] = None
