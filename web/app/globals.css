@@ -10,32 +10,187 @@ html {
 
 body {
   font-family: 'Inter', system-ui, sans-serif;
+  background-color: #0a0a0a;
 }
 
 @layer utilities {
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-400;
+  /* Gold gradient text */
+  .text-gradient-gold {
+    background: linear-gradient(to right, #fbbf24, #fcd34d, #d4af37);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 
-  .glass {
-    @apply bg-white/10 backdrop-blur-lg border border-white/20;
+  /* Emerald gradient text */
+  .text-gradient-emerald {
+    background: linear-gradient(to right, #34d399, #6ee7b7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Premium glass effect */
+  .glass-gold {
+    background-color: rgba(22, 22, 22, 0.8);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(212, 175, 55, 0.2);
+  }
+
+  .glass-dark {
+    background-color: rgba(17, 17, 17, 0.8);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid #262626;
+  }
+
+  /* Gold glow effect */
+  .glow-gold {
+    box-shadow: 0 0 40px rgba(212, 175, 55, 0.15);
+  }
+
+  .glow-gold-sm {
+    box-shadow: 0 0 20px rgba(212, 175, 55, 0.1);
+  }
+
+  /* Emerald glow */
+  .glow-emerald {
+    box-shadow: 0 0 40px rgba(16, 185, 129, 0.15);
+  }
+
+  /* Card styles */
+  .card-premium {
+    background-color: #161616;
+    border: 1px solid #262626;
+    border-radius: 1rem;
+    transition: all 0.3s;
+  }
+
+  .card-premium:hover {
+    border-color: rgba(212, 175, 55, 0.3);
+  }
+
+  /* Button styles */
+  .btn-gold {
+    padding: 0.75rem 1.5rem;
+    background: linear-gradient(to right, #ca8a04, #d4af37, #ca8a04);
+    color: #0a0a0a;
+    font-weight: 600;
+    border-radius: 0.75rem;
+    transition: all 0.3s;
+  }
+
+  .btn-gold:hover {
+    box-shadow: 0 0 30px rgba(212, 175, 55, 0.2);
+    transform: translateY(-2px);
+  }
+
+  .btn-outline-gold {
+    padding: 0.75rem 1.5rem;
+    background: transparent;
+    border: 1px solid rgba(212, 175, 55, 0.5);
+    color: #fbbf24;
+    font-weight: 600;
+    border-radius: 0.75rem;
+    transition: all 0.3s;
+  }
+
+  .btn-outline-gold:hover {
+    background-color: rgba(212, 175, 55, 0.1);
+    border-color: #fbbf24;
+  }
+
+  .btn-ghost {
+    padding: 0.75rem 1.5rem;
+    background-color: #111111;
+    color: white;
+    font-weight: 500;
+    border-radius: 0.75rem;
+    border: 1px solid #262626;
+    transition: all 0.3s;
+  }
+
+  .btn-ghost:hover {
+    background-color: #161616;
+    border-color: #333333;
+  }
+
+  /* Shimmer animation for loading */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(212, 175, 55, 0) 0%,
+      rgba(212, 175, 55, 0.2) 50%,
+      rgba(212, 175, 55, 0) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
   }
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #1e293b;
+  background: #111111;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #475569;
-  border-radius: 4px;
+  background: #333333;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+  background: #444444;
+}
+
+/* Selection */
+::selection {
+  background-color: rgba(212, 175, 55, 0.3);
+  color: white;
+}
+
+/* Focus styles */
+*:focus-visible {
+  outline: 2px solid rgba(212, 175, 55, 0.5);
+  outline-offset: 2px;
+}
+
+/* Noise texture overlay */
+.noise::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.02;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Gradient borders */
+.gradient-border {
+  position: relative;
+  background: linear-gradient(#0a0a0a, #0a0a0a) padding-box,
+              linear-gradient(135deg, #d4af37 0%, #10b981 100%) border-box;
+  border: 1px solid transparent;
+}
+
+/* Animated gradient background */
+.animated-gradient {
+  background: linear-gradient(
+    45deg,
+    rgba(212, 175, 55, 0.05) 0%,
+    rgba(16, 185, 129, 0.05) 50%,
+    rgba(212, 175, 55, 0.05) 100%
+  );
+  background-size: 200% 200%;
+  animation: gradient-shift 8s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }

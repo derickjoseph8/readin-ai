@@ -2,39 +2,49 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, Sparkles } from 'lucide-react'
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-dark-950/80 backdrop-blur-lg border-b border-white/10">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-premium-bg/80 backdrop-blur-xl border-b border-premium-border">
+      {/* Announcement bar */}
+      <div className="bg-gradient-to-r from-gold-600/20 via-gold-500/20 to-gold-600/20 border-b border-gold-500/20">
+        <div className="max-w-7xl mx-auto px-4 py-2">
+          <p className="text-center text-sm text-gold-300">
+            <Sparkles className="inline h-4 w-4 mr-1" />
+            <span className="font-medium">Limited Time:</span> Extended 14-day free trial for new users
+          </p>
+        </div>
+      </div>
+
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">R</span>
+          <Link href="/" className="flex items-center space-x-2 group">
+            <div className="w-9 h-9 bg-gradient-to-br from-gold-400 to-gold-600 rounded-lg flex items-center justify-center shadow-gold-sm group-hover:shadow-gold transition-shadow">
+              <span className="text-premium-bg font-bold text-lg">R</span>
             </div>
-            <span className="text-xl font-bold text-white">ReadIn AI</span>
+            <span className="text-xl font-bold text-white">ReadIn <span className="text-gold-400">AI</span></span>
           </Link>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
-            <a href="#features" className="text-gray-300 hover:text-white transition">Features</a>
-            <a href="#how-it-works" className="text-gray-300 hover:text-white transition">How It Works</a>
-            <a href="#pricing" className="text-gray-300 hover:text-white transition">Pricing</a>
-            <a href="#faq" className="text-gray-300 hover:text-white transition">FAQ</a>
+            <a href="#features" className="text-gray-400 hover:text-gold-400 transition-colors">Features</a>
+            <a href="#how-it-works" className="text-gray-400 hover:text-gold-400 transition-colors">How It Works</a>
+            <a href="#pricing" className="text-gray-400 hover:text-gold-400 transition-colors">Pricing</a>
+            <a href="#faq" className="text-gray-400 hover:text-gold-400 transition-colors">FAQ</a>
           </div>
 
           {/* CTA Buttons */}
           <div className="hidden md:flex items-center space-x-4">
-            <Link href="/login" className="px-4 py-2 text-gray-300 hover:text-white transition">
+            <Link href="/login" className="px-4 py-2 text-gray-400 hover:text-white transition-colors">
               Login
             </Link>
             <Link
               href="/download"
-              className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-medium rounded-lg hover:opacity-90 transition"
+              className="px-5 py-2.5 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-lg hover:shadow-gold transition-all hover:-translate-y-0.5"
             >
               Download Free
             </Link>
@@ -42,7 +52,7 @@ export default function Header() {
 
           {/* Mobile menu button */}
           <button
-            className="md:hidden text-gray-300"
+            className="md:hidden text-gray-400 hover:text-white"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -51,15 +61,15 @@ export default function Header() {
 
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t border-white/10">
+          <div className="md:hidden py-4 border-t border-premium-border animate-fade-in">
             <div className="flex flex-col space-y-4">
-              <a href="#features" className="text-gray-300 hover:text-white transition" onClick={() => setMobileMenuOpen(false)}>Features</a>
-              <a href="#how-it-works" className="text-gray-300 hover:text-white transition" onClick={() => setMobileMenuOpen(false)}>How It Works</a>
-              <a href="#pricing" className="text-gray-300 hover:text-white transition" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
-              <a href="#faq" className="text-gray-300 hover:text-white transition" onClick={() => setMobileMenuOpen(false)}>FAQ</a>
+              <a href="#features" className="text-gray-400 hover:text-gold-400 transition-colors" onClick={() => setMobileMenuOpen(false)}>Features</a>
+              <a href="#how-it-works" className="text-gray-400 hover:text-gold-400 transition-colors" onClick={() => setMobileMenuOpen(false)}>How It Works</a>
+              <a href="#pricing" className="text-gray-400 hover:text-gold-400 transition-colors" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
+              <a href="#faq" className="text-gray-400 hover:text-gold-400 transition-colors" onClick={() => setMobileMenuOpen(false)}>FAQ</a>
               <Link
                 href="/download"
-                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-medium rounded-lg text-center"
+                className="px-5 py-2.5 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-lg text-center"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Download Free

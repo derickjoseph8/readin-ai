@@ -1,38 +1,126 @@
-"""Real-time speech-to-text using faster-whisper."""
+"""Real-time speech-to-text using faster-whisper with multi-language support."""
 
 import threading
 import queue
-from typing import Callable, Optional
+from typing import Callable, Optional, List, Tuple
 
 import numpy as np
 
 from config import WHISPER_MODEL
 
 
-class Transcriber:
-    """Real-time transcription using faster-whisper."""
+# Supported languages from Whisper
+SUPPORTED_LANGUAGES: List[Tuple[str, str]] = [
+    ("en", "English"),
+    ("es", "Spanish"),
+    ("fr", "French"),
+    ("de", "German"),
+    ("it", "Italian"),
+    ("pt", "Portuguese"),
+    ("nl", "Dutch"),
+    ("pl", "Polish"),
+    ("ru", "Russian"),
+    ("ja", "Japanese"),
+    ("zh", "Chinese"),
+    ("ko", "Korean"),
+    ("ar", "Arabic"),
+    ("hi", "Hindi"),
+    ("tr", "Turkish"),
+    ("vi", "Vietnamese"),
+    ("th", "Thai"),
+    ("id", "Indonesian"),
+    ("cs", "Czech"),
+    ("ro", "Romanian"),
+    ("hu", "Hungarian"),
+    ("el", "Greek"),
+    ("he", "Hebrew"),
+    ("sv", "Swedish"),
+    ("da", "Danish"),
+    ("fi", "Finnish"),
+    ("no", "Norwegian"),
+    ("uk", "Ukrainian"),
+]
 
-    def __init__(self, on_transcription: Callable[[str], None]):
+
+class Transcriber:
+    """Real-time transcription using faster-whisper with multi-language support."""
+
+    def __init__(
+        self,
+        on_transcription: Callable[[str], None],
+        on_error: Optional[Callable[[str], None]] = None,
+        language: str = "en",
+        model_name: str = WHISPER_MODEL
+    ):
+        """Initialize the transcriber.
+
+        Args:
+            on_transcription: Callback when transcription is ready
+            on_error: Optional callback for errors
+            language: Language code (e.g., 'en', 'es') or 'auto' for auto-detection
+            model_name: Whisper model to use
+        """
         self.on_transcription = on_transcription
+        self.on_error = on_error
         self._model = None
+        self._model_name = model_name
+        self._language = language if language != "auto" else None
         self._audio_queue: queue.Queue = queue.Queue()
         self._running = False
         self._thread: Optional[threading.Thread] = None
+        self._detected_language: Optional[str] = None
+
+    @staticmethod
+    def get_supported_languages() -> List[Tuple[str, str]]:
+        """Get list of supported languages.
+
+        Returns:
+            List of (code, name) tuples
+        """
+        return SUPPORTED_LANGUAGES.copy()
+
+    def set_language(self, language: str):
+        """Set the transcription language.
+
+        Args:
+            language: Language code (e.g., 'en') or 'auto' for auto-detection
+        """
+        self._language = language if language != "auto" else None
+        self._detected_language = None
+
+    def get_language(self) -> str:
+        """Get the current language setting."""
+        return self._language or "auto"
+
+    def get_detected_language(self) -> Optional[str]:
+        """Get the auto-detected language (if using auto-detection)."""
+        return self._detected_language
 
     def _load_model(self):
         """Load the Whisper model (lazy loading)."""
         if self._model is None:
-            from faster_whisper import WhisperModel
-            # Use CPU by default, can switch to CUDA if available
-            self._model = WhisperModel(
-                WHISPER_MODEL,
-                device="cpu",
-                compute_type="int8"  # Faster on CPU
-            )
+            try:
+                from faster_whisper import WhisperModel
+                # Use CPU by default, can switch to CUDA if available
+                self._model = WhisperModel(
+                    self._model_name,
+                    device="cpu",
+                    compute_type="int8"  # Faster on CPU
+                )
+            except Exception as e:
+                error_msg = f"Failed to load Whisper model: {e}"
+                print(error_msg)
+                if self.on_error:
+                    self.on_error(error_msg)
+                raise
 
     def _transcribe_loop(self):
         """Main transcription loop."""
-        self._load_model()
+        try:
+            self._load_model()
+        except Exception:
+            self._running = False
+            return
 
         while self._running:
             try:
@@ -42,17 +130,29 @@ class Transcriber:
                 if np.abs(audio_chunk).max() < 0.01:
                     continue
 
+                # Build transcription options
+                transcribe_options = {
+                    "beam_size": 1,  # Faster
+                    "vad_filter": True,  # Filter out non-speech
+                    "vad_parameters": {
+                        "min_silence_duration_ms": 500,
+                        "speech_pad_ms": 200,
+                    }
+                }
+
+                # Add language if specified
+                if self._language:
+                    transcribe_options["language"] = self._language
+
                 # Transcribe
                 segments, info = self._model.transcribe(
                     audio_chunk,
-                    beam_size=1,  # Faster
-                    language="en",
-                    vad_filter=True,  # Filter out non-speech
-                    vad_parameters=dict(
-                        min_silence_duration_ms=500,
-                        speech_pad_ms=200,
-                    )
+                    **transcribe_options
                 )
+
+                # Store detected language if auto-detecting
+                if not self._language and info.language:
+                    self._detected_language = info.language
 
                 # Collect transcription
                 text_parts = []
@@ -68,7 +168,10 @@ class Transcriber:
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"Transcription error: {e}")
+                error_msg = f"Transcription error: {e}"
+                print(error_msg)
+                if self.on_error:
+                    self.on_error(error_msg)
 
     def process_audio(self, audio_chunk: np.ndarray):
         """Add audio chunk to processing queue."""
@@ -94,3 +197,11 @@ class Transcriber:
     def is_running(self) -> bool:
         """Check if transcriber is active."""
         return self._running
+
+    def clear_queue(self):
+        """Clear any pending audio in the queue."""
+        try:
+            while True:
+                self._audio_queue.get_nowait()
+        except queue.Empty:
+            pass

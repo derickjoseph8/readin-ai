@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, HelpCircle } from 'lucide-react'
 
 const faqs = [
   {
@@ -22,7 +22,7 @@ const faqs = [
   },
   {
     question: 'What happens after my free trial?',
-    answer: 'After 7 days, you can continue with limited free usage (10 responses/day) or upgrade to Premium ($10/month) for unlimited responses. No credit card required to start your trial.',
+    answer: 'After 14 days, you can continue with limited free usage (10 responses/day) or upgrade to Premium ($19.99/month) for unlimited responses. No credit card required to start your trial.',
   },
   {
     question: 'Can I use it for in-person meetings?',
@@ -34,7 +34,7 @@ const faqs = [
   },
   {
     question: 'Can I customize the response style?',
-    answer: 'Currently, responses are optimized for quick scanning with 2-4 bullet points of 5-10 words each. We\'re working on customization options for future releases.',
+    answer: 'Yes! Premium users can customize system prompts with presets like Interview Coach, Technical Expert, Sales, and Executive modes, or create their own custom prompts.',
   },
 ]
 
@@ -46,9 +46,13 @@ export default function FAQ() {
       <div className="max-w-3xl mx-auto">
         {/* Section Header */}
         <div className="text-center mb-16">
+          <div className="inline-flex items-center px-4 py-2 bg-gold-500/10 border border-gold-500/30 rounded-full mb-6">
+            <HelpCircle className="h-4 w-4 text-gold-400 mr-2" />
+            <span className="text-sm text-gold-300">Got questions?</span>
+          </div>
           <h2 className="text-4xl md:text-5xl font-bold mb-6">
             Frequently Asked{' '}
-            <span className="text-gradient">Questions</span>
+            <span className="text-gradient-gold">Questions</span>
           </h2>
           <p className="text-xl text-gray-400">
             Everything you need to know about ReadIn AI.
@@ -60,26 +64,48 @@ export default function FAQ() {
           {faqs.map((faq, index) => (
             <div
               key={index}
-              className="bg-dark-900/50 rounded-xl border border-white/10 overflow-hidden"
+              className={`bg-premium-card rounded-xl border overflow-hidden transition-all duration-300 ${
+                openIndex === index
+                  ? 'border-gold-500/50 shadow-gold'
+                  : 'border-premium-border hover:border-gold-500/30'
+              }`}
             >
               <button
-                className="w-full px-6 py-4 flex items-center justify-between text-left"
+                className="w-full px-6 py-5 flex items-center justify-between text-left"
                 onClick={() => setOpenIndex(openIndex === index ? null : index)}
               >
-                <span className="font-medium pr-4">{faq.question}</span>
-                <ChevronDown
-                  className={`h-5 w-5 text-gray-400 transition-transform flex-shrink-0 ${
-                    openIndex === index ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
-              {openIndex === index && (
-                <div className="px-6 pb-4">
-                  <p className="text-gray-400">{faq.answer}</p>
+                <span className="font-medium pr-4 text-white">{faq.question}</span>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
+                  openIndex === index
+                    ? 'bg-gold-500/20 text-gold-400'
+                    : 'bg-premium-surface text-gray-400'
+                }`}>
+                  <ChevronDown
+                    className={`h-5 w-5 transition-transform duration-300 ${
+                      openIndex === index ? 'rotate-180' : ''
+                    }`}
+                  />
                 </div>
-              )}
+              </button>
+              <div className={`overflow-hidden transition-all duration-300 ${
+                openIndex === index ? 'max-h-96' : 'max-h-0'
+              }`}>
+                <div className="px-6 pb-5 border-t border-premium-border">
+                  <p className="text-gray-400 pt-4">{faq.answer}</p>
+                </div>
+              </div>
             </div>
           ))}
+        </div>
+
+        {/* Contact prompt */}
+        <div className="mt-12 text-center">
+          <p className="text-gray-500">
+            Still have questions?{' '}
+            <a href="mailto:support@readin.ai" className="text-gold-400 hover:text-gold-300 transition-colors">
+              Contact our support team
+            </a>
+          </p>
         </div>
       </div>
     </section>
