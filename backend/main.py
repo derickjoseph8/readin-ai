@@ -1,4 +1,4 @@
-"""ReadIn AI Backend API - Authentication, Subscriptions, Usage Tracking."""
+"""ReadIn AI Backend API - Authentication, Subscriptions, Usage Tracking, ML Intelligence."""
 
 import os
 from datetime import date, datetime
@@ -14,10 +14,10 @@ from config import (
     TRIAL_DAILY_LIMIT, APP_NAME
 )
 from database import get_db, init_db
-from models import User, DailyUsage
+from models import User, DailyUsage, Profession, UserLearningProfile
 from schemas import (
-    UserCreate, UserLogin, Token, UserResponse, UserStatus,
-    CreateCheckoutSession, CheckoutSessionResponse, UsageResponse
+    UserCreate, UserLogin, Token, UserResponse, UserStatus, UserUpdate,
+    UserEmailPreferences, CreateCheckoutSession, CheckoutSessionResponse, UsageResponse
 )
 from auth import (
     hash_password, verify_password, create_access_token, get_current_user
@@ -28,11 +28,17 @@ from stripe_handler import (
     handle_subscription_deleted
 )
 
+# Import route modules
+from routes import (
+    professions_router, organizations_router, meetings_router,
+    conversations_router, tasks_router, briefings_router, interviews_router
+)
+
 # Initialize FastAPI
 app = FastAPI(
     title=f"{APP_NAME} API",
-    version="1.0.0",
-    description="Backend API for ReadIn AI - Real-time AI assistant for live conversations",
+    version="2.0.0",
+    description="Backend API for ReadIn AI - Meeting Intelligence Platform with ML-powered learning",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -51,6 +57,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include route modules
+app.include_router(professions_router)
+app.include_router(organizations_router)
+app.include_router(meetings_router)
+app.include_router(conversations_router)
+app.include_router(tasks_router)
+app.include_router(briefings_router)
+app.include_router(interviews_router)
 
 
 @app.on_event("startup")
@@ -90,7 +105,8 @@ def startup():
         print("  [WARNING] Stripe price ID not configured")
 
     print()
-    print(f"  Trial: {TRIAL_DAILY_LIMIT} responses/day for 7 days")
+    print(f"  Trial: {TRIAL_DAILY_LIMIT} responses/day for 14 days")
+    print("  Premium: $29.99/month - Unlimited responses")
     print("  API Docs: http://localhost:8000/docs")
     print("=" * 50)
     print()
@@ -100,7 +116,13 @@ def startup():
 
 @app.post("/auth/register", response_model=Token)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
-    """Register a new user."""
+    """
+    Register a new user.
+
+    IMPORTANT: profession_id is required for personalized AI responses.
+    ML will first use stored knowledge for the profession,
+    then learn the user's personal patterns over time.
+    """
     # Check if email exists
     existing = db.query(User).filter(User.email == user_data.email).first()
     if existing:
@@ -109,14 +131,35 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
             detail="Email already registered"
         )
 
+    # Validate profession if provided
+    profession = None
+    if user_data.profession_id:
+        profession = db.query(Profession).filter(
+            Profession.id == user_data.profession_id,
+            Profession.is_active == True
+        ).first()
+        if not profession:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid profession selected"
+            )
+
     # Create user
     user = User(
         email=user_data.email,
         hashed_password=hash_password(user_data.password),
         full_name=user_data.full_name,
+        profession_id=user_data.profession_id,
+        specialization=user_data.specialization,
         subscription_status="trial"
     )
     db.add(user)
+    db.flush()
+
+    # Create empty learning profile for ML to populate
+    learning_profile = UserLearningProfile(user_id=user.id)
+    db.add(learning_profile)
+
     db.commit()
     db.refresh(user)
 
@@ -143,22 +186,109 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
 # ============== User Endpoints ==============
 
 @app.get("/user/me", response_model=UserResponse)
-def get_me(user: User = Depends(get_current_user)):
-    """Get current user info."""
+def get_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get current user info with profession and organization details."""
+    profession_name = user.profession.name if user.profession else None
+    organization_name = user.organization.name if user.organization else None
+
     return UserResponse(
         id=user.id,
         email=user.email,
         full_name=user.full_name,
+        profession_id=user.profession_id,
+        profession_name=profession_name,
+        specialization=user.specialization,
+        organization_id=user.organization_id,
+        organization_name=organization_name,
+        role_in_org=user.role_in_org,
         subscription_status=user.subscription_status,
         trial_days_remaining=user.trial_days_remaining,
         is_active=user.is_active,
+        email_notifications_enabled=user.email_notifications_enabled,
+        email_summary_enabled=user.email_summary_enabled,
+        email_reminders_enabled=user.email_reminders_enabled,
         created_at=user.created_at
     )
 
 
+@app.patch("/user/me", response_model=UserResponse)
+def update_me(
+    data: UserUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update current user profile."""
+    if data.full_name is not None:
+        user.full_name = data.full_name
+    if data.profession_id is not None:
+        # Validate profession
+        profession = db.query(Profession).filter(
+            Profession.id == data.profession_id,
+            Profession.is_active == True
+        ).first()
+        if not profession:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid profession"
+            )
+        user.profession_id = data.profession_id
+    if data.specialization is not None:
+        user.specialization = data.specialization
+    if data.years_experience is not None:
+        user.years_experience = data.years_experience
+
+    db.commit()
+    db.refresh(user)
+
+    profession_name = user.profession.name if user.profession else None
+    organization_name = user.organization.name if user.organization else None
+
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        profession_id=user.profession_id,
+        profession_name=profession_name,
+        specialization=user.specialization,
+        organization_id=user.organization_id,
+        organization_name=organization_name,
+        role_in_org=user.role_in_org,
+        subscription_status=user.subscription_status,
+        trial_days_remaining=user.trial_days_remaining,
+        is_active=user.is_active,
+        email_notifications_enabled=user.email_notifications_enabled,
+        email_summary_enabled=user.email_summary_enabled,
+        email_reminders_enabled=user.email_reminders_enabled,
+        created_at=user.created_at
+    )
+
+
+@app.patch("/user/me/email-preferences")
+def update_email_preferences(
+    data: UserEmailPreferences,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update email notification preferences."""
+    if data.email_notifications_enabled is not None:
+        user.email_notifications_enabled = data.email_notifications_enabled
+    if data.email_summary_enabled is not None:
+        user.email_summary_enabled = data.email_summary_enabled
+    if data.email_reminders_enabled is not None:
+        user.email_reminders_enabled = data.email_reminders_enabled
+
+    db.commit()
+
+    return {
+        "email_notifications_enabled": user.email_notifications_enabled,
+        "email_summary_enabled": user.email_summary_enabled,
+        "email_reminders_enabled": user.email_reminders_enabled
+    }
+
+
 @app.get("/user/status", response_model=UserStatus)
 def get_status(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Get user status for desktop app - subscription and usage info."""
+    """Get user status for desktop app - subscription, usage, and context info."""
     today = date.today()
 
     # Get today's usage
@@ -180,13 +310,18 @@ def get_status(user: User = Depends(get_current_user), db: Session = Depends(get
         daily_limit = 0
         can_use = False
 
+    profession_name = user.profession.name if user.profession else None
+    organization_name = user.organization.name if user.organization else None
+
     return UserStatus(
         is_active=user.is_active,
         subscription_status=user.subscription_status,
         trial_days_remaining=user.trial_days_remaining,
         daily_usage=daily_count,
         daily_limit=daily_limit,
-        can_use=can_use
+        can_use=can_use,
+        profession_name=profession_name,
+        organization_name=organization_name
     )
 
 
@@ -318,7 +453,7 @@ async def stripe_webhook(
 @app.get("/health")
 def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "app": APP_NAME}
+    return {"status": "healthy", "app": APP_NAME, "version": "2.0.0"}
 
 
 if __name__ == "__main__":
