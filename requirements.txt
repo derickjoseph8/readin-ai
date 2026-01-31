@@ -9,3 +9,7 @@ httpx>=0.25.0           # API client
 # Platform-specific audio
 pyaudio>=0.2.14; sys_platform == "win32"       # Windows audio
 sounddevice>=0.4.6; sys_platform != "win32"    # macOS/Linux audio
+
+# New dependencies for enhanced features
+pynput>=1.7.6           # Global keyboard shortcuts
+packaging>=23.0         # Version comparison for auto-updates

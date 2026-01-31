@@ -35,7 +35,6 @@ export default function LoginPage() {
 
       if (response.ok) {
         setSuccess(isLogin ? 'Login successful! Open the desktop app to continue.' : 'Account created! You can now log in to the desktop app.')
-        // Store token for potential web features
         if (data.access_token) {
           localStorage.setItem('readin_token', data.access_token)
         }
@@ -50,34 +49,32 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-dark-950 text-white flex items-center justify-center px-4">
-      {/* Background effects */}
-      <div className="absolute inset-0 bg-gradient-to-b from-blue-600/10 via-transparent to-transparent" />
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl" />
-      <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl" />
+    <main className="min-h-screen bg-premium-bg text-white flex items-center justify-center px-4">
+      {/* Lightweight background gradient */}
+      <div className="absolute inset-0 bg-gradient-to-b from-gold-500/5 via-transparent to-transparent" />
 
       <div className="relative w-full max-w-md">
         {/* Back link */}
         <Link
           href="/"
-          className="inline-flex items-center text-gray-400 hover:text-white transition mb-8"
+          className="inline-flex items-center text-gray-400 hover:text-gold-400 transition mb-8"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Home
         </Link>
 
         {/* Card */}
-        <div className="bg-dark-900/80 backdrop-blur-lg rounded-2xl border border-white/10 p-8">
+        <div className="bg-premium-card rounded-2xl border border-premium-border p-8">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-xl flex items-center justify-center mx-auto mb-4">
-              <span className="text-white font-bold text-xl">R</span>
+            <div className="w-12 h-12 bg-gradient-to-br from-gold-400 to-gold-600 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <span className="text-premium-bg font-bold text-xl">R</span>
             </div>
             <h1 className="text-2xl font-bold">
               {isLogin ? 'Welcome Back' : 'Create Account'}
             </h1>
             <p className="text-gray-400 mt-2">
-              {isLogin ? 'Log in to your ReadIn AI account' : 'Start your 7-day free trial'}
+              {isLogin ? 'Log in to your ReadIn AI account' : 'Start your 14-day free trial'}
             </p>
           </div>
 
@@ -92,7 +89,7 @@ export default function LoginPage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-lg focus:border-blue-500 focus:outline-none transition"
+                  className="w-full px-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none transition text-white"
                   placeholder="John Doe"
                 />
               </div>
@@ -108,7 +105,7 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-white/10 rounded-lg focus:border-blue-500 focus:outline-none transition"
+                  className="w-full pl-10 pr-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none transition text-white"
                   placeholder="you@example.com"
                   required
                 />
@@ -125,7 +122,7 @@ export default function LoginPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-white/10 rounded-lg focus:border-blue-500 focus:outline-none transition"
+                  className="w-full pl-10 pr-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none transition text-white"
                   placeholder={isLogin ? '••••••••' : 'Min 8 characters'}
                   required
                   minLength={8}
@@ -140,7 +137,7 @@ export default function LoginPage() {
             )}
 
             {success && (
-              <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg text-green-400 text-sm">
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-sm">
                 {success}
               </div>
             )}
@@ -148,7 +145,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-semibold rounded-lg hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center"
+              className="w-full py-3 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-lg hover:shadow-gold transition disabled:opacity-50 flex items-center justify-center"
             >
               {loading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -171,19 +168,19 @@ export default function LoginPage() {
                 setError('')
                 setSuccess('')
               }}
-              className="text-blue-400 hover:text-blue-300 font-medium"
+              className="text-gold-400 hover:text-gold-300 font-medium"
             >
               {isLogin ? 'Sign Up' : 'Log In'}
             </button>
           </div>
 
           {/* Divider */}
-          <div className="mt-6 pt-6 border-t border-white/10 text-center">
+          <div className="mt-6 pt-6 border-t border-premium-border text-center">
             <p className="text-gray-500 text-sm">
               By continuing, you agree to our{' '}
-              <a href="#" className="text-gray-400 hover:text-white">Terms</a>
+              <a href="#" className="text-gray-400 hover:text-gold-400">Terms</a>
               {' '}and{' '}
-              <a href="#" className="text-gray-400 hover:text-white">Privacy Policy</a>
+              <a href="#" className="text-gray-400 hover:text-gold-400">Privacy Policy</a>
             </p>
           </div>
         </div>
@@ -191,7 +188,7 @@ export default function LoginPage() {
         {/* Download hint */}
         <p className="text-center text-gray-500 text-sm mt-6">
           Need the app?{' '}
-          <Link href="/download" className="text-blue-400 hover:text-blue-300">
+          <Link href="/download" className="text-gold-400 hover:text-gold-300">
             Download ReadIn AI
           </Link>
         </p>

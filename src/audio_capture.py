@@ -1,8 +1,8 @@
-"""Cross-platform system audio capture."""
+"""Cross-platform system audio capture with device selection."""
 
 import threading
 import queue
-from typing import Callable, Optional
+from typing import Callable, Optional, List, Tuple, Dict, Any
 
 import numpy as np
 
@@ -12,8 +12,16 @@ from config import AUDIO_SAMPLE_RATE, AUDIO_CHUNK_DURATION, IS_WINDOWS, IS_MACOS
 class AudioCapture:
     """Captures system audio for real-time processing (cross-platform)."""
 
-    def __init__(self, on_audio_chunk: Callable[[np.ndarray], None]):
+    def __init__(
+        self,
+        on_audio_chunk: Callable[[np.ndarray], None],
+        device_index: Optional[int] = None,
+        on_device_change: Optional[Callable[[str], None]] = None,
+        on_error: Optional[Callable[[str], None]] = None
+    ):
         self.on_audio_chunk = on_audio_chunk
+        self.on_device_change = on_device_change
+        self.on_error = on_error
         self.sample_rate = AUDIO_SAMPLE_RATE
         self.chunk_duration = AUDIO_CHUNK_DURATION
         self._running = False
@@ -22,10 +30,134 @@ class AudioCapture:
         self._audio_buffer = np.array([], dtype=np.float32)
         self._samples_per_chunk = int(self.sample_rate * self.chunk_duration)
         self._buffer_queue: queue.Queue = queue.Queue()
+        self._device_index = device_index
+        self._current_device_name = ""
 
         # Platform-specific audio backends
         self._pa = None  # PyAudio instance (Windows)
         self._stream = None
+
+    @staticmethod
+    def get_available_devices() -> List[Dict[str, Any]]:
+        """Get list of available audio input devices.
+
+        Returns:
+            List of dicts with keys: index, name, channels, is_loopback, is_default
+        """
+        devices = []
+
+        if IS_WINDOWS:
+            try:
+                import pyaudio
+                pa = pyaudio.PyAudio()
+                default_input = pa.get_default_input_device_info()
+                default_index = default_input['index'] if default_input else -1
+
+                for i in range(pa.get_device_count()):
+                    info = pa.get_device_info_by_index(i)
+                    if info['maxInputChannels'] > 0:
+                        name = info['name']
+                        name_lower = name.lower()
+                        is_loopback = (
+                            'loopback' in name_lower or
+                            'stereo mix' in name_lower or
+                            'what u hear' in name_lower
+                        )
+                        devices.append({
+                            'index': i,
+                            'name': name,
+                            'channels': info['maxInputChannels'],
+                            'is_loopback': is_loopback,
+                            'is_default': i == default_index,
+                            'sample_rate': int(info.get('defaultSampleRate', AUDIO_SAMPLE_RATE)),
+                        })
+                pa.terminate()
+            except Exception as e:
+                print(f"Error listing Windows audio devices: {e}")
+        else:
+            try:
+                import sounddevice as sd
+                default_input = sd.default.device[0]
+
+                for i, device in enumerate(sd.query_devices()):
+                    if device['max_input_channels'] > 0:
+                        name = device['name']
+                        name_lower = name.lower()
+                        is_loopback = (
+                            'monitor' in name_lower or
+                            'blackhole' in name_lower or
+                            'loopback' in name_lower
+                        )
+                        devices.append({
+                            'index': i,
+                            'name': name,
+                            'channels': device['max_input_channels'],
+                            'is_loopback': is_loopback,
+                            'is_default': i == default_input,
+                            'sample_rate': int(device.get('default_samplerate', AUDIO_SAMPLE_RATE)),
+                        })
+            except Exception as e:
+                print(f"Error listing audio devices: {e}")
+
+        return devices
+
+    @staticmethod
+    def get_recommended_device() -> Optional[int]:
+        """Get the recommended device index (loopback first, then default)."""
+        devices = AudioCapture.get_available_devices()
+
+        # Prefer loopback devices
+        for device in devices:
+            if device['is_loopback']:
+                return device['index']
+
+        # Fall back to default input
+        for device in devices:
+            if device['is_default']:
+                return device['index']
+
+        # Fall back to first available
+        if devices:
+            return devices[0]['index']
+
+        return None
+
+    def set_device(self, device_index: Optional[int]) -> bool:
+        """Set the audio device to use. If currently running, restarts capture.
+
+        Args:
+            device_index: Device index or None for auto-detection
+
+        Returns:
+            True if successful, False otherwise
+        """
+        was_running = self._running
+        if was_running:
+            self.stop()
+
+        self._device_index = device_index
+
+        if was_running:
+            self.start()
+            return self._running
+
+        return True
+
+    def get_current_device(self) -> Tuple[Optional[int], str]:
+        """Get the current device index and name."""
+        return self._device_index, self._current_device_name
+
+    def _emit_error(self, message: str):
+        """Emit an error message."""
+        print(f"Audio error: {message}")
+        if self.on_error:
+            self.on_error(message)
+
+    def _emit_device_change(self, device_name: str):
+        """Emit device change notification."""
+        self._current_device_name = device_name
+        if self.on_device_change:
+            self.on_device_change(device_name)
 
     def _find_loopback_device_windows(self) -> Optional[int]:
         """Find WASAPI loopback or stereo mix device on Windows."""
@@ -98,19 +230,29 @@ class AudioCapture:
         if self._pa is None:
             self._pa = pyaudio.PyAudio()
 
-        # Try loopback first, then microphone
-        device_index = self._find_loopback_device_windows()
+        # Use specified device or auto-detect
+        device_index = self._device_index
         if device_index is None:
-            device_index = self._find_input_device_windows()
+            device_index = self._find_loopback_device_windows()
+            if device_index is None:
+                device_index = self._find_input_device_windows()
 
         if device_index is None:
-            print("ERROR: No audio input device found!")
+            self._emit_error("No audio input device found!")
             self._running = False
             return
 
-        info = self._pa.get_device_info_by_index(device_index)
+        try:
+            info = self._pa.get_device_info_by_index(device_index)
+        except Exception as e:
+            self._emit_error(f"Invalid device index {device_index}: {e}")
+            self._running = False
+            return
+
         channels = min(int(info['maxInputChannels']), 2)
-        print(f"Using device: {info['name']}")
+        device_name = info['name']
+        print(f"Using device: {device_name}")
+        self._emit_device_change(device_name)
 
         try:
             self._stream = self._pa.open(
@@ -125,21 +267,27 @@ class AudioCapture:
             self._stream.start_stream()
             print("Audio capture started (Windows)")
         except Exception as e:
-            print(f"Failed to start audio: {e}")
-            # Try default device
-            try:
-                self._stream = self._pa.open(
-                    format=pyaudio.paInt16,
-                    channels=1,
-                    rate=self.sample_rate,
-                    input=True,
-                    frames_per_buffer=int(self.sample_rate * 0.1),
-                    stream_callback=self._audio_callback_pyaudio,
-                )
-                self._stream.start_stream()
-                print("Audio capture started (default device)")
-            except Exception as e2:
-                print(f"Audio capture failed: {e2}")
+            print(f"Failed to start audio with selected device: {e}")
+            # Try default device if specific device fails
+            if self._device_index is not None:
+                self._emit_error(f"Failed to start with selected device. Trying default...")
+                try:
+                    self._stream = self._pa.open(
+                        format=pyaudio.paInt16,
+                        channels=1,
+                        rate=self.sample_rate,
+                        input=True,
+                        frames_per_buffer=int(self.sample_rate * 0.1),
+                        stream_callback=self._audio_callback_pyaudio,
+                    )
+                    self._stream.start_stream()
+                    self._emit_device_change("Default Input")
+                    print("Audio capture started (default device)")
+                except Exception as e2:
+                    self._emit_error(f"Audio capture failed: {e2}")
+                    self._running = False
+            else:
+                self._emit_error(f"Audio capture failed: {e}")
                 self._running = False
 
     def _start_macos(self):
@@ -158,9 +306,18 @@ class AudioCapture:
                 self._buffer_queue.put(audio)
 
         try:
-            # On macOS, use default input (microphone)
-            # For system audio, user needs to install BlackHole or similar
+            device_index = self._device_index
+            device_name = "Default Input"
+
+            if device_index is not None:
+                try:
+                    device_info = sd.query_devices(device_index)
+                    device_name = device_info['name']
+                except Exception:
+                    device_index = None  # Fall back to default
+
             self._stream = sd.InputStream(
+                device=device_index,
                 samplerate=self.sample_rate,
                 channels=1,
                 dtype=np.float32,
@@ -168,10 +325,12 @@ class AudioCapture:
                 blocksize=int(self.sample_rate * 0.1),
             )
             self._stream.start()
-            print("Audio capture started (macOS)")
-            print("Note: For system audio, install BlackHole and set it as input")
+            self._emit_device_change(device_name)
+            print(f"Audio capture started (macOS) - {device_name}")
+            if device_index is None:
+                print("Note: For system audio, install BlackHole and set it as input")
         except Exception as e:
-            print(f"Failed to start audio: {e}")
+            self._emit_error(f"Failed to start audio: {e}")
             self._running = False
 
     def _start_linux(self):
@@ -189,9 +348,18 @@ class AudioCapture:
                 self._buffer_queue.put(audio)
 
         try:
-            # On Linux, use default input
-            # For system audio, use PulseAudio monitor device
+            device_index = self._device_index
+            device_name = "Default Input"
+
+            if device_index is not None:
+                try:
+                    device_info = sd.query_devices(device_index)
+                    device_name = device_info['name']
+                except Exception:
+                    device_index = None  # Fall back to default
+
             self._stream = sd.InputStream(
+                device=device_index,
                 samplerate=self.sample_rate,
                 channels=1,
                 dtype=np.float32,
@@ -199,10 +367,12 @@ class AudioCapture:
                 blocksize=int(self.sample_rate * 0.1),
             )
             self._stream.start()
-            print("Audio capture started (Linux)")
-            print("Note: For system audio, select PulseAudio monitor as input")
+            self._emit_device_change(device_name)
+            print(f"Audio capture started (Linux) - {device_name}")
+            if device_index is None:
+                print("Note: For system audio, select PulseAudio monitor as input")
         except Exception as e:
-            print(f"Failed to start audio: {e}")
+            self._emit_error(f"Failed to start audio: {e}")
             self._running = False
 
     def start(self):
@@ -262,15 +432,13 @@ class AudioCapture:
     @staticmethod
     def list_devices():
         """List available audio devices for debugging."""
-        if IS_WINDOWS:
-            import pyaudio
-            pa = pyaudio.PyAudio()
-            print("Available audio devices (Windows):")
-            for i in range(pa.get_device_count()):
-                info = pa.get_device_info_by_index(i)
-                print(f"  [{i}] {info['name']} (in: {info['maxInputChannels']}, out: {info['maxOutputChannels']})")
-            pa.terminate()
-        else:
-            import sounddevice as sd
-            print("Available audio devices:")
-            print(sd.query_devices())
+        devices = AudioCapture.get_available_devices()
+        print("Available audio input devices:")
+        for device in devices:
+            flags = []
+            if device['is_loopback']:
+                flags.append("LOOPBACK")
+            if device['is_default']:
+                flags.append("DEFAULT")
+            flag_str = f" [{', '.join(flags)}]" if flags else ""
+            print(f"  [{device['index']}] {device['name']} ({device['channels']} ch){flag_str}")

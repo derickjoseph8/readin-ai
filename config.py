@@ -164,3 +164,25 @@ PROCESS_CHECK_INTERVAL = 2.0  # Seconds between process checks
 OVERLAY_WIDTH = 450
 OVERLAY_HEIGHT = 300
 OVERLAY_OPACITY = 0.92
+
+# Version info
+APP_VERSION = "1.0.0"
+APP_NAME = "ReadIn AI"
+UPDATE_CHECK_URL = "https://api.getreadin.ai/version"
+GITHUB_RELEASES_URL = "https://github.com/derickjoseph8/readin-ai/releases"
+
+# Default keyboard shortcuts
+DEFAULT_SHORTCUTS = {
+    "toggle_listen": "ctrl+shift+r",
+    "show_hide": "ctrl+shift+h",
+    "clear_context": "ctrl+shift+c",
+}
+
+# AI Configuration defaults
+DEFAULT_CONTEXT_WINDOW = 3
+MAX_CONTEXT_WINDOW = 10
+MIN_CONTEXT_WINDOW = 1
+
+# Export configuration
+EXPORT_FORMATS = ["txt", "md", "json"]
+DEFAULT_EXPORT_FORMAT = "md"

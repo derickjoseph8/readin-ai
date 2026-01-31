@@ -31,13 +31,13 @@ const steps = [
 
 export default function HowItWorks() {
   return (
-    <section id="how-it-works" className="py-24 px-4 bg-dark-900/50">
+    <section id="how-it-works" className="py-24 px-4">
       <div className="max-w-7xl mx-auto">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-4xl md:text-5xl font-bold mb-6">
             How It{' '}
-            <span className="text-gradient">Works</span>
+            <span className="text-gradient-gold">Works</span>
           </h2>
           <p className="text-xl text-gray-400">
             From question to confident answer in seconds — without looking like you're reading a script.
@@ -50,22 +50,22 @@ export default function HowItWorks() {
             <div key={index} className="relative">
               {/* Connector line */}
               {index < steps.length - 1 && (
-                <div className="hidden lg:block absolute top-12 left-full w-full h-0.5 bg-gradient-to-r from-blue-500/50 to-transparent" />
+                <div className="hidden lg:block absolute top-12 left-full w-full h-0.5 bg-gradient-to-r from-gold-500/50 to-transparent" />
               )}
 
               <div className="text-center">
                 {/* Icon */}
                 <div className="relative inline-block mb-6">
-                  <div className="w-24 h-24 bg-gradient-to-br from-blue-600/20 to-cyan-500/20 rounded-2xl flex items-center justify-center border border-blue-500/20">
-                    <step.icon className="h-10 w-10 text-blue-400" />
+                  <div className="w-24 h-24 bg-premium-card rounded-2xl flex items-center justify-center border border-premium-border group-hover:border-gold-500/30 transition-colors">
+                    <step.icon className="h-10 w-10 text-gold-400" />
                   </div>
-                  <span className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-br from-blue-600 to-cyan-500 rounded-lg flex items-center justify-center text-sm font-bold">
+                  <span className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-br from-gold-500 to-gold-600 rounded-lg flex items-center justify-center text-sm font-bold text-premium-bg">
                     {step.number}
                   </span>
                 </div>
 
                 {/* Content */}
-                <h3 className="text-xl font-semibold mb-3">{step.title}</h3>
+                <h3 className="text-xl font-semibold mb-3 text-white">{step.title}</h3>
                 <p className="text-gray-400">{step.description}</p>
               </div>
             </div>
@@ -74,11 +74,11 @@ export default function HowItWorks() {
 
         {/* Demo Video Placeholder */}
         <div className="mt-16 max-w-4xl mx-auto">
-          <div className="relative aspect-video bg-dark-800 rounded-2xl border border-white/10 flex items-center justify-center overflow-hidden group cursor-pointer">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-600/10 to-purple-600/10" />
+          <div className="relative aspect-video bg-premium-card rounded-2xl border border-premium-border flex items-center justify-center overflow-hidden group cursor-pointer hover:border-gold-500/30 transition-colors">
+            <div className="absolute inset-0 bg-gradient-to-br from-gold-500/5 to-emerald-500/5" />
             <div className="relative z-10 text-center">
-              <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mb-4 mx-auto group-hover:scale-110 transition border border-white/20">
-                <div className="w-0 h-0 border-l-[20px] border-l-white border-y-[12px] border-y-transparent ml-1" />
+              <div className="w-20 h-20 bg-gradient-to-br from-gold-500 to-gold-600 rounded-full flex items-center justify-center mb-4 mx-auto group-hover:scale-110 group-hover:shadow-gold transition-all duration-300">
+                <div className="w-0 h-0 border-l-[20px] border-l-premium-bg border-y-[12px] border-y-transparent ml-1" />
               </div>
               <p className="text-gray-400">Watch ReadIn AI in action</p>
             </div>
