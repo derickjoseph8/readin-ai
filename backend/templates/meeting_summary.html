@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meeting Summary</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: #ffffff;
+            margin: 20px auto;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            color: #1a1a1a;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .header .subtitle {
+            margin-top: 5px;
+            opacity: 0.8;
+        }
+        .content {
+            padding: 30px;
+        }
+        .meeting-info {
+            background: #f9fafb;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 25px;
+        }
+        .meeting-info p {
+            margin: 5px 0;
+            color: #666;
+        }
+        h2 {
+            color: #1a1a1a;
+            font-size: 18px;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #fbbf24;
+        }
+        .summary-text {
+            background: #fef9e7;
+            border-left: 4px solid #fbbf24;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .key-points {
+            list-style: none;
+            padding: 0;
+        }
+        .key-points li {
+            padding: 10px 0 10px 25px;
+            position: relative;
+            border-bottom: 1px solid #eee;
+        }
+        .key-points li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #10b981;
+            font-weight: bold;
+        }
+        .action-item {
+            background: #f0f9ff;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .action-item .assignee {
+            font-weight: bold;
+            color: #0369a1;
+        }
+        .action-item .due {
+            color: #666;
+            font-size: 14px;
+        }
+        .action-item .priority-high {
+            color: #dc2626;
+        }
+        .action-item .priority-medium {
+            color: #f59e0b;
+        }
+        .action-item .priority-low {
+            color: #10b981;
+        }
+        .commitment {
+            background: #fef3c7;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .commitment .due {
+            color: #92400e;
+            font-size: 14px;
+        }
+        .sentiment {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .sentiment-positive {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .sentiment-neutral {
+            background: #f3f4f6;
+            color: #4b5563;
+        }
+        .sentiment-negative {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        .sentiment-mixed {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .footer {
+            background: #1a1a1a;
+            color: #999;
+            padding: 25px;
+            text-align: center;
+            font-size: 12px;
+        }
+        .footer a {
+            color: #fbbf24;
+            text-decoration: none;
+        }
+        .btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            color: #1a1a1a;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📝 Meeting Summary</h1>
+            <p class="subtitle">{{ meeting_title }}</p>
+        </div>
+
+        <div class="content">
+            <div class="meeting-info">
+                <p><strong>Date:</strong> {{ meeting_date }}</p>
+                <p><strong>Duration:</strong> {{ meeting_duration }}</p>
+                <p><strong>Type:</strong> {{ meeting_type }}</p>
+                <p><strong>Sentiment:</strong>
+                    <span class="sentiment sentiment-{{ sentiment }}">{{ sentiment }}</span>
+                </p>
+            </div>
+
+            <h2>Executive Summary</h2>
+            <div class="summary-text">
+                {{ summary_text }}
+            </div>
+
+            <h2>Key Points</h2>
+            <ul class="key-points">
+                {% for point in key_points %}
+                <li>{{ point }}</li>
+                {% endfor %}
+            </ul>
+
+            {% if action_items %}
+            <h2>Action Items</h2>
+            {% for item in action_items %}
+            <div class="action-item">
+                <span class="assignee">{{ item.assignee }}:</span> {{ item.description }}
+                {% if item.due_date %}
+                <div class="due">Due: {{ item.due_date }}</div>
+                {% endif %}
+                <span class="priority-{{ item.priority }}">● {{ item.priority }} priority</span>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            {% if commitments %}
+            <h2>Your Commitments</h2>
+            {% for commitment in commitments %}
+            <div class="commitment">
+                {{ commitment.description }}
+                {% if commitment.due_date %}
+                <div class="due">Due: {{ commitment.due_date }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="{{ dashboard_url }}" class="btn">View in Dashboard</a>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>This summary was automatically generated by ReadIn AI</p>
+            <p>
+                <a href="https://getreadin.ai">Visit Website</a> |
+                <a href="{{ preferences_url }}">Email Preferences</a> |
+                <a href="{{ unsubscribe_url }}">Unsubscribe</a>
+            </p>
+            <p style="margin-top: 15px;">© {{ year }} ReadIn AI. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
