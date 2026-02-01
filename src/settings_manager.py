@@ -42,6 +42,8 @@ class SettingsManager:
         "minimize_to_tray": True,
         "auto_check_updates": True,
         "show_usage_warnings": True,
+        "audio_setup_completed": False,  # First-run audio setup flag
+        "hide_from_screen_capture": False,  # Screen capture protection (disabled by default for visibility)
 
         # Export settings
         "export_format": "md",  # "txt", "md", "json"
@@ -145,7 +147,7 @@ Emphasize strategic thinking and leadership perspective."""
     # Available AI models
     AVAILABLE_MODELS = [
         ("claude-sonnet-4-20250514", "Claude Sonnet 4 (Recommended)"),
-        ("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet"),
+        ("claude-sonnet-4-20250514", "Claude Sonnet 4"),
         ("claude-3-haiku-20240307", "Claude 3 Haiku (Fastest)"),
     ]
 

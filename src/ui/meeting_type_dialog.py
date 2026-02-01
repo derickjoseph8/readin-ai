@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
-from meeting_session import MeetingSession
+from src.meeting_session import MeetingSession
 
 
 class MeetingTypeDialog(QDialog):

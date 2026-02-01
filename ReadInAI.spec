@@ -1,12 +1,28 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+block_cipher = None
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets', 'assets'), ('config.py', '.')],
-    hiddenimports=[],
+    datas=[
+        ('assets', 'assets'),
+        ('config.py', '.'),
+        ('src', 'src'),
+    ],
+    hiddenimports=[
+        'PyQt6',
+        'PyQt6.QtCore',
+        'PyQt6.QtGui',
+        'PyQt6.QtWidgets',
+        'anthropic',
+        'pyaudio',
+        'faster_whisper',
+        'pynput',
+        'psutil',
+        'requests',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -14,7 +30,8 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
-pyz = PYZ(a.pure)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
     pyz,
@@ -32,8 +49,10 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['assets\\icon.png'],
+    icon='assets\\icon.ico',
+    version='version_info.txt',
 )
+
 coll = COLLECT(
     exe,
     a.binaries,

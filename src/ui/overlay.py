@@ -35,6 +35,7 @@ class OverlayWindow(QWidget):
     export_requested = pyqtSignal()
     settings_requested = pyqtSignal()
     logout_requested = pyqtSignal()
+    listen_toggled = pyqtSignal(bool)  # True = start, False = stop
 
     def __init__(self):
         super().__init__()
@@ -47,7 +48,9 @@ class OverlayWindow(QWidget):
         self._setup_ui()
         self._connect_signals()
         self._load_position()
-        self._setup_screen_capture_protection()
+        # Only enable screen capture protection if setting is enabled
+        if self._settings and self._settings.get("hide_from_screen_capture", False):
+            self._setup_screen_capture_protection()
 
     def _setup_ui(self):
         """Initialize the UI components."""
@@ -88,6 +91,15 @@ class OverlayWindow(QWidget):
         header.addWidget(self.title_label)
 
         header.addStretch()
+
+        # Start/Stop Listening button
+        self.listen_btn = QPushButton("▶ Start")
+        self.listen_btn.setFixedSize(60, 24)
+        self.listen_btn.setToolTip("Start/Stop Listening")
+        self._is_listening = False
+        self._update_listen_btn_style()
+        self.listen_btn.clicked.connect(self._on_listen_clicked)
+        header.addWidget(self.listen_btn)
 
         # Font size toggle button
         self.size_btn = QPushButton("A+")
@@ -308,6 +320,50 @@ class OverlayWindow(QWidget):
             self.size_btn.setText("A+")
             self.resize(OVERLAY_WIDTH, OVERLAY_HEIGHT)
 
+    def _update_listen_btn_style(self):
+        """Update listen button style based on state."""
+        if self._is_listening:
+            self.listen_btn.setText("■ Stop")
+            self.listen_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #ef4444;
+                    color: #ffffff;
+                    border: none;
+                    border-radius: 4px;
+                    font-weight: bold;
+                    font-size: 10px;
+                }
+                QPushButton:hover {
+                    background-color: #dc2626;
+                }
+            """)
+        else:
+            self.listen_btn.setText("▶ Start")
+            self.listen_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #22c55e;
+                    color: #ffffff;
+                    border: none;
+                    border-radius: 4px;
+                    font-weight: bold;
+                    font-size: 10px;
+                }
+                QPushButton:hover {
+                    background-color: #16a34a;
+                }
+            """)
+
+    def _on_listen_clicked(self):
+        """Handle listen button click."""
+        self._is_listening = not self._is_listening
+        self._update_listen_btn_style()
+        self.listen_toggled.emit(self._is_listening)
+
+    def set_listening_state(self, is_listening: bool):
+        """Set the listening state from external source."""
+        self._is_listening = is_listening
+        self._update_listen_btn_style()
+
     def _connect_signals(self):
         """Connect signals for thread-safe updates."""
         self.update_heard_signal.connect(self._update_heard)
@@ -382,8 +438,9 @@ class OverlayWindow(QWidget):
         """When shown, force to top and start keep-alive timer."""
         super().showEvent(event)
         self._force_on_top()
-        # Re-apply screen capture protection (in case window handle changed)
-        self._setup_screen_capture_protection()
+        # Apply screen capture protection if setting is enabled
+        if self._settings and self._settings.get("hide_from_screen_capture", False):
+            self._setup_screen_capture_protection()
         # Periodically re-raise above other always-on-top windows
         if not hasattr(self, '_top_timer'):
             self._top_timer = QTimer(self)
@@ -451,10 +508,10 @@ class OverlayWindow(QWidget):
         if not IS_WINDOWS:
             return
 
-        # Check if setting is enabled (default: True for privacy)
-        hide_from_capture = True
+        # Check if setting is enabled (default: False for visibility)
+        hide_from_capture = False
         if self._settings:
-            hide_from_capture = self._settings.get("hide_from_screen_capture", True)
+            hide_from_capture = self._settings.get("hide_from_screen_capture", False)
 
         if not hide_from_capture:
             # User disabled this feature - make sure capture is allowed

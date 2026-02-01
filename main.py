@@ -15,7 +15,7 @@ except (AttributeError, OSError):
 import webbrowser
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QMessageBox
 from PyQt6.QtGui import QIcon, QAction
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt
 
 from config import ANTHROPIC_API_KEY
 from src.process_monitor import ProcessMonitor
@@ -40,12 +40,15 @@ from src.meeting_session import MeetingSession
 from src.context_provider import ContextProvider
 from src.ui.meeting_type_dialog import MeetingTypeDialog
 from src.ui.briefing_panel import BriefingPanel, SummaryPanel
+from src.ui.audio_setup_dialog import AudioSetupDialog
+from src.ui.app_selector_dialog import AppSelectorDialog
 
 
 class SignalBridge(QObject):
     """Bridges background threads to Qt main thread via signals."""
     meeting_detected = pyqtSignal(str)
     meeting_ended = pyqtSignal()
+    multiple_apps_detected = pyqtSignal(list)
     transcription_ready = pyqtSignal(str)
     ai_response_ready = pyqtSignal(str, str)
     ai_chunk_ready = pyqtSignal(str)
@@ -69,6 +72,7 @@ class ReadInApp:
         self.signals = SignalBridge()
         self.signals.meeting_detected.connect(self._on_meeting_detected)
         self.signals.meeting_ended.connect(self._on_meeting_ended)
+        self.signals.multiple_apps_detected.connect(self._on_multiple_apps_detected)
         self.signals.transcription_ready.connect(self._on_transcription)
         self.signals.ai_response_ready.connect(self._on_ai_response)
         self.signals.ai_chunk_ready.connect(self._on_streaming_chunk)
@@ -79,6 +83,7 @@ class ReadInApp:
         self.overlay = OverlayWindow()
         self.overlay.settings_requested.connect(self._show_settings)
         self.overlay.logout_requested.connect(self._logout)
+        self.overlay.listen_toggled.connect(self._on_overlay_listen_toggled)
         self.login_window = None
         self.settings_window = None
         self.ai_assistant = AIAssistant(
@@ -116,7 +121,8 @@ class ReadInApp:
 
         self.process_monitor = ProcessMonitor(
             on_meeting_detected=lambda name: self.signals.meeting_detected.emit(name),
-            on_meeting_ended=lambda: self.signals.meeting_ended.emit()
+            on_meeting_ended=lambda: self.signals.meeting_ended.emit(),
+            on_multiple_detected=lambda apps: self.signals.multiple_apps_detected.emit(apps)
         )
 
         # Initialize conversation recorder for export
@@ -140,7 +146,7 @@ class ReadInApp:
 
     def _apply_ai_settings(self):
         """Apply AI-related settings."""
-        model = self.settings.get("model", "claude-3-5-sonnet-20241022")
+        model = self.settings.get("model", "claude-sonnet-4-20250514")
         self.ai_assistant.set_model(model)
 
         context_size = self.settings.get("context_size", 3)
@@ -473,9 +479,44 @@ class ReadInApp:
             self._show_login()
             return
 
+        # Force overlay to CENTER of primary screen (more visible)
+        from PyQt6.QtWidgets import QApplication
+        screen = QApplication.primaryScreen()
+        if screen:
+            geom = screen.availableGeometry()
+            # Position in CENTER for visibility
+            x = (geom.width() - self.overlay.width()) // 2
+            y = (geom.height() - self.overlay.height()) // 2
+            self.overlay.move(x, y)
+            print(f"Repositioned overlay to CENTER: ({x}, {y}) on screen {geom.width()}x{geom.height()}")
+
+        # Disable screen capture protection temporarily to test visibility
+        self.overlay.set_screen_capture_visibility(True)
+
+        # Force show and bring to front
         self.overlay.show()
+        self.overlay.setWindowState(self.overlay.windowState() & ~Qt.WindowState.WindowMinimized)
         self.overlay.raise_()
         self.overlay.activateWindow()
+
+        # Flash taskbar to get attention (Windows)
+        try:
+            import ctypes
+            hwnd = int(self.overlay.winId())
+            ctypes.windll.user32.FlashWindow(hwnd, True)
+        except:
+            pass
+
+        print(f"Overlay visible: {self.overlay.isVisible()}, geometry: {self.overlay.geometry()}")
+
+    def _on_overlay_listen_toggled(self, start: bool):
+        """Handle listen button toggle from overlay."""
+        if start:
+            if not self._listening:
+                self._start_listening(skip_dialog=True)
+        else:
+            if self._listening:
+                self._stop_listening()
 
     def _toggle_listening(self):
         if not api.is_logged_in():
@@ -528,6 +569,7 @@ class ReadInApp:
         self.transcriber.start()
         self.audio_capture.start()
         self.overlay.reset()
+        self.overlay.set_listening_state(True)
         self._show_overlay()
 
         if hasattr(self, 'toggle_action'):
@@ -544,6 +586,7 @@ class ReadInApp:
         self.audio_capture.stop()
         self.transcriber.stop()
         self.ai_assistant.clear_context()
+        self.overlay.set_listening_state(False)
 
         # End the meeting session and get summary
         if self.meeting_session.is_active:
@@ -564,17 +607,45 @@ class ReadInApp:
         if not api.is_logged_in():
             return
 
+        # Prevent duplicate calls
+        if self._listening and self._current_meeting_app == process_name:
+            return
+
         print(f"Meeting app detected: {process_name}")
         self._current_meeting_app = process_name
         if hasattr(self, 'status_action'):
             self.status_action.setText(f"Status: {process_name} detected")
         self.tray.showMessage(
             "ReadIn AI",
-            f"{process_name} started. Ready to assist!",
+            f"{process_name} detected. Ready to assist!",
             QSystemTrayIcon.MessageIcon.Information,
             3000
         )
         self._start_listening(meeting_app=process_name)
+
+    def _on_multiple_apps_detected(self, apps: list):
+        """Handle when multiple meeting apps are detected."""
+        if not api.is_logged_in():
+            return
+
+        print(f"Multiple meeting apps detected: {apps}")
+
+        # Show selection dialog
+        selected_app = AppSelectorDialog.select_app(apps)
+
+        if selected_app:
+            # User selected an app
+            self.process_monitor.set_active_process(selected_app)
+            self._on_meeting_detected(selected_app)
+        else:
+            # User cancelled - notify all detected apps
+            apps_str = ", ".join(apps)
+            self.tray.showMessage(
+                "ReadIn AI",
+                f"Detected: {apps_str}\nRight-click tray to start manually.",
+                QSystemTrayIcon.MessageIcon.Information,
+                5000
+            )
 
     def _on_meeting_ended(self):
         print("Meeting app closed")
@@ -770,6 +841,10 @@ class ReadInApp:
         if not ANTHROPIC_API_KEY:
             print("WARNING: ANTHROPIC_API_KEY not set!")
 
+        # Check for first run - show audio setup dialog
+        if not self.settings.get("audio_setup_completed", False):
+            self._show_audio_setup()
+
         # Check login status and refresh
         if api.is_logged_in():
             print("User logged in, checking subscription...")
@@ -808,6 +883,20 @@ class ReadInApp:
                 )
         except Exception:
             pass  # Silently ignore startup update check failures
+
+    def _show_audio_setup(self):
+        """Show audio setup dialog on first run."""
+        print("First run detected - showing audio setup...")
+        device_index = AudioSetupDialog.get_audio_device()
+
+        if device_index is not None:
+            # Save the selected device
+            self.settings.set("audio_device", device_index)
+            self.audio_capture.set_device(device_index)
+            print(f"Audio device configured: index {device_index}")
+
+        # Mark setup as completed (even if cancelled, don't show again)
+        self.settings.set("audio_setup_completed", True)
 
 
 def main():

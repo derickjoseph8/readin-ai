@@ -227,7 +227,7 @@ class APIClient:
     def get_active_meeting(self) -> Optional[Dict]:
         """Get user's currently active meeting."""
         result = self._request("GET", "/meetings/active")
-        if "error" in result:
+        if result is None or (isinstance(result, dict) and "error" in result):
             return None
         return result
 

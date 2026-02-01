@@ -1,48 +1,68 @@
-; Inno Setup Script for ReadIn AI
-; Download Inno Setup from: https://jrsoftware.org/isdl.php
+; ReadIn AI Installer Script for Inno Setup
+; Download Inno Setup from: https://jrsoftware.org/isinfo.php
 
 #define MyAppName "ReadIn AI"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Brider LLC"
-#define MyAppURL "https://getreadin.ai"
+#define MyAppURL "https://readin.ai"
 #define MyAppExeName "ReadInAI.exe"
 
 [Setup]
-AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
+; NOTE: The value of AppId uniquely identifies this application.
+AppId={{B8E3F2A1-5C4D-4E6F-9A8B-1C2D3E4F5A6B}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
-DisableProgramGroupPage=yes
-LicenseFile=
+DefaultGroupName={#MyAppName}
+AllowNoIcons=yes
+; Output settings
 OutputDir=installer_output
 OutputBaseFilename=ReadInAI_Setup_{#MyAppVersion}
+; Installer appearance
 SetupIconFile=assets\icon.ico
-Compression=lzma
+UninstallDisplayIcon={app}\{#MyAppExeName}
+; Compression
+Compression=lzma2
 SolidCompression=yes
-WizardStyle=modern
+; Windows version requirements
+MinVersion=10.0
+; Privileges (per-user install doesn't require admin)
 PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
+; Misc
+WizardStyle=modern
+DisableProgramGroupPage=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "startupicon"; Description: "Start ReadIn AI when Windows starts"; GroupDescription: "Startup:"
+Name: "startupicon"; Description: "Start ReadIn AI when Windows starts"; GroupDescription: "Startup:"; Flags: unchecked
 
 [Files]
+; Main application files from PyInstaller dist folder
 Source: "dist\ReadInAI\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startupicon
+
+[Registry]
+; Add to startup if selected
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "ReadInAI"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: startupicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
-Type: filesandordirs; Name: "{userappdata}\ReadIn AI"
+Type: filesandordirs; Name: "{localappdata}\ReadInAI"
+
+[Code]
+// Optional: Add custom installer logic here if needed
