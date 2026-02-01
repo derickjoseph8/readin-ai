@@ -172,7 +172,7 @@ class SettingsWindow(QDialog):
 
         self.model_combo = QComboBox()
         self.model_combo.addItems([
-            "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4-20250514",
             "claude-3-haiku-20240307",
             "claude-3-opus-20240229"
         ])
@@ -267,7 +267,7 @@ class SettingsWindow(QDialog):
         overlay_layout.addRow("", self.remember_position_check)
 
         self.hide_from_capture_check = QCheckBox("Hide overlay during screen sharing")
-        self.hide_from_capture_check.setChecked(True)
+        self.hide_from_capture_check.setChecked(False)
         self.hide_from_capture_check.setToolTip(
             "When enabled, the overlay will be invisible to others during screen sharing.\n"
             "You can still see it, but it won't appear in recordings or shared screens.\n"
@@ -485,7 +485,7 @@ class SettingsWindow(QDialog):
 
         # AI
         self.model_combo.setCurrentText(
-            self.settings.get("model", "claude-3-5-sonnet-20241022")
+            self.settings.get("model", "claude-sonnet-4-20250514")
         )
         self.context_spin.setValue(self.settings.get("context_size", 3))
         self.prompt_edit.setPlainText(self.settings.get("system_prompt", ""))
@@ -512,7 +512,7 @@ class SettingsWindow(QDialog):
             self.settings.get("remember_position", True)
         )
         self.hide_from_capture_check.setChecked(
-            self.settings.get("hide_from_screen_capture", True)
+            self.settings.get("hide_from_screen_capture", False)
         )
 
         # Shortcuts
