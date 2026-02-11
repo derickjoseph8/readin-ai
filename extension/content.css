@@ -1,0 +1,152 @@
+/* ReadIn AI Browser Extension - Content Script Styles */
+
+#readin-ai-overlay {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 999999;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+#readin-ai-overlay .readin-overlay-content {
+  background: #0f0f14;
+  border: 1px solid #2d2d3a;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  width: 280px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+#readin-ai-overlay.minimized .readin-overlay-content {
+  width: 120px;
+}
+
+#readin-ai-overlay.minimized .readin-body {
+  display: none;
+}
+
+#readin-ai-overlay.minimized .readin-title {
+  display: none;
+}
+
+#readin-ai-overlay .readin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #1e1e28;
+  cursor: grab;
+  user-select: none;
+}
+
+#readin-ai-overlay .readin-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#readin-ai-overlay .readin-icon {
+  width: 24px;
+  height: 24px;
+  background: linear-gradient(135deg, #c9a227, #e6c14a);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 12px;
+  color: #0f0f14;
+}
+
+#readin-ai-overlay .readin-title {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#readin-ai-overlay .readin-minimize {
+  width: 24px;
+  height: 24px;
+  background: #2d2d3a;
+  border: none;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+#readin-ai-overlay .readin-minimize:hover {
+  background: #3d3d4a;
+}
+
+#readin-ai-overlay .readin-body {
+  padding: 16px;
+}
+
+#readin-ai-overlay .readin-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+#readin-ai-overlay .readin-status-dot {
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+#readin-ai-overlay .readin-status-text {
+  color: #10b981;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#readin-ai-overlay .readin-info {
+  color: #ffffff;
+  font-size: 13px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+#readin-ai-overlay .readin-hint {
+  color: #6b7280;
+  font-size: 12px;
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+#readin-ai-overlay .readin-download-link {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  background: linear-gradient(135deg, #c9a227, #e6c14a);
+  color: #0f0f14;
+  text-align: center;
+  text-decoration: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+#readin-ai-overlay .readin-download-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(201, 162, 39, 0.3);
+}

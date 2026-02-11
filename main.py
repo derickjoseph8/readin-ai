@@ -42,6 +42,8 @@ from src.ui.meeting_type_dialog import MeetingTypeDialog
 from src.ui.briefing_panel import BriefingPanel, SummaryPanel
 from src.ui.audio_setup_dialog import AudioSetupDialog
 from src.ui.app_selector_dialog import AppSelectorDialog
+from src.ui.first_run_wizard import FirstRunWizard
+from src.browser_bridge import BrowserBridge
 
 
 class SignalBridge(QObject):
@@ -54,6 +56,10 @@ class SignalBridge(QObject):
     ai_chunk_ready = pyqtSignal(str)
     briefing_ready = pyqtSignal(dict)
     summary_ready = pyqtSignal(dict)
+    # Browser extension signals
+    browser_meeting_detected = pyqtSignal(str, str)  # name, url
+    browser_capture_started = pyqtSignal()
+    browser_capture_stopped = pyqtSignal()
 
 
 class ReadInApp:
@@ -78,6 +84,10 @@ class ReadInApp:
         self.signals.ai_chunk_ready.connect(self._on_streaming_chunk)
         self.signals.briefing_ready.connect(self._on_briefing_ready)
         self.signals.summary_ready.connect(self._on_summary_ready)
+        # Browser extension signals
+        self.signals.browser_meeting_detected.connect(self._on_browser_meeting_detected)
+        self.signals.browser_capture_started.connect(self._on_browser_capture_started)
+        self.signals.browser_capture_stopped.connect(self._on_browser_capture_stopped)
 
         # Components
         self.overlay = OverlayWindow()
@@ -123,6 +133,14 @@ class ReadInApp:
             on_meeting_detected=lambda name: self.signals.meeting_detected.emit(name),
             on_meeting_ended=lambda: self.signals.meeting_ended.emit(),
             on_multiple_detected=lambda apps: self.signals.multiple_apps_detected.emit(apps)
+        )
+
+        # Initialize browser bridge for extension audio capture
+        self.browser_bridge = BrowserBridge(
+            on_audio_chunk=self.transcriber.process_audio,
+            on_meeting_detected=lambda name, url: self.signals.browser_meeting_detected.emit(name, url),
+            on_capture_started=lambda: self.signals.browser_capture_started.emit(),
+            on_capture_stopped=lambda: self.signals.browser_capture_stopped.emit()
         )
 
         # Initialize conversation recorder for export
@@ -623,6 +641,72 @@ class ReadInApp:
         )
         self._start_listening(meeting_app=process_name)
 
+    def _on_browser_meeting_detected(self, meeting_name: str, url: str):
+        """Handle meeting detected from browser extension."""
+        if not api.is_logged_in():
+            return
+
+        print(f"Browser meeting detected: {meeting_name} at {url}")
+        self._current_meeting_app = f"{meeting_name} (Browser)"
+        if hasattr(self, 'status_action'):
+            self.status_action.setText(f"Status: {meeting_name} (Browser)")
+        self.tray.showMessage(
+            "ReadIn AI",
+            f"{meeting_name} detected via browser extension!",
+            QSystemTrayIcon.MessageIcon.Information,
+            3000
+        )
+
+    def _on_browser_capture_started(self):
+        """Handle browser extension starting audio capture."""
+        if not api.is_logged_in():
+            return
+
+        print("Browser extension started audio capture")
+
+        # Start transcription if not already listening
+        if not self._listening:
+            # Check subscription status first
+            self._refresh_user_status()
+            if self._user_status and not self._user_status.get("is_active"):
+                self._show_upgrade_prompt()
+                return
+
+            # Start the meeting session
+            self.meeting_session.start(
+                meeting_type="general",
+                title=None,
+                meeting_app=self._current_meeting_app or "Browser Meeting"
+            )
+
+            self.ai_assistant.set_meeting_type("general")
+
+            # Refresh personalization context
+            if api.is_logged_in():
+                self.context_provider.refresh_context()
+
+            self._listening = True
+            self.transcriber.start()
+            # Note: Audio comes from browser bridge, not local audio capture
+            self.overlay.reset()
+            self.overlay.set_listening_state(True)
+            self._show_overlay()
+
+            if hasattr(self, 'toggle_action'):
+                self.toggle_action.setText("Stop Listening")
+            if hasattr(self, 'status_action'):
+                self.status_action.setText("Status: Listening (Browser)...")
+
+    def _on_browser_capture_stopped(self):
+        """Handle browser extension stopping audio capture."""
+        print("Browser extension stopped audio capture")
+
+        if self._listening and self.browser_bridge.is_capturing() == False:
+            # Only stop if we were using browser audio
+            if self._current_meeting_app and "Browser" in self._current_meeting_app:
+                self._stop_listening()
+                self._current_meeting_app = None
+
     def _on_multiple_apps_detected(self, apps: list):
         """Handle when multiple meeting apps are detected."""
         if not api.is_logged_in():
@@ -833,6 +917,7 @@ class ReadInApp:
             self.meeting_session.end()
 
         self.process_monitor.stop()
+        self.browser_bridge.stop()
         self.hotkey_manager.stop()
         self.tray.hide()
         self.app.quit()
@@ -841,8 +926,11 @@ class ReadInApp:
         if not ANTHROPIC_API_KEY:
             print("WARNING: ANTHROPIC_API_KEY not set!")
 
-        # Check for first run - show audio setup dialog
-        if not self.settings.get("audio_setup_completed", False):
+        # Check for first run - show setup wizard
+        if not self.settings.get("first_run_completed", False):
+            self._show_first_run_wizard()
+        elif not self.settings.get("audio_setup_completed", False):
+            # Legacy: show just audio setup if wizard was skipped but audio not configured
             self._show_audio_setup()
 
         # Check login status and refresh
@@ -862,6 +950,10 @@ class ReadInApp:
             QTimer.singleShot(500, self._show_login)
 
         self.process_monitor.start()
+
+        # Start browser bridge for extension support
+        self.browser_bridge.start()
+
         print("ReadIn AI started")
 
         # Check for updates on startup if enabled
@@ -883,6 +975,21 @@ class ReadInApp:
                 )
         except Exception:
             pass  # Silently ignore startup update check failures
+
+    def _show_first_run_wizard(self):
+        """Show first run setup wizard."""
+        print("First run detected - showing setup wizard...")
+        accepted, device_index = FirstRunWizard.run_wizard()
+
+        if accepted and device_index is not None:
+            # Save the selected device
+            self.settings.set("audio_device", device_index)
+            self.audio_capture.set_device(device_index)
+            print(f"Audio device configured: index {device_index}")
+            self.settings.set("audio_setup_completed", True)
+
+        # Mark first run as completed (even if cancelled)
+        self.settings.set("first_run_completed", True)
 
     def _show_audio_setup(self):
         """Show audio setup dialog on first run."""
