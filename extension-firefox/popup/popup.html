@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ReadIn AI</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <div class="logo-icon">R</div>
+        <div class="logo-text">ReadIn AI</div>
+      </div>
+      <div class="connection-status" id="connectionStatus">
+        <span class="status-dot disconnected"></span>
+        <span class="status-text">Disconnected</span>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+      <!-- Connection Section -->
+      <section class="section" id="connectionSection">
+        <div class="info-card warning" id="disconnectedWarning">
+          <div class="info-icon">!</div>
+          <div class="info-content">
+            <div class="info-title">Desktop App Not Running</div>
+            <div class="info-text">Start the ReadIn AI desktop app to enable meeting capture.</div>
+          </div>
+        </div>
+        <div class="info-card success hidden" id="connectedInfo">
+          <div class="info-icon">&#10003;</div>
+          <div class="info-content">
+            <div class="info-title">Connected to Desktop App</div>
+            <div class="info-text">Ready to capture meeting audio.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Meeting Detection Section -->
+      <section class="section" id="meetingSection">
+        <div class="section-title">Current Tab</div>
+        <div class="meeting-info" id="meetingInfo">
+          <div class="meeting-icon" id="meetingIcon">&#128247;</div>
+          <div class="meeting-details">
+            <div class="meeting-name" id="meetingName">No meeting detected</div>
+            <div class="meeting-url" id="meetingUrl">Open a meeting to get started</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Capture Controls -->
+      <section class="section">
+        <button class="btn btn-primary" id="captureBtn" disabled>
+          <span class="btn-icon">&#9654;</span>
+          <span class="btn-text">Start Capture</span>
+        </button>
+        <div class="capture-status hidden" id="captureStatus">
+          <div class="capture-indicator"></div>
+          <span>Capturing audio...</span>
+        </div>
+        <div class="info-text" style="margin-top: 8px; font-size: 11px; color: #9ca3af;">
+          Note: Firefox will ask you to share your screen. Select the tab with audio and check "Share audio".
+        </div>
+      </section>
+
+      <!-- Quick Actions -->
+      <section class="section">
+        <div class="section-title">Quick Actions</div>
+        <div class="quick-actions">
+          <button class="action-btn" id="openDashboardBtn" title="Open Dashboard">
+            <span class="action-icon">&#128200;</span>
+            <span class="action-label">Dashboard</span>
+          </button>
+          <button class="action-btn" id="openSettingsBtn" title="Settings">
+            <span class="action-icon">&#9881;</span>
+            <span class="action-label">Settings</span>
+          </button>
+          <button class="action-btn" id="openHelpBtn" title="Help">
+            <span class="action-icon">&#63;</span>
+            <span class="action-label">Help</span>
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span>v1.0.0</span>
+      <a href="http://18.198.173.81:7500" target="_blank">ReadIn AI</a>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

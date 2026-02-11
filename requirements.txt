@@ -13,3 +13,6 @@ sounddevice>=0.4.6; sys_platform != "win32"    # macOS/Linux audio
 # New dependencies for enhanced features
 pynput>=1.7.6           # Global keyboard shortcuts
 packaging>=23.0         # Version comparison for auto-updates
+websockets>=12.0        # Browser extension WebSocket server
+Pillow>=10.0.0          # Icon generation (optional)
+pywin32>=306; sys_platform == "win32"  # Windows shortcuts and registry

@@ -308,18 +308,35 @@ class AudioCapture:
         try:
             device_index = self._device_index
             device_name = "Default Input"
+            channels = 1
 
             if device_index is not None:
                 try:
                     device_info = sd.query_devices(device_index)
                     device_name = device_info['name']
-                except Exception:
-                    device_index = None  # Fall back to default
+                    channels = min(int(device_info['max_input_channels']), 2)
+                    if channels == 0:
+                        raise ValueError(f"Device {device_name} has no input channels")
+                except Exception as e:
+                    print(f"Device {device_index} error: {e}, falling back to default")
+                    device_index = None
+
+            # If no device specified, try to find BlackHole or loopback
+            if device_index is None:
+                for i, dev in enumerate(sd.query_devices()):
+                    if dev['max_input_channels'] > 0:
+                        name_lower = dev['name'].lower()
+                        if 'blackhole' in name_lower or 'loopback' in name_lower:
+                            device_index = i
+                            device_name = dev['name']
+                            channels = min(int(dev['max_input_channels']), 2)
+                            print(f"Auto-selected loopback device: {device_name}")
+                            break
 
             self._stream = sd.InputStream(
                 device=device_index,
                 samplerate=self.sample_rate,
-                channels=1,
+                channels=channels,
                 dtype=np.float32,
                 callback=callback,
                 blocksize=int(self.sample_rate * 0.1),
@@ -328,7 +345,7 @@ class AudioCapture:
             self._emit_device_change(device_name)
             print(f"Audio capture started (macOS) - {device_name}")
             if device_index is None:
-                print("Note: For system audio, install BlackHole and set it as input")
+                print("Tip: Install BlackHole (brew install blackhole-2ch) for system audio capture")
         except Exception as e:
             self._emit_error(f"Failed to start audio: {e}")
             self._running = False
@@ -350,18 +367,36 @@ class AudioCapture:
         try:
             device_index = self._device_index
             device_name = "Default Input"
+            channels = 1
 
             if device_index is not None:
                 try:
                     device_info = sd.query_devices(device_index)
                     device_name = device_info['name']
-                except Exception:
-                    device_index = None  # Fall back to default
+                    channels = min(int(device_info['max_input_channels']), 2)
+                    if channels == 0:
+                        raise ValueError(f"Device {device_name} has no input channels")
+                except Exception as e:
+                    print(f"Device {device_index} error: {e}, falling back to default")
+                    device_index = None
+
+            # If no device specified, try to find PulseAudio monitor
+            if device_index is None:
+                for i, dev in enumerate(sd.query_devices()):
+                    if dev['max_input_channels'] > 0:
+                        name_lower = dev['name'].lower()
+                        # PulseAudio monitor devices contain "monitor" in name
+                        if 'monitor' in name_lower:
+                            device_index = i
+                            device_name = dev['name']
+                            channels = min(int(dev['max_input_channels']), 2)
+                            print(f"Auto-selected monitor device: {device_name}")
+                            break
 
             self._stream = sd.InputStream(
                 device=device_index,
                 samplerate=self.sample_rate,
-                channels=1,
+                channels=channels,
                 dtype=np.float32,
                 callback=callback,
                 blocksize=int(self.sample_rate * 0.1),
@@ -370,7 +405,7 @@ class AudioCapture:
             self._emit_device_change(device_name)
             print(f"Audio capture started (Linux) - {device_name}")
             if device_index is None:
-                print("Note: For system audio, select PulseAudio monitor as input")
+                print("Tip: Select 'Monitor of [speaker]' device for system audio capture")
         except Exception as e:
             self._emit_error(f"Failed to start audio: {e}")
             self._running = False

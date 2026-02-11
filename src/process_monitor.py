@@ -8,30 +8,113 @@ import psutil
 
 from config import MONITORED_PROCESSES, PROCESS_CHECK_INTERVAL
 
-# Map process names to friendly app names
+# Map process names to friendly app names (cross-platform)
 PROCESS_TO_APP = {
-    # Microsoft Teams
+    # Microsoft Teams - Windows
     "Teams.exe": "Microsoft Teams",
     "ms-teams.exe": "Microsoft Teams",
     "msteams.exe": "Microsoft Teams",
+    # Microsoft Teams - macOS
     "Microsoft Teams": "Microsoft Teams",
+    "Microsoft Teams (work or school)": "Microsoft Teams",
+    "Microsoft Teams classic": "Microsoft Teams",
+    # Microsoft Teams - Linux
     "teams": "Microsoft Teams",
-    # Zoom
+    "Teams": "Microsoft Teams",
+    "microsoft teams": "Microsoft Teams",
+
+    # Zoom - Windows
     "Zoom.exe": "Zoom",
     "zoom.exe": "Zoom",
+    # Zoom - macOS
     "zoom.us": "Zoom",
+    "Zoom": "Zoom",
+    # Zoom - Linux
     "zoom": "Zoom",
     "ZoomLauncher": "Zoom",
-    # Webex
+    "zoom-client": "Zoom",
+
+    # Webex - Windows
     "webex.exe": "Cisco Webex",
     "CiscoWebexStart.exe": "Cisco Webex",
+    "atmgr.exe": "Cisco Webex",
+    "webexmta.exe": "Cisco Webex",
+    # Webex - macOS/Linux
     "Cisco Webex Meetings": "Cisco Webex",
+    "Webex": "Cisco Webex",
     "webex": "Cisco Webex",
-    # Google Meet (browser-based, detected by window title)
-    "meet.google.com": "Google Meet",
-    # Slack
+    "CiscoWebex": "Cisco Webex",
+
+    # Skype - Windows
+    "Skype.exe": "Skype",
+    "SkypeApp.exe": "Skype",
+    "SkypeHost.exe": "Skype",
+    # Skype - macOS/Linux
+    "Skype": "Skype",
+    "Skype for Business": "Skype",
+    "skype": "Skype",
+    "skypeforlinux": "Skype",
+
+    # Discord - All platforms
+    "Discord.exe": "Discord",
+    "Discord": "Discord",
+    "discord": "Discord",
+
+    # Slack - All platforms
     "slack.exe": "Slack",
     "Slack": "Slack",
+    "slack": "Slack",
+
+    # GoToMeeting - Windows
+    "g2mstart.exe": "GoToMeeting",
+    "g2mlauncher.exe": "GoToMeeting",
+    "GoToMeeting.exe": "GoToMeeting",
+    # GoToMeeting - macOS
+    "GoToMeeting": "GoToMeeting",
+    "GoTo Meeting": "GoToMeeting",
+
+    # BlueJeans - All platforms
+    "BlueJeans.exe": "BlueJeans",
+    "BlueJeans": "BlueJeans",
+
+    # RingCentral - All platforms
+    "RingCentral.exe": "RingCentral",
+    "RingCentralMeetings.exe": "RingCentral",
+    "RingCentral": "RingCentral",
+    "RingCentral Meetings": "RingCentral",
+
+    # Amazon Chime - All platforms
+    "Amazon Chime.exe": "Amazon Chime",
+    "Amazon Chime": "Amazon Chime",
+
+    # Google Meet - All platforms
+    "Google Meet.exe": "Google Meet",
+    "Google Meet": "Google Meet",
+
+    # Jitsi Meet - All platforms
+    "Jitsi Meet.exe": "Jitsi Meet",
+    "Jitsi Meet": "Jitsi Meet",
+    "jitsi-meet": "Jitsi Meet",
+
+    # FaceTime - macOS only
+    "FaceTime": "FaceTime",
+
+    # Signal - All platforms
+    "Signal.exe": "Signal",
+    "Signal": "Signal",
+    "signal-desktop": "Signal",
+
+    # Element (Matrix) - Linux
+    "element-desktop": "Element",
+    "Element": "Element",
+
+    # Whereby
+    "Whereby.exe": "Whereby",
+    "Whereby": "Whereby",
+
+    # Loom
+    "Loom.exe": "Loom",
+    "Loom": "Loom",
 }
 
 

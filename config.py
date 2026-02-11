@@ -15,7 +15,7 @@ IS_LINUX = sys.platform.startswith("linux")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 # Backend API Configuration
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.getreadin.ai")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://18.198.173.81:7500")
 
 # Whisper Configuration
 # Options: tiny.en (fastest), base.en (balanced), small.en (accurate)
@@ -168,7 +168,7 @@ OVERLAY_OPACITY = 0.92
 # Version info
 APP_VERSION = "1.0.0"
 APP_NAME = "ReadIn AI"
-UPDATE_CHECK_URL = "https://api.getreadin.ai/version"
+UPDATE_CHECK_URL = "http://18.198.173.81:7500/version"
 GITHUB_RELEASES_URL = "https://github.com/derickjoseph8/readin-ai/releases"
 
 # Default keyboard shortcuts
