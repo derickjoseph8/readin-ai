@@ -138,7 +138,7 @@ jobs:
           fi
 
           # Create desktop file
-          cat > AppDir/readin-ai.desktop << EOF
+          cat > AppDir/readin-ai.desktop << 'EOF'
           [Desktop Entry]
           Type=Application
           Name=ReadIn AI
@@ -148,6 +148,9 @@ jobs:
           Categories=Utility;Office;
           Terminal=false
           EOF
+
+          # Also copy to usr/share/applications
+          cp AppDir/readin-ai.desktop AppDir/usr/share/applications/
 
           # Create AppRun
           cat > AppDir/AppRun << 'APPRUN'
@@ -160,8 +163,8 @@ jobs:
           APPRUN
           chmod +x AppDir/AppRun
 
-          # Create AppImage
-          ARCH=x86_64 ./appimagetool-x86_64.AppImage AppDir "ReadInAI-Linux-$VERSION.AppImage"
+          # Create AppImage using --appimage-extract-and-run to avoid FUSE requirement
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir "ReadInAI-Linux-$VERSION.AppImage"
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
