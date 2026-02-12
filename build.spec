@@ -20,21 +20,80 @@ datas = [
     ('config.py', '.'),
 ]
 
+# Include src directory structure
+if (PROJECT_ROOT / 'src').exists():
+    datas.append(('src', 'src'))
+
 # Add .env only if it exists
 if (PROJECT_ROOT / '.env').exists():
     datas.append(('.env', '.'))
 
-# Hidden imports - platform specific
+# Hidden imports - all modules that PyInstaller might miss
 hidden_imports = [
+    # Qt
     'PyQt6',
     'PyQt6.QtCore',
     'PyQt6.QtGui',
     'PyQt6.QtWidgets',
+    'PyQt6.sip',
+
+    # Core
     'numpy',
+    'numpy.core._methods',
+    'numpy.lib.format',
+
+    # AI and Transcription
     'faster_whisper',
+    'faster_whisper.tokenizer',
+    'faster_whisper.audio',
+    'faster_whisper.vad',
+    'ctranslate2',
     'anthropic',
+    'anthropic._streaming',
+
+    # HTTP
     'httpx',
+    'httpx._transports',
+    'httpx._transports.default',
+    'httpcore',
+    'h11',
+    'certifi',
+    'idna',
+    'sniffio',
+    'anyio',
+    'anyio._backends',
+    'anyio._backends._asyncio',
+
+    # System
     'psutil',
+    'psutil._psutil_common',
+
+    # Keyboard/Input
+    'pynput',
+    'pynput.keyboard',
+    'pynput.mouse',
+
+    # Environment
+    'dotenv',
+    'python-dotenv',
+
+    # Websockets (for browser extension bridge)
+    'websockets',
+    'websockets.server',
+    'websockets.client',
+
+    # JSON/Data
+    'json',
+    'datetime',
+    'collections',
+    'queue',
+    'threading',
+
+    # Encoding
+    'encodings',
+    'encodings.utf_8',
+    'encodings.ascii',
+    'encodings.latin_1',
 ]
 
 if IS_WINDOWS:
@@ -42,9 +101,32 @@ if IS_WINDOWS:
         'pyaudio',
         'ctypes',
         'ctypes.wintypes',
+        'win32api',
+        'win32con',
+        'win32gui',
+        'pywintypes',
+        'psutil._pswindows',
+        'pynput.keyboard._win32',
+        'pynput.mouse._win32',
     ])
-else:
-    hidden_imports.append('sounddevice')
+elif IS_MACOS:
+    hidden_imports.extend([
+        'sounddevice',
+        'psutil._psosx',
+        'pynput.keyboard._darwin',
+        'pynput.mouse._darwin',
+        'AppKit',
+        'Foundation',
+        'objc',
+    ])
+else:  # Linux
+    hidden_imports.extend([
+        'sounddevice',
+        'psutil._pslinux',
+        'pynput.keyboard._xorg',
+        'pynput.mouse._xorg',
+        'Xlib',
+    ])
 
 # Icon path
 icon_path = None
@@ -55,20 +137,57 @@ elif IS_MACOS and (PROJECT_ROOT / 'assets' / 'icon.icns').exists():
 elif (PROJECT_ROOT / 'assets' / 'icon.png').exists():
     icon_path = str(PROJECT_ROOT / 'assets' / 'icon.png')
 
+# Collect data files from packages that need them
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+
+# Collect faster_whisper data (tokenizers, etc.)
+try:
+    datas += collect_data_files('faster_whisper')
+except Exception:
+    pass
+
+# Collect ctranslate2 libraries
+try:
+    datas += collect_data_files('ctranslate2')
+    binaries = collect_dynamic_libs('ctranslate2')
+except Exception:
+    binaries = []
+
+# Collect anthropic data
+try:
+    datas += collect_data_files('anthropic')
+except Exception:
+    pass
+
+# Collect certifi certificates
+try:
+    datas += collect_data_files('certifi')
+except Exception:
+    pass
+
 a = Analysis(
     ['main.py'],
-    pathex=[str(PROJECT_ROOT)],
-    binaries=[],
+    pathex=[str(PROJECT_ROOT), str(PROJECT_ROOT / 'src')],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
+        # Exclude unnecessary modules to reduce size
         'tkinter',
         'matplotlib',
         'scipy',
         'pandas',
+        'PIL.ImageTk',
+        'IPython',
+        'jupyter',
+        'notebook',
+        'test',
+        'tests',
+        'unittest',
+        'pytest',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -120,17 +239,21 @@ if IS_MACOS:
         },
     )
 else:
-    # Windows/Linux: Create directory-based distribution
+    # Windows/Linux: Create single-file portable executable
+    # Note: This is a PORTABLE app, NOT an installer. Run directly, no installation needed.
     exe = EXE(
         pyz,
         a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
         [],
-        exclude_binaries=True,
-        name='ReadInAI',
+        name='ReadInAI-Portable',
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
         upx=True,
+        upx_exclude=[],
         console=False,  # No console window
         disable_windowed_traceback=False,
         argv_emulation=False,
@@ -138,14 +261,4 @@ else:
         codesign_identity=None,
         entitlements_file=None,
         icon=icon_path,
-    )
-    coll = COLLECT(
-        exe,
-        a.binaries,
-        a.zipfiles,
-        a.datas,
-        strip=False,
-        upx=True,
-        upx_exclude=[],
-        name='ReadInAI',
     )

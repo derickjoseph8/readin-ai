@@ -126,18 +126,23 @@ class Transcriber:
             try:
                 audio_chunk = self._audio_queue.get(timeout=0.5)
 
-                # Skip silent audio
-                if np.abs(audio_chunk).max() < 0.01:
+                # Skip very quiet audio (likely silence)
+                # Use RMS instead of max for better silence detection
+                rms = np.sqrt(np.mean(audio_chunk ** 2))
+                if rms < 0.005:  # Very quiet threshold
                     continue
 
                 # Build transcription options
                 transcribe_options = {
                     "beam_size": 1,  # Faster
+                    "best_of": 1,
                     "vad_filter": True,  # Filter out non-speech
                     "vad_parameters": {
-                        "min_silence_duration_ms": 500,
-                        "speech_pad_ms": 200,
-                    }
+                        "min_silence_duration_ms": 300,  # Shorter for responsiveness
+                        "speech_pad_ms": 150,
+                        "threshold": 0.3,  # Lower threshold = more sensitive
+                    },
+                    "without_timestamps": True,  # Faster
                 }
 
                 # Add language if specified
@@ -158,7 +163,8 @@ class Transcriber:
                 text_parts = []
                 for segment in segments:
                     text = segment.text.strip()
-                    if text:
+                    # Filter out common Whisper hallucinations
+                    if text and not self._is_hallucination(text):
                         text_parts.append(text)
 
                 if text_parts:
@@ -172,6 +178,26 @@ class Transcriber:
                 print(error_msg)
                 if self.on_error:
                     self.on_error(error_msg)
+
+    def _is_hallucination(self, text: str) -> bool:
+        """Check if text is a common Whisper hallucination."""
+        # Common hallucinations when there's no actual speech
+        hallucinations = [
+            "thank you",
+            "thanks for watching",
+            "subscribe",
+            "like and subscribe",
+            "see you next time",
+            "bye",
+            "goodbye",
+            "[music]",
+            "[applause]",
+            "(music)",
+            "...",
+            "you",
+        ]
+        text_lower = text.lower().strip()
+        return text_lower in hallucinations or len(text_lower) < 3
 
     def process_audio(self, audio_chunk: np.ndarray):
         """Add audio chunk to processing queue."""

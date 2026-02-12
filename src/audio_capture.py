@@ -2,6 +2,7 @@
 
 import threading
 import queue
+import time
 from typing import Callable, Optional, List, Tuple, Dict, Any
 
 import numpy as np
@@ -17,11 +18,13 @@ class AudioCapture:
         on_audio_chunk: Callable[[np.ndarray], None],
         device_index: Optional[int] = None,
         on_device_change: Optional[Callable[[str], None]] = None,
-        on_error: Optional[Callable[[str], None]] = None
+        on_error: Optional[Callable[[str], None]] = None,
+        on_audio_level: Optional[Callable[[float], None]] = None
     ):
         self.on_audio_chunk = on_audio_chunk
         self.on_device_change = on_device_change
         self.on_error = on_error
+        self.on_audio_level = on_audio_level  # Callback for real-time audio level
         self.sample_rate = AUDIO_SAMPLE_RATE
         self.chunk_duration = AUDIO_CHUNK_DURATION
         self._running = False
@@ -32,6 +35,11 @@ class AudioCapture:
         self._buffer_queue: queue.Queue = queue.Queue()
         self._device_index = device_index
         self._current_device_name = ""
+        self._current_audio_level = 0.0
+        self._last_error_time = 0.0
+        self._error_count = 0
+        self._source_sample_rate: Optional[int] = None  # Track source sample rate for resampling
+        self._source_channels: int = 1
 
         # Platform-specific audio backends
         self._pa = None  # PyAudio instance (Windows)
@@ -191,6 +199,42 @@ class AudioCapture:
                 return i
         return None
 
+    def _convert_to_mono(self, audio: np.ndarray, channels: int) -> np.ndarray:
+        """Convert multi-channel audio to mono with proper mixing."""
+        if channels <= 1 or len(audio.shape) == 1:
+            return audio.flatten()
+
+        # Reshape to (samples, channels) if needed
+        if len(audio.shape) == 1 and channels > 1:
+            audio = audio.reshape(-1, channels)
+
+        # Average all channels for mono
+        return audio.mean(axis=1).astype(np.float32)
+
+    def _resample_audio(self, audio: np.ndarray, source_rate: int, target_rate: int) -> np.ndarray:
+        """Resample audio to target sample rate."""
+        if source_rate == target_rate:
+            return audio
+
+        # Simple linear interpolation resampling
+        duration = len(audio) / source_rate
+        target_samples = int(duration * target_rate)
+
+        if target_samples <= 0:
+            return audio
+
+        indices = np.linspace(0, len(audio) - 1, target_samples)
+        return np.interp(indices, np.arange(len(audio)), audio).astype(np.float32)
+
+    def _calculate_audio_level(self, audio: np.ndarray) -> float:
+        """Calculate RMS audio level (0.0 to 1.0)."""
+        if len(audio) == 0:
+            return 0.0
+        rms = np.sqrt(np.mean(audio ** 2))
+        # Normalize to 0-1 range (typical speech is around 0.01-0.1)
+        level = min(1.0, rms * 5.0)
+        return float(level)
+
     def _process_audio(self):
         """Process buffered audio and emit chunks."""
         while self._running:
@@ -200,10 +244,28 @@ class AudioCapture:
                 # Convert based on format
                 if isinstance(raw_data, bytes):
                     audio = np.frombuffer(raw_data, dtype=np.int16).astype(np.float32) / 32768.0
-                else:
+                elif isinstance(raw_data, np.ndarray):
                     audio = raw_data.astype(np.float32)
-                    if audio.max() > 1.0:
+                    # Normalize if needed (int16 range)
+                    if np.abs(audio).max() > 1.5:
                         audio = audio / 32768.0
+                else:
+                    continue
+
+                # Convert stereo to mono if needed
+                if self._source_channels > 1:
+                    audio = self._convert_to_mono(audio, self._source_channels)
+                else:
+                    audio = audio.flatten()
+
+                # Resample if source rate differs from target
+                if self._source_sample_rate and self._source_sample_rate != self.sample_rate:
+                    audio = self._resample_audio(audio, self._source_sample_rate, self.sample_rate)
+
+                # Calculate and emit audio level
+                self._current_audio_level = self._calculate_audio_level(audio)
+                if self.on_audio_level:
+                    self.on_audio_level(self._current_audio_level)
 
                 self._audio_buffer = np.concatenate([self._audio_buffer, audio])
 
@@ -211,10 +273,21 @@ class AudioCapture:
                     chunk = self._audio_buffer[:self._samples_per_chunk]
                     self._audio_buffer = self._audio_buffer[self._samples_per_chunk:]
                     self.on_audio_chunk(chunk)
+
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"Audio processing error: {e}")
+                self._error_count += 1
+                current_time = time.time()
+                # Rate limit error logging
+                if current_time - self._last_error_time > 5.0:
+                    print(f"Audio processing error: {e}")
+                    self._last_error_time = current_time
+                # If too many errors, try to recover
+                if self._error_count > 10:
+                    print("Too many audio errors, attempting recovery...")
+                    self._error_count = 0
+                    self._audio_buffer = np.array([], dtype=np.float32)
 
     def _audio_callback_pyaudio(self, in_data, frame_count, time_info, status):
         """PyAudio stream callback."""
@@ -251,70 +324,92 @@ class AudioCapture:
 
         channels = min(int(info['maxInputChannels']), 2)
         device_name = info['name']
-        print(f"Using device: {device_name}")
+        device_sample_rate = int(info.get('defaultSampleRate', self.sample_rate))
+
+        # Store source info for processing
+        self._source_channels = channels
+        self._source_sample_rate = device_sample_rate
+
+        print(f"Using device: {device_name} ({channels}ch @ {device_sample_rate}Hz)")
         self._emit_device_change(device_name)
 
-        try:
-            self._stream = self._pa.open(
-                format=pyaudio.paInt16,
-                channels=channels,
-                rate=self.sample_rate,
-                input=True,
-                input_device_index=device_index,
-                frames_per_buffer=int(self.sample_rate * 0.1),
-                stream_callback=self._audio_callback_pyaudio,
-            )
-            self._stream.start_stream()
-            print("Audio capture started (Windows)")
-        except Exception as e:
-            print(f"Failed to start audio with selected device: {e}")
-            # Try default device if specific device fails
-            if self._device_index is not None:
-                self._emit_error(f"Failed to start with selected device. Trying default...")
-                try:
-                    self._stream = self._pa.open(
-                        format=pyaudio.paInt16,
-                        channels=1,
-                        rate=self.sample_rate,
-                        input=True,
-                        frames_per_buffer=int(self.sample_rate * 0.1),
-                        stream_callback=self._audio_callback_pyaudio,
-                    )
-                    self._stream.start_stream()
-                    self._emit_device_change("Default Input")
-                    print("Audio capture started (default device)")
-                except Exception as e2:
-                    self._emit_error(f"Audio capture failed: {e2}")
-                    self._running = False
-            else:
-                self._emit_error(f"Audio capture failed: {e}")
+        # Try with device's native sample rate first, then fall back
+        sample_rates_to_try = [device_sample_rate, self.sample_rate, 44100, 48000]
+        seen = set()
+        sample_rates_to_try = [x for x in sample_rates_to_try if not (x in seen or seen.add(x))]
+
+        for try_rate in sample_rates_to_try:
+            try:
+                self._stream = self._pa.open(
+                    format=pyaudio.paInt16,
+                    channels=channels,
+                    rate=try_rate,
+                    input=True,
+                    input_device_index=device_index,
+                    frames_per_buffer=int(try_rate * 0.1),
+                    stream_callback=self._audio_callback_pyaudio,
+                )
+                self._stream.start_stream()
+                self._source_sample_rate = try_rate
+                print(f"Audio capture started (Windows) at {try_rate}Hz")
+                return
+            except Exception as e:
+                print(f"Failed to start at {try_rate}Hz: {e}")
+                if self._stream:
+                    try:
+                        self._stream.close()
+                    except:
+                        pass
+                    self._stream = None
+                continue
+
+        # If all sample rates fail, try default device
+        if self._device_index is not None:
+            self._emit_error("Failed to start with selected device. Trying default...")
+            try:
+                self._source_channels = 1
+                self._source_sample_rate = self.sample_rate
+                self._stream = self._pa.open(
+                    format=pyaudio.paInt16,
+                    channels=1,
+                    rate=self.sample_rate,
+                    input=True,
+                    frames_per_buffer=int(self.sample_rate * 0.1),
+                    stream_callback=self._audio_callback_pyaudio,
+                )
+                self._stream.start_stream()
+                self._emit_device_change("Default Input")
+                print("Audio capture started (default device)")
+            except Exception as e2:
+                self._emit_error(f"Audio capture failed: {e2}")
                 self._running = False
+        else:
+            self._emit_error("Audio capture failed: Could not open any audio stream")
+            self._running = False
 
     def _start_macos(self):
         """Start audio capture on macOS using sounddevice."""
         import sounddevice as sd
 
-        def callback(indata, frames, time, status):
+        def callback(indata, frames, time_info, status):
             if status:
                 print(f"Audio status: {status}")
             if self._running:
-                # Convert to mono if stereo
-                if indata.ndim > 1:
-                    audio = indata.mean(axis=1)
-                else:
-                    audio = indata.flatten()
-                self._buffer_queue.put(audio)
+                # Put raw data in queue - processing thread handles conversion
+                self._buffer_queue.put(indata.copy())
 
         try:
             device_index = self._device_index
             device_name = "Default Input"
             channels = 1
+            device_sample_rate = self.sample_rate
 
             if device_index is not None:
                 try:
                     device_info = sd.query_devices(device_index)
                     device_name = device_info['name']
                     channels = min(int(device_info['max_input_channels']), 2)
+                    device_sample_rate = int(device_info.get('default_samplerate', self.sample_rate))
                     if channels == 0:
                         raise ValueError(f"Device {device_name} has no input channels")
                 except Exception as e:
@@ -330,22 +425,49 @@ class AudioCapture:
                             device_index = i
                             device_name = dev['name']
                             channels = min(int(dev['max_input_channels']), 2)
+                            device_sample_rate = int(dev.get('default_samplerate', self.sample_rate))
                             print(f"Auto-selected loopback device: {device_name}")
                             break
 
-            self._stream = sd.InputStream(
-                device=device_index,
-                samplerate=self.sample_rate,
-                channels=channels,
-                dtype=np.float32,
-                callback=callback,
-                blocksize=int(self.sample_rate * 0.1),
-            )
-            self._stream.start()
-            self._emit_device_change(device_name)
-            print(f"Audio capture started (macOS) - {device_name}")
-            if device_index is None:
-                print("Tip: Install BlackHole (brew install blackhole-2ch) for system audio capture")
+            # Store source info for processing
+            self._source_channels = channels
+            self._source_sample_rate = device_sample_rate
+
+            # Try with device's native sample rate first
+            sample_rates_to_try = [device_sample_rate, self.sample_rate, 44100, 48000]
+            seen = set()
+            sample_rates_to_try = [x for x in sample_rates_to_try if not (x in seen or seen.add(x))]
+
+            for try_rate in sample_rates_to_try:
+                try:
+                    self._stream = sd.InputStream(
+                        device=device_index,
+                        samplerate=try_rate,
+                        channels=channels,
+                        dtype=np.float32,
+                        callback=callback,
+                        blocksize=int(try_rate * 0.1),
+                    )
+                    self._stream.start()
+                    self._source_sample_rate = try_rate
+                    self._emit_device_change(device_name)
+                    print(f"Audio capture started (macOS) - {device_name} at {try_rate}Hz")
+                    if device_index is None:
+                        print("Tip: Install BlackHole (brew install blackhole-2ch) for system audio capture")
+                    return
+                except Exception as e:
+                    print(f"Failed to start at {try_rate}Hz: {e}")
+                    if self._stream:
+                        try:
+                            self._stream.close()
+                        except:
+                            pass
+                        self._stream = None
+                    continue
+
+            self._emit_error("Failed to start audio capture with any sample rate")
+            self._running = False
+
         except Exception as e:
             self._emit_error(f"Failed to start audio: {e}")
             self._running = False
@@ -354,26 +476,25 @@ class AudioCapture:
         """Start audio capture on Linux using sounddevice with PulseAudio."""
         import sounddevice as sd
 
-        def callback(indata, frames, time, status):
+        def callback(indata, frames, time_info, status):
             if status:
                 print(f"Audio status: {status}")
             if self._running:
-                if indata.ndim > 1:
-                    audio = indata.mean(axis=1)
-                else:
-                    audio = indata.flatten()
-                self._buffer_queue.put(audio)
+                # Put raw data in queue - processing thread handles conversion
+                self._buffer_queue.put(indata.copy())
 
         try:
             device_index = self._device_index
             device_name = "Default Input"
             channels = 1
+            device_sample_rate = self.sample_rate
 
             if device_index is not None:
                 try:
                     device_info = sd.query_devices(device_index)
                     device_name = device_info['name']
                     channels = min(int(device_info['max_input_channels']), 2)
+                    device_sample_rate = int(device_info.get('default_samplerate', self.sample_rate))
                     if channels == 0:
                         raise ValueError(f"Device {device_name} has no input channels")
                 except Exception as e:
@@ -390,22 +511,49 @@ class AudioCapture:
                             device_index = i
                             device_name = dev['name']
                             channels = min(int(dev['max_input_channels']), 2)
+                            device_sample_rate = int(dev.get('default_samplerate', self.sample_rate))
                             print(f"Auto-selected monitor device: {device_name}")
                             break
 
-            self._stream = sd.InputStream(
-                device=device_index,
-                samplerate=self.sample_rate,
-                channels=channels,
-                dtype=np.float32,
-                callback=callback,
-                blocksize=int(self.sample_rate * 0.1),
-            )
-            self._stream.start()
-            self._emit_device_change(device_name)
-            print(f"Audio capture started (Linux) - {device_name}")
-            if device_index is None:
-                print("Tip: Select 'Monitor of [speaker]' device for system audio capture")
+            # Store source info for processing
+            self._source_channels = channels
+            self._source_sample_rate = device_sample_rate
+
+            # Try with device's native sample rate first
+            sample_rates_to_try = [device_sample_rate, self.sample_rate, 44100, 48000]
+            seen = set()
+            sample_rates_to_try = [x for x in sample_rates_to_try if not (x in seen or seen.add(x))]
+
+            for try_rate in sample_rates_to_try:
+                try:
+                    self._stream = sd.InputStream(
+                        device=device_index,
+                        samplerate=try_rate,
+                        channels=channels,
+                        dtype=np.float32,
+                        callback=callback,
+                        blocksize=int(try_rate * 0.1),
+                    )
+                    self._stream.start()
+                    self._source_sample_rate = try_rate
+                    self._emit_device_change(device_name)
+                    print(f"Audio capture started (Linux) - {device_name} at {try_rate}Hz")
+                    if device_index is None:
+                        print("Tip: Select 'Monitor of [speaker]' device for system audio capture")
+                    return
+                except Exception as e:
+                    print(f"Failed to start at {try_rate}Hz: {e}")
+                    if self._stream:
+                        try:
+                            self._stream.close()
+                        except:
+                            pass
+                        self._stream = None
+                    continue
+
+            self._emit_error("Failed to start audio capture with any sample rate")
+            self._running = False
+
         except Exception as e:
             self._emit_error(f"Failed to start audio: {e}")
             self._running = False
@@ -417,6 +565,16 @@ class AudioCapture:
 
         self._running = True
         self._audio_buffer = np.array([], dtype=np.float32)
+        self._error_count = 0
+        self._last_error_time = 0.0
+        self._current_audio_level = 0.0
+
+        # Clear any stale data from queue
+        while not self._buffer_queue.empty():
+            try:
+                self._buffer_queue.get_nowait()
+            except queue.Empty:
+                break
 
         # Start processor thread
         self._processor_thread = threading.Thread(target=self._process_audio, daemon=True)
@@ -463,6 +621,23 @@ class AudioCapture:
     def is_running(self) -> bool:
         """Check if audio capture is active."""
         return self._running
+
+    def get_audio_level(self) -> float:
+        """Get current audio level (0.0 to 1.0)."""
+        return self._current_audio_level
+
+    def get_status(self) -> Dict[str, Any]:
+        """Get detailed audio capture status."""
+        return {
+            "is_running": self._running,
+            "device_index": self._device_index,
+            "device_name": self._current_device_name,
+            "source_sample_rate": self._source_sample_rate,
+            "target_sample_rate": self.sample_rate,
+            "source_channels": self._source_channels,
+            "audio_level": self._current_audio_level,
+            "error_count": self._error_count,
+        }
 
     @staticmethod
     def list_devices():

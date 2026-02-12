@@ -60,6 +60,8 @@ class SignalBridge(QObject):
     browser_meeting_detected = pyqtSignal(str, str)  # name, url
     browser_capture_started = pyqtSignal()
     browser_capture_stopped = pyqtSignal()
+    # Audio level signal for UI feedback
+    audio_level_updated = pyqtSignal(float)
 
 
 class ReadInApp:
@@ -122,11 +124,13 @@ class ReadInApp:
         language = self.settings.get("language", "en")
         self.transcriber.set_language(language)
 
-        # Setup audio capture with device selection
+        # Setup audio capture with device selection and level monitoring
         device_index = self.settings.get("audio_device", -1)
         self.audio_capture = AudioCapture(
             on_audio_chunk=self.transcriber.process_audio,
-            device_index=device_index if device_index >= 0 else None
+            device_index=device_index if device_index >= 0 else None,
+            on_audio_level=lambda level: self.signals.audio_level_updated.emit(level),
+            on_error=self._on_audio_error
         )
 
         self.process_monitor = ProcessMonitor(
@@ -228,6 +232,16 @@ class ReadInApp:
 
         if was_listening:
             self.audio_capture.start()
+
+    def _on_audio_error(self, error_message: str):
+        """Handle audio capture errors."""
+        print(f"Audio error: {error_message}")
+        self.tray.showMessage(
+            "ReadIn AI - Audio Error",
+            error_message,
+            QSystemTrayIcon.MessageIcon.Warning,
+            5000
+        )
 
     def _setup_tray(self):
         self.tray = QSystemTrayIcon(self.app)

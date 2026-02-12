@@ -1,0 +1,196 @@
+name: Build Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+env:
+  APP_NAME: ReadInAI
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install PyQt6 anthropic faster-whisper httpx psutil pynput python-dotenv websockets pyaudio numpy pillow
+
+      - name: Build executable
+        run: python -m PyInstaller build.spec --noconfirm
+
+      - name: Package artifacts
+        run: |
+          $version = "${{ github.event.inputs.version || '1.0.0' }}"
+          Compress-Archive -Path dist/ReadInAI-Portable.exe -DestinationPath "ReadInAI-Windows-$version.zip"
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: ReadInAI-Windows-*.zip
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install system dependencies
+        run: brew install portaudio
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install PyQt6 anthropic faster-whisper httpx psutil pynput python-dotenv websockets sounddevice numpy pillow
+
+      - name: Build app bundle
+        run: python -m PyInstaller build.spec --noconfirm
+
+      - name: Create DMG
+        run: |
+          VERSION="${{ github.event.inputs.version || '1.0.0' }}"
+          # Create DMG from app bundle
+          if [ -d "dist/ReadInAI.app" ]; then
+            hdiutil create -volname "ReadIn AI" -srcfolder dist/ReadInAI.app -ov -format UDZO "ReadInAI-macOS-$VERSION.dmg"
+          else
+            # If no .app bundle, zip the directory
+            cd dist && zip -r "../ReadInAI-macOS-$VERSION.zip" ReadInAI/
+          fi
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: |
+            ReadInAI-macOS-*.dmg
+            ReadInAI-macOS-*.zip
+
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libportaudio2 portaudio19-dev libxcb-cursor0 libasound2-dev
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install PyQt6 anthropic faster-whisper httpx psutil pynput python-dotenv websockets sounddevice numpy pillow
+
+      - name: Build executable
+        run: python -m PyInstaller build.spec --noconfirm
+
+      - name: Create AppImage
+        run: |
+          VERSION="${{ github.event.inputs.version || '1.0.0' }}"
+
+          # Download appimagetool
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+
+          # Create AppDir structure
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+
+          # Copy built files
+          cp dist/ReadInAI-Portable AppDir/usr/bin/ReadInAI
+          chmod +x AppDir/usr/bin/ReadInAI
+
+          # Copy icon
+          if [ -f "assets/icon.png" ]; then
+            cp assets/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/readin-ai.png
+            cp assets/icon.png AppDir/readin-ai.png
+          fi
+
+          # Create desktop file
+          cat > AppDir/readin-ai.desktop << EOF
+          [Desktop Entry]
+          Type=Application
+          Name=ReadIn AI
+          Comment=Real-time AI meeting assistant
+          Exec=ReadInAI
+          Icon=readin-ai
+          Categories=Utility;Office;
+          Terminal=false
+          EOF
+
+          # Create AppRun
+          cat > AppDir/AppRun << 'APPRUN'
+          #!/bin/bash
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export PATH="${HERE}/usr/bin:${PATH}"
+          export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+          exec "${HERE}/usr/bin/ReadInAI" "$@"
+          APPRUN
+          chmod +x AppDir/AppRun
+
+          # Create AppImage
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage AppDir "ReadInAI-Linux-$VERSION.AppImage"
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: ReadInAI-Linux-*.AppImage
+
+  create-release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/windows-build/*
+            artifacts/macos-build/*
+            artifacts/linux-build/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

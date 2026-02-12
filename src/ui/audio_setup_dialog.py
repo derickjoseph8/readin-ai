@@ -1,28 +1,43 @@
-"""Audio Setup Dialog for first-run configuration."""
+"""Audio Setup Dialog for first-run configuration (cross-platform)."""
 
 import subprocess
 import os
+import sys
+import threading
+import time
+import webbrowser
 from typing import Optional, List, Dict, Any
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QRadioButton, QButtonGroup, QFrame, QScrollArea, QWidget,
-    QMessageBox
+    QMessageBox, QProgressBar
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont, QPalette, QColor
 
+import numpy as np
+
 from src.audio_capture import AudioCapture
+from config import IS_WINDOWS, IS_MACOS, IS_LINUX
 
 
 class AudioSetupDialog(QDialog):
     """Dialog for selecting audio input device on first run."""
 
+    audio_level_updated = pyqtSignal(float)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._selected_device = None
         self._devices = []
+        self._testing = False
+        self._test_thread = None
+        self._audio_levels = []
         self._apply_dark_theme()
         self.setup_ui()
+
+        # Connect signal
+        self.audio_level_updated.connect(self._update_audio_level_display)
 
     def _apply_dark_theme(self):
         """Apply dark theme using QPalette."""
@@ -56,12 +71,27 @@ class AudioSetupDialog(QDialog):
         header.setStyleSheet("color: #ffffff; background: transparent;")
         layout.addWidget(header)
 
-        # Description
-        desc = QLabel(
-            "Select the audio source ReadIn AI should listen to.\n\n"
-            "To capture meeting audio (what others say), select a loopback device "
-            "like 'Stereo Mix' or 'CABLE Output'."
-        )
+        # Description - platform specific
+        if IS_WINDOWS:
+            desc_text = (
+                "Select the audio source ReadIn AI should listen to.\n\n"
+                "To capture meeting audio (what others say), select a loopback device "
+                "like 'Stereo Mix' or 'CABLE Output'."
+            )
+        elif IS_MACOS:
+            desc_text = (
+                "Select the audio source ReadIn AI should listen to.\n\n"
+                "To capture meeting audio, install BlackHole (free) and select it. "
+                "Run: brew install blackhole-2ch"
+            )
+        else:  # Linux
+            desc_text = (
+                "Select the audio source ReadIn AI should listen to.\n\n"
+                "To capture meeting audio, select a 'Monitor' device from PulseAudio "
+                "(e.g., 'Monitor of Built-in Audio')."
+            )
+
+        desc = QLabel(desc_text)
         desc.setWordWrap(True)
         desc.setStyleSheet("color: #aaaaaa; font-size: 12px; background: transparent;")
         layout.addWidget(desc)
@@ -161,7 +191,82 @@ class AudioSetupDialog(QDialog):
         device_layout.addStretch()
         layout.addWidget(device_frame, 1)
 
-        # Warning if no loopback devices
+        # Audio test section
+        test_frame = QFrame()
+        test_frame.setStyleSheet("""
+            QFrame {
+                background-color: #2a2a2a;
+                border: 1px solid #444444;
+                border-radius: 6px;
+                padding: 8px;
+            }
+        """)
+        test_layout = QVBoxLayout(test_frame)
+        test_layout.setContentsMargins(12, 8, 12, 8)
+
+        test_label = QLabel("Test Selected Device:")
+        test_label.setStyleSheet("color: #ffffff; font-weight: bold; background: transparent;")
+        test_layout.addWidget(test_label)
+
+        test_desc = QLabel(
+            "Click 'Test' and speak or play audio from your meeting app.\n"
+            "The level bar should move if the correct device is selected."
+        )
+        test_desc.setWordWrap(True)
+        test_desc.setStyleSheet("color: #888888; font-size: 11px; background: transparent;")
+        test_layout.addWidget(test_desc)
+
+        # Audio level indicator
+        self.audio_level_bar = QProgressBar()
+        self.audio_level_bar.setMinimum(0)
+        self.audio_level_bar.setMaximum(100)
+        self.audio_level_bar.setValue(0)
+        self.audio_level_bar.setTextVisible(False)
+        self.audio_level_bar.setFixedHeight(20)
+        self.audio_level_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #444444;
+                border-radius: 4px;
+                background-color: #1e1e1e;
+            }
+            QProgressBar::chunk {
+                background-color: #22c55e;
+                border-radius: 3px;
+            }
+        """)
+        test_layout.addWidget(self.audio_level_bar)
+
+        # Test button row
+        test_btn_row = QHBoxLayout()
+        self.test_btn = QPushButton("Test Device")
+        self.test_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3d3d3d;
+                color: #ffffff;
+                border: 1px solid #555555;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #4d4d4d;
+            }
+            QPushButton:pressed {
+                background-color: #2d2d2d;
+            }
+        """)
+        self.test_btn.clicked.connect(self._toggle_test)
+        test_btn_row.addWidget(self.test_btn)
+        test_btn_row.addStretch()
+
+        self.test_status = QLabel("")
+        self.test_status.setStyleSheet("color: #888888; font-size: 11px; background: transparent;")
+        test_btn_row.addWidget(self.test_status)
+
+        test_layout.addLayout(test_btn_row)
+        layout.addWidget(test_frame)
+
+        # Warning if no loopback devices (platform-specific)
         if not has_loopback:
             warning_frame = QFrame()
             warning_frame.setStyleSheet("""
@@ -175,33 +280,143 @@ class AudioSetupDialog(QDialog):
             warning_layout = QVBoxLayout(warning_frame)
             warning_layout.setContentsMargins(12, 8, 12, 8)
 
-            warning_text = QLabel(
-                "No loopback devices found! Only microphones are available.\n"
-                "To capture meeting audio, you need to enable Stereo Mix or install VB-Cable."
-            )
+            warning_title = QLabel("No Loopback Device Found")
+            warning_title.setStyleSheet("color: #fbbf24; font-weight: bold; font-size: 12px; background: transparent;")
+            warning_layout.addWidget(warning_title)
+
+            # Platform-specific instructions
+            if IS_WINDOWS:
+                warning_text_content = (
+                    "To capture what others say in meetings, you need a loopback device.\n\n"
+                    "Option 1: Enable Stereo Mix (free)\n"
+                    "  1. Right-click speaker icon → Sound settings\n"
+                    "  2. Click 'More sound settings' → Recording tab\n"
+                    "  3. Right-click → Show Disabled Devices\n"
+                    "  4. Right-click 'Stereo Mix' → Enable\n\n"
+                    "Option 2: Install VB-Cable (free virtual audio cable)\n"
+                    "  Download from: vb-audio.com/Cable"
+                )
+            elif IS_MACOS:
+                warning_text_content = (
+                    "To capture system audio on macOS, install BlackHole (free).\n\n"
+                    "Installation:\n"
+                    "  1. Run: brew install blackhole-2ch\n"
+                    "  2. Or download from: existential.audio/blackhole\n\n"
+                    "Setup:\n"
+                    "  1. Open Audio MIDI Setup (Spotlight: 'Audio MIDI')\n"
+                    "  2. Create Multi-Output Device with BlackHole + speakers\n"
+                    "  3. Set Multi-Output as system output\n"
+                    "  4. Select BlackHole 2ch here"
+                )
+            else:  # Linux
+                warning_text_content = (
+                    "To capture system audio on Linux, use PulseAudio monitor.\n\n"
+                    "The monitor device should appear automatically.\n"
+                    "Look for 'Monitor of [your audio device]'.\n\n"
+                    "If not visible:\n"
+                    "  1. Install pavucontrol: sudo apt install pavucontrol\n"
+                    "  2. Open PulseAudio Volume Control\n"
+                    "  3. Go to Recording tab while this dialog is open\n"
+                    "  4. Change 'Record from' to 'Monitor of [speaker]'"
+                )
+
+            warning_text = QLabel(warning_text_content)
             warning_text.setWordWrap(True)
             warning_text.setStyleSheet("color: #fbbf24; font-size: 11px; background: transparent;")
             warning_layout.addWidget(warning_text)
 
             btn_row = QHBoxLayout()
 
-            open_sound_btn = QPushButton("Open Sound Settings")
-            open_sound_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #f59e0b;
-                    color: #000000;
-                    border: none;
-                    padding: 6px 12px;
-                    border-radius: 4px;
-                    font-weight: bold;
-                    font-size: 11px;
-                }
-                QPushButton:hover {
-                    background-color: #d97706;
-                }
-            """)
-            open_sound_btn.clicked.connect(self._open_sound_settings)
-            btn_row.addWidget(open_sound_btn)
+            if IS_WINDOWS:
+                open_sound_btn = QPushButton("Open Sound Settings")
+                open_sound_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #f59e0b;
+                        color: #000000;
+                        border: none;
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        font-weight: bold;
+                        font-size: 11px;
+                    }
+                    QPushButton:hover {
+                        background-color: #d97706;
+                    }
+                """)
+                open_sound_btn.clicked.connect(self._open_sound_settings)
+                btn_row.addWidget(open_sound_btn)
+
+                download_btn = QPushButton("Download VB-Cable")
+                download_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #3d3d3d;
+                        color: #ffffff;
+                        border: 1px solid #555555;
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        font-size: 11px;
+                    }
+                    QPushButton:hover {
+                        background-color: #4d4d4d;
+                    }
+                """)
+                download_btn.clicked.connect(self._open_vbcable_download)
+                btn_row.addWidget(download_btn)
+
+            elif IS_MACOS:
+                install_btn = QPushButton("Install BlackHole (Homebrew)")
+                install_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #f59e0b;
+                        color: #000000;
+                        border: none;
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        font-weight: bold;
+                        font-size: 11px;
+                    }
+                    QPushButton:hover {
+                        background-color: #d97706;
+                    }
+                """)
+                install_btn.clicked.connect(self._install_blackhole)
+                btn_row.addWidget(install_btn)
+
+                download_btn = QPushButton("Download BlackHole")
+                download_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #3d3d3d;
+                        color: #ffffff;
+                        border: 1px solid #555555;
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        font-size: 11px;
+                    }
+                    QPushButton:hover {
+                        background-color: #4d4d4d;
+                    }
+                """)
+                download_btn.clicked.connect(self._open_blackhole_download)
+                btn_row.addWidget(download_btn)
+
+            else:  # Linux
+                open_pavucontrol_btn = QPushButton("Open PulseAudio Control")
+                open_pavucontrol_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #f59e0b;
+                        color: #000000;
+                        border: none;
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        font-weight: bold;
+                        font-size: 11px;
+                    }
+                    QPushButton:hover {
+                        background-color: #d97706;
+                    }
+                """)
+                open_pavucontrol_btn.clicked.connect(self._open_pavucontrol)
+                btn_row.addWidget(open_pavucontrol_btn)
 
             btn_row.addStretch()
             warning_layout.addLayout(btn_row)
@@ -235,9 +450,211 @@ class AudioSetupDialog(QDialog):
     def _on_device_selected(self, button):
         """Handle device selection."""
         self._selected_device = button.property("device_index")
+        # Stop any ongoing test when device changes
+        if self._testing:
+            self._stop_test()
+
+    def _toggle_test(self):
+        """Toggle audio device test."""
+        if self._testing:
+            self._stop_test()
+        else:
+            self._start_test()
+
+    def _start_test(self):
+        """Start testing the selected audio device."""
+        if self._selected_device is None:
+            QMessageBox.warning(self, "No Device", "Please select an audio device first.")
+            return
+
+        self._testing = True
+        self.test_btn.setText("Stop Test")
+        self.test_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #dc2626;
+                color: #ffffff;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #b91c1c;
+            }
+        """)
+        self.test_status.setText("Listening... speak or play audio")
+        self.test_status.setStyleSheet("color: #22c55e; font-size: 11px; background: transparent;")
+
+        # Start test thread
+        self._test_thread = threading.Thread(target=self._test_audio_loop, daemon=True)
+        self._test_thread.start()
+
+    def _stop_test(self):
+        """Stop the audio test."""
+        self._testing = False
+        self.test_btn.setText("Test Device")
+        self.test_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3d3d3d;
+                color: #ffffff;
+                border: 1px solid #555555;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #4d4d4d;
+            }
+        """)
+        self.test_status.setText("")
+        self.audio_level_bar.setValue(0)
+
+    def _test_audio_loop(self):
+        """Audio test loop running in background thread (cross-platform)."""
+        try:
+            if IS_WINDOWS:
+                self._test_audio_windows()
+            else:
+                self._test_audio_sounddevice()
+        except Exception as e:
+            print(f"Audio test error: {e}")
+            self._testing = False
+
+    def _test_audio_windows(self):
+        """Test audio on Windows using PyAudio."""
+        import pyaudio
+
+        try:
+            pa = pyaudio.PyAudio()
+
+            # Get device info
+            device_info = pa.get_device_info_by_index(self._selected_device)
+            channels = min(int(device_info['maxInputChannels']), 2)
+            sample_rate = int(device_info.get('defaultSampleRate', 16000))
+
+            # Try device's native sample rate first
+            try:
+                stream = pa.open(
+                    format=pyaudio.paInt16,
+                    channels=channels,
+                    rate=sample_rate,
+                    input=True,
+                    input_device_index=self._selected_device,
+                    frames_per_buffer=1024,
+                )
+            except Exception:
+                # Fall back to 16kHz
+                stream = pa.open(
+                    format=pyaudio.paInt16,
+                    channels=channels,
+                    rate=16000,
+                    input=True,
+                    input_device_index=self._selected_device,
+                    frames_per_buffer=1024,
+                )
+
+            while self._testing:
+                try:
+                    data = stream.read(1024, exception_on_overflow=False)
+                    audio = np.frombuffer(data, dtype=np.int16).astype(np.float32)
+
+                    # Calculate RMS level
+                    rms = np.sqrt(np.mean(audio ** 2))
+                    # Normalize to 0-100 scale
+                    level = min(100, int(rms / 200))
+
+                    # Emit signal to update UI
+                    self.audio_level_updated.emit(level)
+
+                except Exception:
+                    break
+
+            stream.stop_stream()
+            stream.close()
+            pa.terminate()
+
+        except Exception as e:
+            print(f"Windows audio test error: {e}")
+            self._testing = False
+
+    def _test_audio_sounddevice(self):
+        """Test audio on macOS/Linux using sounddevice."""
+        import sounddevice as sd
+
+        try:
+            # Get device info
+            device_info = sd.query_devices(self._selected_device)
+            channels = min(int(device_info['max_input_channels']), 2)
+            sample_rate = int(device_info.get('default_samplerate', 16000))
+
+            # Audio callback to process data
+            audio_data = []
+
+            def callback(indata, frames, time_info, status):
+                if self._testing:
+                    audio_data.append(indata.copy())
+
+            # Try device's native sample rate first
+            try:
+                stream = sd.InputStream(
+                    device=self._selected_device,
+                    channels=channels,
+                    samplerate=sample_rate,
+                    dtype=np.float32,
+                    callback=callback,
+                    blocksize=1024,
+                )
+            except Exception:
+                # Fall back to 16kHz
+                stream = sd.InputStream(
+                    device=self._selected_device,
+                    channels=channels,
+                    samplerate=16000,
+                    dtype=np.float32,
+                    callback=callback,
+                    blocksize=1024,
+                )
+
+            stream.start()
+
+            while self._testing:
+                time.sleep(0.05)  # 50ms update interval
+
+                if audio_data:
+                    # Get latest audio data
+                    latest = audio_data[-1]
+                    audio_data.clear()
+
+                    # Convert to mono if stereo
+                    if latest.ndim > 1:
+                        audio = latest.mean(axis=1)
+                    else:
+                        audio = latest.flatten()
+
+                    # Calculate RMS level
+                    rms = np.sqrt(np.mean(audio ** 2))
+                    # Normalize to 0-100 scale (float32 is -1 to 1)
+                    level = min(100, int(rms * 500))
+
+                    # Emit signal to update UI
+                    self.audio_level_updated.emit(level)
+
+            stream.stop()
+            stream.close()
+
+        except Exception as e:
+            print(f"sounddevice audio test error: {e}")
+            self._testing = False
+
+    def _update_audio_level_display(self, level: float):
+        """Update the audio level bar (called from main thread via signal)."""
+        self.audio_level_bar.setValue(int(level))
 
     def _open_sound_settings(self):
         """Open Windows Sound settings."""
+        if not IS_WINDOWS:
+            return
+
         try:
             # Open the Recording devices tab in Sound settings
             subprocess.Popen(['control', 'mmsys.cpl', ',1'], shell=True)
@@ -254,9 +671,76 @@ class AudioSetupDialog(QDialog):
                 "5. Right-click and enable 'Stereo Mix'"
             )
 
+    def _open_vbcable_download(self):
+        """Open VB-Cable download page."""
+        webbrowser.open("https://vb-audio.com/Cable/")
+
+    def _install_blackhole(self):
+        """Install BlackHole via Homebrew on macOS."""
+        if not IS_MACOS:
+            return
+
+        try:
+            # Try to run brew install in Terminal
+            script = '''
+            tell application "Terminal"
+                activate
+                do script "brew install blackhole-2ch && echo 'BlackHole installed! Please restart ReadIn AI.' && read"
+            end tell
+            '''
+            subprocess.Popen(['osascript', '-e', script])
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Could not run Homebrew: {e}\n\n"
+                "Please install manually:\n"
+                "1. Open Terminal\n"
+                "2. Run: brew install blackhole-2ch\n"
+                "3. Restart ReadIn AI"
+            )
+
+    def _open_blackhole_download(self):
+        """Open BlackHole download page."""
+        webbrowser.open("https://existential.audio/blackhole/")
+
+    def _open_pavucontrol(self):
+        """Open PulseAudio Volume Control on Linux."""
+        if not IS_LINUX:
+            return
+
+        try:
+            subprocess.Popen(['pavucontrol'])
+        except FileNotFoundError:
+            QMessageBox.warning(
+                self,
+                "PulseAudio Control Not Found",
+                "pavucontrol is not installed.\n\n"
+                "Install it with:\n"
+                "  Ubuntu/Debian: sudo apt install pavucontrol\n"
+                "  Fedora: sudo dnf install pavucontrol\n"
+                "  Arch: sudo pacman -S pavucontrol"
+            )
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Could not open PulseAudio Control: {e}"
+            )
+
     def get_selected_device(self) -> Optional[int]:
         """Get the selected device index."""
         return self._selected_device
+
+    def closeEvent(self, event):
+        """Handle dialog close - stop any ongoing test."""
+        self._stop_test()
+        super().closeEvent(event)
+
+    def reject(self):
+        """Handle dialog rejection (cancel/escape)."""
+        self._stop_test()
+        super().reject()
 
     @staticmethod
     def get_audio_device(parent=None) -> Optional[int]:
