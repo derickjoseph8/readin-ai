@@ -1,0 +1,322 @@
+'use client'
+
+import { useState } from 'react'
+import {
+  CreditCard,
+  Check,
+  Zap,
+  Crown,
+  ExternalLink,
+  Calendar,
+  AlertCircle
+} from 'lucide-react'
+import { useAuth } from '@/lib/hooks/useAuth'
+
+const plans = [
+  {
+    id: 'free',
+    name: 'Free',
+    price: 0,
+    period: 'forever',
+    features: [
+      '5 AI responses per day',
+      'Basic meeting transcription',
+      '7-day history',
+      'Standard support',
+    ],
+    cta: 'Current Plan',
+    current: true,
+  },
+  {
+    id: 'pro',
+    name: 'Pro',
+    price: 19,
+    period: 'per month',
+    features: [
+      'Unlimited AI responses',
+      'Advanced transcription',
+      'Unlimited history',
+      'Meeting summaries',
+      'Action item tracking',
+      'Priority support',
+    ],
+    cta: 'Upgrade to Pro',
+    popular: true,
+  },
+  {
+    id: 'team',
+    name: 'Team',
+    price: 49,
+    period: 'per month',
+    features: [
+      'Everything in Pro',
+      'Up to 10 team members',
+      'Shared meeting library',
+      'Team analytics',
+      'Admin controls',
+      'SSO (coming soon)',
+    ],
+    cta: 'Contact Sales',
+  },
+]
+
+export default function BillingPage() {
+  const { status } = useAuth()
+  const [isLoading, setIsLoading] = useState<string | null>(null)
+
+  const currentPlan = status?.subscription.status === 'active' ? 'pro' :
+                      status?.subscription.status === 'trial' ? 'trial' : 'free'
+
+  const handleUpgrade = async (planId: string) => {
+    setIsLoading(planId)
+    try {
+      // Redirect to Stripe checkout
+      const response = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: planId }),
+      })
+      const data = await response.json()
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } catch (error) {
+      console.error('Upgrade failed:', error)
+    } finally {
+      setIsLoading(null)
+    }
+  }
+
+  const handleManageSubscription = async () => {
+    try {
+      const response = await fetch('/api/stripe/portal', {
+        method: 'POST',
+      })
+      const data = await response.json()
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } catch (error) {
+      console.error('Portal access failed:', error)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-white">Billing & Subscription</h1>
+        <p className="text-gray-400 mt-1">
+          Manage your subscription and billing information
+        </p>
+      </div>
+
+      {/* Current Subscription Status */}
+      <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+        <h2 className="font-semibold text-white mb-4 flex items-center">
+          <Crown className="h-5 w-5 text-gold-400 mr-2" />
+          Current Subscription
+        </h2>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <span className="text-xl font-bold text-white capitalize">
+                {currentPlan === 'trial' ? 'Pro Trial' : currentPlan}
+              </span>
+              {status?.subscription.status === 'active' && (
+                <span className="px-2 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded-full">
+                  Active
+                </span>
+              )}
+              {status?.subscription.status === 'trial' && (
+                <span className="px-2 py-1 bg-gold-500/20 text-gold-400 text-xs rounded-full">
+                  Trial
+                </span>
+              )}
+            </div>
+
+            {status?.subscription.status === 'trial' && status.subscription.trial_days_remaining && (
+              <p className="text-gray-400 text-sm mt-1 flex items-center">
+                <Calendar className="h-4 w-4 mr-1" />
+                {status.subscription.trial_days_remaining} days remaining in trial
+              </p>
+            )}
+
+            {status?.subscription.current_period_end && (
+              <p className="text-gray-400 text-sm mt-1 flex items-center">
+                <Calendar className="h-4 w-4 mr-1" />
+                Renews on {new Date(status.subscription.current_period_end).toLocaleDateString()}
+              </p>
+            )}
+          </div>
+
+          {status?.subscription.status === 'active' && (
+            <button
+              onClick={handleManageSubscription}
+              className="px-4 py-2 border border-premium-border text-gray-300 rounded-lg hover:bg-premium-surface transition-colors flex items-center text-sm"
+            >
+              Manage Subscription
+              <ExternalLink className="h-4 w-4 ml-2" />
+            </button>
+          )}
+        </div>
+
+        {/* Usage Stats */}
+        {status?.usage && (
+          <div className="mt-6 pt-6 border-t border-premium-border">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-gray-400 text-sm">Today&apos;s Usage</span>
+              <span className="text-white text-sm">
+                {status.usage.daily_count || 0}
+                {status.usage.daily_limit && ` / ${status.usage.daily_limit}`} responses
+              </span>
+            </div>
+            <div className="h-2 bg-premium-surface rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-gold-600 to-gold-400 rounded-full"
+                style={{
+                  width: status.usage.daily_limit
+                    ? `${Math.min((status.usage.daily_count / status.usage.daily_limit) * 100, 100)}%`
+                    : '0%'
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Trial Warning */}
+      {status?.subscription.status === 'trial' && status.subscription.trial_days_remaining && status.subscription.trial_days_remaining <= 3 && (
+        <div className="bg-gold-500/10 border border-gold-500/30 rounded-xl p-4 flex items-start">
+          <AlertCircle className="h-5 w-5 text-gold-400 mr-3 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-white font-medium">Your trial is ending soon</p>
+            <p className="text-gold-400/80 text-sm mt-1">
+              Upgrade now to keep your unlimited access and all Pro features.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Plans */}
+      <div>
+        <h2 className="font-semibold text-white mb-4">Available Plans</h2>
+        <div className="grid md:grid-cols-3 gap-4">
+          {plans.map((plan) => (
+            <div
+              key={plan.id}
+              className={`bg-premium-card border rounded-xl p-6 relative ${
+                plan.popular ? 'border-gold-500/50' : 'border-premium-border'
+              }`}
+            >
+              {plan.popular && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <span className="px-3 py-1 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg text-xs font-medium rounded-full">
+                    Most Popular
+                  </span>
+                </div>
+              )}
+
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-white">{plan.name}</h3>
+                <div className="mt-2">
+                  <span className="text-3xl font-bold text-white">${plan.price}</span>
+                  <span className="text-gray-500 text-sm">/{plan.period}</span>
+                </div>
+              </div>
+
+              <ul className="space-y-3 mb-6">
+                {plan.features.map((feature, i) => (
+                  <li key={i} className="flex items-start text-sm">
+                    <Check className="h-4 w-4 text-gold-400 mr-2 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-300">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                onClick={() => plan.id !== 'free' && handleUpgrade(plan.id)}
+                disabled={plan.id === 'free' || isLoading === plan.id || (currentPlan === 'pro' && plan.id === 'pro')}
+                className={`w-full py-2.5 rounded-lg font-medium transition-all ${
+                  plan.popular
+                    ? 'bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg hover:shadow-gold'
+                    : plan.id === 'free'
+                    ? 'bg-premium-surface text-gray-400 cursor-not-allowed'
+                    : 'border border-premium-border text-white hover:bg-premium-surface'
+                } ${isLoading === plan.id || (currentPlan === 'pro' && plan.id === 'pro') ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {isLoading === plan.id ? (
+                  <span className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-current mr-2"></div>
+                    Processing...
+                  </span>
+                ) : currentPlan === 'pro' && plan.id === 'pro' ? (
+                  'Current Plan'
+                ) : (
+                  plan.cta
+                )}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Payment Methods */}
+      {status?.subscription.status === 'active' && (
+        <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+          <h2 className="font-semibold text-white mb-4 flex items-center">
+            <CreditCard className="h-5 w-5 text-gold-400 mr-2" />
+            Payment Method
+          </h2>
+
+          <div className="flex items-center justify-between p-4 bg-premium-surface rounded-lg">
+            <div className="flex items-center">
+              <div className="w-10 h-7 bg-gradient-to-r from-blue-600 to-blue-400 rounded flex items-center justify-center mr-3">
+                <span className="text-white text-xs font-bold">VISA</span>
+              </div>
+              <div>
+                <p className="text-white text-sm">**** **** **** 4242</p>
+                <p className="text-gray-500 text-xs">Expires 12/25</p>
+              </div>
+            </div>
+            <button
+              onClick={handleManageSubscription}
+              className="text-gold-400 text-sm hover:text-gold-300 transition-colors"
+            >
+              Update
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* FAQ */}
+      <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+        <h2 className="font-semibold text-white mb-4">Frequently Asked Questions</h2>
+
+        <div className="space-y-4">
+          <div>
+            <h4 className="text-white font-medium mb-1">Can I cancel anytime?</h4>
+            <p className="text-gray-400 text-sm">
+              Yes, you can cancel your subscription at any time. You&apos;ll continue to have access until the end of your billing period.
+            </p>
+          </div>
+
+          <div>
+            <h4 className="text-white font-medium mb-1">What happens to my data if I downgrade?</h4>
+            <p className="text-gray-400 text-sm">
+              Your data is preserved. On the free plan, you&apos;ll only have access to your last 7 days of meetings.
+            </p>
+          </div>
+
+          <div>
+            <h4 className="text-white font-medium mb-1">Do you offer refunds?</h4>
+            <p className="text-gray-400 text-sm">
+              We offer a full refund within 14 days of your first subscription if you&apos;re not satisfied.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

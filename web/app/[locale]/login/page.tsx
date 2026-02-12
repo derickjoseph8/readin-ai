@@ -1,52 +1,57 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import Link from 'next/link'
-import { ArrowLeft, Mail, Lock, Loader2 } from 'lucide-react'
+import { useState } from 'react';
+import Link from 'next/link';
+import { ArrowLeft, Mail, Lock, Loader2 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://18.198.173.81:7500';
 
 export default function LoginPage() {
-  const [isLogin, setIsLogin] = useState(true)
-  const [loading, setLoading] = useState(false)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [isLogin, setIsLogin] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const t = useTranslations('login');
+  const tc = useTranslations('common');
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    setSuccess('')
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccess('');
 
     try {
-      const endpoint = isLogin ? '/auth/login' : '/auth/register'
+      const endpoint = isLogin ? '/auth/login' : '/auth/register';
       const body = isLogin
         ? { email, password }
-        : { email, password, full_name: name }
+        : { email, password, full_name: name };
 
-      const response = await fetch(`http://127.0.0.1:8000${endpoint}`, {
+      const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (response.ok) {
-        setSuccess(isLogin ? 'Login successful! Open the desktop app to continue.' : 'Account created! You can now log in to the desktop app.')
+        setSuccess(isLogin ? 'Login successful! Open the desktop app to continue.' : 'Account created! You can now log in to the desktop app.');
         if (data.access_token) {
-          localStorage.setItem('readin_token', data.access_token)
+          localStorage.setItem('readin_token', data.access_token);
         }
       } else {
-        setError(data.detail || 'Something went wrong. Please try again.')
+        setError(data.detail || 'Something went wrong. Please try again.');
       }
-    } catch (err) {
-      setError('Cannot connect to server. Make sure the backend is running.')
+    } catch {
+      setError('Unable to connect to our servers. Please try again later.');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <main className="min-h-screen bg-premium-bg text-white flex items-center justify-center px-4">
@@ -60,7 +65,7 @@ export default function LoginPage() {
           className="inline-flex items-center text-gray-400 hover:text-gold-400 transition mb-8"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Home
+          {tc('back')}
         </Link>
 
         {/* Card */}
@@ -71,10 +76,10 @@ export default function LoginPage() {
               <span className="text-premium-bg font-bold text-xl">R</span>
             </div>
             <h1 className="text-2xl font-bold">
-              {isLogin ? 'Welcome Back' : 'Create Account'}
+              {isLogin ? t('title') : tc('signUp')}
             </h1>
             <p className="text-gray-400 mt-2">
-              {isLogin ? 'Log in to your ReadIn AI account' : 'Start your 14-day free trial'}
+              {isLogin ? t('subtitle') : 'Start your 14-day free trial'}
             </p>
           </div>
 
@@ -97,7 +102,7 @@ export default function LoginPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Email
+                {t('email')}
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
@@ -114,7 +119,7 @@ export default function LoginPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Password
+                {t('password')}
               </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
@@ -150,9 +155,9 @@ export default function LoginPage() {
               {loading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
               ) : isLogin ? (
-                'Log In'
+                t('signIn')
               ) : (
-                'Create Account'
+                tc('signUp')
               )}
             </button>
           </form>
@@ -160,17 +165,17 @@ export default function LoginPage() {
           {/* Toggle */}
           <div className="mt-6 text-center text-sm">
             <span className="text-gray-400">
-              {isLogin ? "Don't have an account? " : 'Already have an account? '}
+              {isLogin ? t('noAccount') + ' ' : 'Already have an account? '}
             </span>
             <button
               onClick={() => {
-                setIsLogin(!isLogin)
-                setError('')
-                setSuccess('')
+                setIsLogin(!isLogin);
+                setError('');
+                setSuccess('');
               }}
               className="text-gold-400 hover:text-gold-300 font-medium"
             >
-              {isLogin ? 'Sign Up' : 'Log In'}
+              {isLogin ? t('signUp') : tc('login')}
             </button>
           </div>
 
@@ -178,9 +183,9 @@ export default function LoginPage() {
           <div className="mt-6 pt-6 border-t border-premium-border text-center">
             <p className="text-gray-500 text-sm">
               By continuing, you agree to our{' '}
-              <a href="#" className="text-gray-400 hover:text-gold-400">Terms</a>
+              <Link href="/terms" className="text-gray-400 hover:text-gold-400">Terms</Link>
               {' '}and{' '}
-              <a href="#" className="text-gray-400 hover:text-gold-400">Privacy Policy</a>
+              <Link href="/privacy" className="text-gray-400 hover:text-gold-400">Privacy Policy</Link>
             </p>
           </div>
         </div>
@@ -194,5 +199,5 @@ export default function LoginPage() {
         </p>
       </div>
     </main>
-  )
+  );
 }

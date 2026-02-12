@@ -1,0 +1,333 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "filter": "Filter",
+    "export": "Export",
+    "import": "Import",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "submit": "Submit",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No",
+    "all": "All",
+    "none": "None",
+    "select": "Select",
+    "view": "View",
+    "download": "Download",
+    "upload": "Upload",
+    "refresh": "Refresh",
+    "logout": "Logout",
+    "login": "Login",
+    "signUp": "Sign Up",
+    "settings": "Settings",
+    "profile": "Profile",
+    "language": "Language",
+    "english": "English",
+    "spanish": "Spanish",
+    "swahili": "Swahili"
+  },
+  "header": {
+    "features": "Features",
+    "pricing": "Pricing",
+    "docs": "Docs",
+    "download": "Download",
+    "tryFree": "Try Free",
+    "getStarted": "Get Started"
+  },
+  "hero": {
+    "badge": "TRUSTED BY 10,000+ PROFESSIONALS",
+    "title": "Your Real-Time AI Assistant for Live Conversations",
+    "subtitle": "Never get caught off guard in meetings again. ReadIn AI listens to questions and instantly shows talking points you can glance at and rephrase naturally.",
+    "tryFree": "Try Free for 14 Days",
+    "watchDemo": "Watch Demo",
+    "noCreditCard": "No credit card required"
+  },
+  "features": {
+    "title": "Everything You Need to Excel in Any Conversation",
+    "subtitle": "Powerful features designed to make you more confident and articulate",
+    "realTime": {
+      "title": "Real-Time AI Assistance",
+      "description": "Get instant suggestions as conversations happen, with context-aware responses tailored to your situation"
+    },
+    "privacy": {
+      "title": "Privacy-First Design",
+      "description": "All processing happens locally on your device. Your conversations never leave your computer"
+    },
+    "learning": {
+      "title": "Adaptive Learning",
+      "description": "The AI learns your communication style and preferences to provide increasingly personalized assistance"
+    },
+    "integration": {
+      "title": "Universal Integration",
+      "description": "Works seamlessly with Zoom, Teams, Google Meet, Discord, and any audio source"
+    },
+    "analytics": {
+      "title": "Meeting Analytics",
+      "description": "Track your speaking patterns, get insights on engagement, and improve over time"
+    },
+    "memory": {
+      "title": "Participant Memory",
+      "description": "Remember key details about people you've met to maintain better professional relationships"
+    }
+  },
+  "howItWorks": {
+    "title": "How It Works",
+    "subtitle": "Get started in minutes with our simple setup process",
+    "step1": {
+      "title": "Download & Install",
+      "description": "Quick installation with automatic setup for your platform"
+    },
+    "step2": {
+      "title": "Configure Your Preferences",
+      "description": "Tell us about your profession and communication style"
+    },
+    "step3": {
+      "title": "Start Your Meeting",
+      "description": "ReadIn AI automatically detects and assists in your conversations"
+    }
+  },
+  "pricing": {
+    "title": "Simple, Transparent Pricing",
+    "subtitle": "Choose the plan that fits your needs",
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "save": "Save 20%",
+    "free": {
+      "name": "Free",
+      "price": "$0",
+      "period": "forever",
+      "description": "Perfect for trying out ReadIn AI",
+      "features": [
+        "5 meetings per month",
+        "Basic AI suggestions",
+        "Local transcription",
+        "Community support"
+      ],
+      "cta": "Get Started"
+    },
+    "pro": {
+      "name": "Pro",
+      "price": "$19",
+      "period": "per month",
+      "description": "For professionals who want more",
+      "features": [
+        "Unlimited meetings",
+        "Advanced AI with GPT-4",
+        "Meeting summaries",
+        "Action item extraction",
+        "Priority support",
+        "Calendar integration"
+      ],
+      "cta": "Start Free Trial",
+      "popular": "Most Popular"
+    },
+    "enterprise": {
+      "name": "Enterprise",
+      "price": "Custom",
+      "period": "per user/month",
+      "description": "For teams and organizations",
+      "features": [
+        "Everything in Pro",
+        "Team management",
+        "SSO integration",
+        "Custom AI training",
+        "Dedicated support",
+        "On-premise option"
+      ],
+      "cta": "Contact Sales"
+    }
+  },
+  "faq": {
+    "title": "Frequently Asked Questions",
+    "q1": {
+      "question": "How does ReadIn AI protect my privacy?",
+      "answer": "All audio processing happens locally on your device using Whisper AI. Your conversations are never sent to external servers unless you explicitly enable cloud features."
+    },
+    "q2": {
+      "question": "Which meeting platforms does it support?",
+      "answer": "ReadIn AI works with Zoom, Microsoft Teams, Google Meet, Webex, Discord, and any application that uses your system audio."
+    },
+    "q3": {
+      "question": "Can others in the meeting see my AI suggestions?",
+      "answer": "No, ReadIn AI runs as a discreet overlay on your screen. Only you can see the suggestions, and there's no indication to others that you're using it."
+    },
+    "q4": {
+      "question": "How accurate is the transcription?",
+      "answer": "We use OpenAI's Whisper model which achieves near-human accuracy. Performance may vary based on audio quality and background noise."
+    },
+    "q5": {
+      "question": "Can I cancel my subscription anytime?",
+      "answer": "Yes, you can cancel your subscription at any time. You'll continue to have access until the end of your billing period."
+    }
+  },
+  "cta": {
+    "title": "Ready to Transform Your Meetings?",
+    "subtitle": "Join thousands of professionals who use ReadIn AI to communicate with confidence",
+    "button": "Start Your Free Trial",
+    "noCard": "No credit card required"
+  },
+  "footer": {
+    "product": "Product",
+    "company": "Company",
+    "legal": "Legal",
+    "support": "Support",
+    "features": "Features",
+    "pricing": "Pricing",
+    "download": "Download",
+    "changelog": "Changelog",
+    "about": "About",
+    "blog": "Blog",
+    "careers": "Careers",
+    "contact": "Contact",
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service",
+    "cookies": "Cookie Policy",
+    "gdpr": "GDPR",
+    "docs": "Documentation",
+    "faq": "FAQ",
+    "status": "Status",
+    "copyright": "All rights reserved."
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome back",
+    "overview": "Overview",
+    "recentMeetings": "Recent Meetings",
+    "quickStats": "Quick Stats",
+    "totalMeetings": "Total Meetings",
+    "hoursRecorded": "Hours Recorded",
+    "actionItems": "Action Items",
+    "avgDuration": "Avg Duration",
+    "viewAll": "View All",
+    "noMeetings": "No meetings yet",
+    "startFirst": "Start your first meeting to see it here"
+  },
+  "meetings": {
+    "title": "Meetings",
+    "subtitle": "View and manage your meeting history",
+    "search": "Search meetings...",
+    "filter": "Filter",
+    "sort": "Sort by",
+    "newest": "Newest First",
+    "oldest": "Oldest First",
+    "duration": "Duration",
+    "participants": "Participants",
+    "topics": "Topics discussed",
+    "actionItems": "Action items",
+    "summary": "Summary",
+    "transcript": "Transcript",
+    "export": "Export",
+    "delete": "Delete",
+    "noMeetings": "No meetings found",
+    "scheduled": "Scheduled",
+    "completed": "Completed",
+    "inProgress": "In Progress"
+  },
+  "analytics": {
+    "title": "Analytics",
+    "subtitle": "Insights from your meetings",
+    "period": "Time Period",
+    "last7Days": "Last 7 Days",
+    "last30Days": "Last 30 Days",
+    "last90Days": "Last 90 Days",
+    "allTime": "All Time",
+    "meetingTrends": "Meeting Trends",
+    "speakingTime": "Speaking Time",
+    "topTopics": "Top Topics",
+    "productivity": "Productivity Score",
+    "engagement": "Engagement Level",
+    "improvement": "vs previous period"
+  },
+  "settings": {
+    "title": "Settings",
+    "profile": {
+      "title": "Profile Settings",
+      "name": "Full Name",
+      "email": "Email Address",
+      "profession": "Profession",
+      "timezone": "Timezone",
+      "language": "Language",
+      "save": "Save Changes"
+    },
+    "billing": {
+      "title": "Billing & Subscription",
+      "currentPlan": "Current Plan",
+      "nextBilling": "Next Billing Date",
+      "paymentMethod": "Payment Method",
+      "updateCard": "Update Card",
+      "viewHistory": "View Billing History",
+      "cancel": "Cancel Subscription",
+      "upgrade": "Upgrade Plan"
+    },
+    "security": {
+      "title": "Security",
+      "password": "Change Password",
+      "currentPassword": "Current Password",
+      "newPassword": "New Password",
+      "confirmPassword": "Confirm New Password",
+      "twoFactor": "Two-Factor Authentication",
+      "enable2FA": "Enable 2FA",
+      "sessions": "Active Sessions",
+      "revokeAll": "Revoke All Sessions"
+    },
+    "notifications": {
+      "title": "Notifications",
+      "email": "Email Notifications",
+      "meetingReminders": "Meeting Reminders",
+      "weeklySummary": "Weekly Summary",
+      "productUpdates": "Product Updates"
+    },
+    "privacy": {
+      "title": "Privacy",
+      "dataExport": "Export My Data",
+      "deleteAccount": "Delete Account",
+      "analytics": "Allow Analytics",
+      "marketing": "Marketing Communications"
+    }
+  },
+  "team": {
+    "title": "Team",
+    "subtitle": "Manage your organization",
+    "members": "Team Members",
+    "invite": "Invite Member",
+    "role": "Role",
+    "admin": "Admin",
+    "member": "Member",
+    "viewer": "Viewer",
+    "pending": "Pending",
+    "active": "Active",
+    "remove": "Remove",
+    "changeRole": "Change Role"
+  },
+  "login": {
+    "title": "Sign In",
+    "subtitle": "Welcome back to ReadIn AI",
+    "email": "Email Address",
+    "password": "Password",
+    "remember": "Remember me",
+    "forgot": "Forgot password?",
+    "signIn": "Sign In",
+    "noAccount": "Don't have an account?",
+    "signUp": "Sign up",
+    "orContinue": "Or continue with",
+    "google": "Continue with Google",
+    "microsoft": "Continue with Microsoft"
+  },
+  "errors": {
+    "notFound": "Page not found",
+    "unauthorized": "You don't have permission to access this page",
+    "serverError": "Something went wrong. Please try again later.",
+    "networkError": "Network error. Please check your connection.",
+    "sessionExpired": "Your session has expired. Please sign in again."
+  }
+}

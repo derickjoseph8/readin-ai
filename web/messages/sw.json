@@ -1,0 +1,333 @@
+{
+  "common": {
+    "loading": "Inapakia...",
+    "error": "Kosa limetokea",
+    "save": "Hifadhi",
+    "cancel": "Ghairi",
+    "delete": "Futa",
+    "edit": "Hariri",
+    "create": "Unda",
+    "search": "Tafuta",
+    "filter": "Chuja",
+    "export": "Hamisha",
+    "import": "Ingiza",
+    "close": "Funga",
+    "back": "Rudi",
+    "next": "Ifuatayo",
+    "previous": "Iliyotangulia",
+    "submit": "Wasilisha",
+    "confirm": "Thibitisha",
+    "yes": "Ndiyo",
+    "no": "Hapana",
+    "all": "Zote",
+    "none": "Hakuna",
+    "select": "Chagua",
+    "view": "Tazama",
+    "download": "Pakua",
+    "upload": "Pakia",
+    "refresh": "Sasisha",
+    "logout": "Ondoka",
+    "login": "Ingia",
+    "signUp": "Jisajili",
+    "settings": "Mipangilio",
+    "profile": "Wasifu",
+    "language": "Lugha",
+    "english": "Kiingereza",
+    "spanish": "Kihispania",
+    "swahili": "Kiswahili"
+  },
+  "header": {
+    "features": "Vipengele",
+    "pricing": "Bei",
+    "docs": "Nyaraka",
+    "download": "Pakua",
+    "tryFree": "Jaribu Bure",
+    "getStarted": "Anza"
+  },
+  "hero": {
+    "badge": "KUAMINIWA NA WATAALAMU ZAIDI YA 10,000",
+    "title": "Msaidizi Wako wa AI kwa Wakati Halisi kwa Mazungumzo ya Moja kwa Moja",
+    "subtitle": "Usishtushwe tena kwenye mikutano. ReadIn AI inasikiliza maswali na kuonyesha nukta za mazungumzo mara moja ambazo unaweza kuzitazama na kuzisema kwa kawaida.",
+    "tryFree": "Jaribu Bure kwa Siku 14",
+    "watchDemo": "Tazama Demo",
+    "noCreditCard": "Kadi ya mkopo haihitajiki"
+  },
+  "features": {
+    "title": "Kila Kitu Unachohitaji Kufanya Vizuri katika Mazungumzo Yoyote",
+    "subtitle": "Vipengele vyenye nguvu vilivyoundwa kukufanya uwe na ujasiri na uwezo wa kueleza",
+    "realTime": {
+      "title": "Msaada wa AI kwa Wakati Halisi",
+      "description": "Pata mapendekezo ya papo hapo mazungumzo yanapofanyika, na majibu yanayofaa muktadha"
+    },
+    "privacy": {
+      "title": "Muundo wa Faragha Kwanza",
+      "description": "Usindikaji wote hufanyika kwenye kifaa chako. Mazungumzo yako hayaondoki kwenye kompyuta yako"
+    },
+    "learning": {
+      "title": "Kujifunza Kunakojirekebisha",
+      "description": "AI inajifunza mtindo wako wa mawasiliano na mapendeleo yako kutoa msaada unaozidi kubinafsishwa"
+    },
+    "integration": {
+      "title": "Kuunganishwa kwa Ulimwengu",
+      "description": "Inafanya kazi vizuri na Zoom, Teams, Google Meet, Discord, na chanzo chochote cha sauti"
+    },
+    "analytics": {
+      "title": "Uchambuzi wa Mikutano",
+      "description": "Fuatilia mifumo yako ya kuzungumza, pata maarifa kuhusu ushiriki, na uboreshwe na wakati"
+    },
+    "memory": {
+      "title": "Kumbukumbu ya Washiriki",
+      "description": "Kumbuka maelezo muhimu kuhusu watu uliowakutana ili kudumisha mahusiano bora ya kitaalamu"
+    }
+  },
+  "howItWorks": {
+    "title": "Jinsi Inavyofanya Kazi",
+    "subtitle": "Anza kwa dakika chache na mchakato wetu rahisi wa usanidi",
+    "step1": {
+      "title": "Pakua na Sakinisha",
+      "description": "Usanidi wa haraka na usanidi wa kiotomatiki kwa jukwaa lako"
+    },
+    "step2": {
+      "title": "Sanidi Mapendeleo Yako",
+      "description": "Tuambie kuhusu kazi yako na mtindo wako wa mawasiliano"
+    },
+    "step3": {
+      "title": "Anza Mkutano Wako",
+      "description": "ReadIn AI inagundua na kusaidia kiotomatiki katika mazungumzo yako"
+    }
+  },
+  "pricing": {
+    "title": "Bei Rahisi na Wazi",
+    "subtitle": "Chagua mpango unaofaa mahitaji yako",
+    "monthly": "Kila Mwezi",
+    "yearly": "Kila Mwaka",
+    "save": "Okoa 20%",
+    "free": {
+      "name": "Bure",
+      "price": "$0",
+      "period": "milele",
+      "description": "Kamili kwa kujaribu ReadIn AI",
+      "features": [
+        "Mikutano 5 kwa mwezi",
+        "Mapendekezo ya msingi ya AI",
+        "Unukuzi wa ndani",
+        "Msaada wa jamii"
+      ],
+      "cta": "Anza"
+    },
+    "pro": {
+      "name": "Pro",
+      "price": "$19",
+      "period": "kwa mwezi",
+      "description": "Kwa wataalamu wanaotaka zaidi",
+      "features": [
+        "Mikutano isiyo na kikomo",
+        "AI ya juu na GPT-4",
+        "Muhtasari wa mikutano",
+        "Uchimbaji wa kazi",
+        "Msaada wa kipaumbele",
+        "Kuunganishwa na kalenda"
+      ],
+      "cta": "Anza Majaribio Bure",
+      "popular": "Maarufu Zaidi"
+    },
+    "enterprise": {
+      "name": "Biashara",
+      "price": "Maalum",
+      "period": "kwa mtumiaji/mwezi",
+      "description": "Kwa timu na mashirika",
+      "features": [
+        "Kila kitu katika Pro",
+        "Usimamizi wa timu",
+        "Kuunganishwa kwa SSO",
+        "Mafunzo ya AI maalum",
+        "Msaada wa kipekee",
+        "Chaguo la kwenye eneo"
+      ],
+      "cta": "Wasiliana na Mauzo"
+    }
+  },
+  "faq": {
+    "title": "Maswali Yanayoulizwa Mara kwa Mara",
+    "q1": {
+      "question": "ReadIn AI inalindaje faragha yangu?",
+      "answer": "Usindikaji wote wa sauti hufanyika kwenye kifaa chako kwa kutumia Whisper AI. Mazungumzo yako hayatumwi kwa seva za nje isipokuwa uwezesha vipengele vya wingu kwa makusudi."
+    },
+    "q2": {
+      "question": "Inasaidia majukwaa gani ya mikutano?",
+      "answer": "ReadIn AI inafanya kazi na Zoom, Microsoft Teams, Google Meet, Webex, Discord, na programu yoyote inayotumia sauti ya mfumo wako."
+    },
+    "q3": {
+      "question": "Je, wengine kwenye mkutano wanaweza kuona mapendekezo yangu ya AI?",
+      "answer": "Hapana, ReadIn AI inafanya kazi kama mwonekano wa siri kwenye skrini yako. Ni wewe tu unayeweza kuona mapendekezo, na hakuna dalili kwa wengine kwamba unatumia."
+    },
+    "q4": {
+      "question": "Unukuzi una usahihi gani?",
+      "answer": "Tunatumia modeli ya Whisper ya OpenAI ambayo inapata usahihi karibu na wa binadamu. Utendaji unaweza kutofautiana kulingana na ubora wa sauti na kelele za nyuma."
+    },
+    "q5": {
+      "question": "Naweza kughairi usajili wangu wakati wowote?",
+      "answer": "Ndiyo, unaweza kughairi usajili wako wakati wowote. Utaendelea kupata ufikiaji hadi mwisho wa kipindi chako cha malipo."
+    }
+  },
+  "cta": {
+    "title": "Uko Tayari Kubadilisha Mikutano Yako?",
+    "subtitle": "Jiunge na maelfu ya wataalamu wanaotumia ReadIn AI kuwasiliana kwa ujasiri",
+    "button": "Anza Majaribio Yako ya Bure",
+    "noCard": "Kadi ya mkopo haihitajiki"
+  },
+  "footer": {
+    "product": "Bidhaa",
+    "company": "Kampuni",
+    "legal": "Kisheria",
+    "support": "Msaada",
+    "features": "Vipengele",
+    "pricing": "Bei",
+    "download": "Pakua",
+    "changelog": "Rekodi ya mabadiliko",
+    "about": "Kuhusu",
+    "blog": "Blogu",
+    "careers": "Kazi",
+    "contact": "Wasiliana",
+    "privacy": "Sera ya Faragha",
+    "terms": "Masharti ya Huduma",
+    "cookies": "Sera ya Vidakuzi",
+    "gdpr": "GDPR",
+    "docs": "Nyaraka",
+    "faq": "Maswali Yanayoulizwa",
+    "status": "Hali",
+    "copyright": "Haki zote zimehifadhiwa."
+  },
+  "dashboard": {
+    "title": "Dashibodi",
+    "welcome": "Karibu tena",
+    "overview": "Muhtasari",
+    "recentMeetings": "Mikutano ya Hivi Karibuni",
+    "quickStats": "Takwimu za Haraka",
+    "totalMeetings": "Jumla ya Mikutano",
+    "hoursRecorded": "Masaa Yaliyorekodiwa",
+    "actionItems": "Vitu vya Hatua",
+    "avgDuration": "Wastani wa Muda",
+    "viewAll": "Tazama Zote",
+    "noMeetings": "Hakuna mikutano bado",
+    "startFirst": "Anza mkutano wako wa kwanza kuiona hapa"
+  },
+  "meetings": {
+    "title": "Mikutano",
+    "subtitle": "Tazama na simamia historia yako ya mikutano",
+    "search": "Tafuta mikutano...",
+    "filter": "Chuja",
+    "sort": "Panga kwa",
+    "newest": "Mpya Zaidi",
+    "oldest": "Ya Zamani Zaidi",
+    "duration": "Muda",
+    "participants": "Washiriki",
+    "topics": "Mada zilizojadiliwa",
+    "actionItems": "Vitu vya hatua",
+    "summary": "Muhtasari",
+    "transcript": "Nakala",
+    "export": "Hamisha",
+    "delete": "Futa",
+    "noMeetings": "Hakuna mikutano iliyopatikana",
+    "scheduled": "Imepangwa",
+    "completed": "Imekamilika",
+    "inProgress": "Inaendelea"
+  },
+  "analytics": {
+    "title": "Uchambuzi",
+    "subtitle": "Maarifa kutoka kwa mikutano yako",
+    "period": "Kipindi cha Muda",
+    "last7Days": "Siku 7 Zilizopita",
+    "last30Days": "Siku 30 Zilizopita",
+    "last90Days": "Siku 90 Zilizopita",
+    "allTime": "Wakati Wote",
+    "meetingTrends": "Mwenendo wa Mikutano",
+    "speakingTime": "Wakati wa Kuzungumza",
+    "topTopics": "Mada Kuu",
+    "productivity": "Alama ya Tija",
+    "engagement": "Kiwango cha Ushiriki",
+    "improvement": "vs kipindi kilichopita"
+  },
+  "settings": {
+    "title": "Mipangilio",
+    "profile": {
+      "title": "Mipangilio ya Wasifu",
+      "name": "Jina Kamili",
+      "email": "Barua Pepe",
+      "profession": "Kazi",
+      "timezone": "Eneo la Saa",
+      "language": "Lugha",
+      "save": "Hifadhi Mabadiliko"
+    },
+    "billing": {
+      "title": "Malipo na Usajili",
+      "currentPlan": "Mpango wa Sasa",
+      "nextBilling": "Tarehe ya Malipo Ijayo",
+      "paymentMethod": "Njia ya Malipo",
+      "updateCard": "Sasisha Kadi",
+      "viewHistory": "Tazama Historia ya Malipo",
+      "cancel": "Ghairi Usajili",
+      "upgrade": "Boresha Mpango"
+    },
+    "security": {
+      "title": "Usalama",
+      "password": "Badilisha Nenosiri",
+      "currentPassword": "Nenosiri la Sasa",
+      "newPassword": "Nenosiri Jipya",
+      "confirmPassword": "Thibitisha Nenosiri Jipya",
+      "twoFactor": "Uthibitisho wa Hatua Mbili",
+      "enable2FA": "Washa 2FA",
+      "sessions": "Vipindi Vilivyo Hai",
+      "revokeAll": "Batilisha Vipindi Vyote"
+    },
+    "notifications": {
+      "title": "Arifa",
+      "email": "Arifa za Barua Pepe",
+      "meetingReminders": "Vikumbusho vya Mikutano",
+      "weeklySummary": "Muhtasari wa Kila Wiki",
+      "productUpdates": "Sasisho za Bidhaa"
+    },
+    "privacy": {
+      "title": "Faragha",
+      "dataExport": "Hamisha Data Yangu",
+      "deleteAccount": "Futa Akaunti",
+      "analytics": "Ruhusu Uchambuzi",
+      "marketing": "Mawasiliano ya Masoko"
+    }
+  },
+  "team": {
+    "title": "Timu",
+    "subtitle": "Simamia shirika lako",
+    "members": "Wanachama wa Timu",
+    "invite": "Karibisha Mwanachama",
+    "role": "Jukumu",
+    "admin": "Msimamizi",
+    "member": "Mwanachama",
+    "viewer": "Mtazamaji",
+    "pending": "Inasubiri",
+    "active": "Hai",
+    "remove": "Ondoa",
+    "changeRole": "Badilisha Jukumu"
+  },
+  "login": {
+    "title": "Ingia",
+    "subtitle": "Karibu tena ReadIn AI",
+    "email": "Barua Pepe",
+    "password": "Nenosiri",
+    "remember": "Nikumbuke",
+    "forgot": "Umesahau nenosiri?",
+    "signIn": "Ingia",
+    "noAccount": "Huna akaunti?",
+    "signUp": "Jisajili",
+    "orContinue": "Au endelea na",
+    "google": "Endelea na Google",
+    "microsoft": "Endelea na Microsoft"
+  },
+  "errors": {
+    "notFound": "Ukurasa haujapatikana",
+    "unauthorized": "Huna ruhusa ya kufikia ukurasa huu",
+    "serverError": "Kitu kimeenda vibaya. Tafadhali jaribu tena baadaye.",
+    "networkError": "Kosa la mtandao. Tafadhali angalia muunganisho wako.",
+    "sessionExpired": "Kipindi chako kimekwisha. Tafadhali ingia tena."
+  }
+}

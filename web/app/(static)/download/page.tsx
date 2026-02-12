@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Download, Apple, Monitor, ArrowLeft, Check, Loader2 } from 'lucide-react'
+import { Download, Apple, Monitor, ArrowLeft, Check, Loader2, X } from 'lucide-react'
 
 export default function DownloadPage() {
   const [platform, setPlatform] = useState<'windows' | 'mac' | 'linux' | null>(null)
   const [downloading, setDownloading] = useState(false)
+  const [downloadMessage, setDownloadMessage] = useState<{ os: string; show: boolean } | null>(null)
 
   useEffect(() => {
     // Detect platform
@@ -23,22 +24,58 @@ export default function DownloadPage() {
   const handleDownload = (os: string) => {
     setDownloading(true)
 
-    // Simulate download start - in production, these would be real download links
     const downloadUrls: Record<string, string> = {
-      windows: '/downloads/ReadInAI-Windows-v1.0.0.exe',
-      mac: '/downloads/ReadInAI-Mac-v1.0.0.dmg',
-      linux: '/downloads/ReadInAI-Linux-v1.0.0.tar.gz',
+      windows: 'http://18.198.173.81:7500/downloads/ReadInAI-Portable.exe',
+      mac: 'http://18.198.173.81:7500/downloads/ReadInAI.dmg',
+      linux: 'http://18.198.173.81:7500/downloads/ReadInAI-Linux',
     }
 
-    // Create a temporary link and trigger download
+    // Trigger actual download
     setTimeout(() => {
-      alert(`Download starting for ${os}...\n\nNote: In production, this would download the actual installer.`)
+      const link = document.createElement('a')
+      link.href = downloadUrls[os]
+      link.download = ''
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
       setDownloading(false)
-    }, 1000)
+      setDownloadMessage({ os, show: true })
+
+      // Auto-hide after 5 seconds
+      setTimeout(() => {
+        setDownloadMessage(null)
+      }, 5000)
+    }, 500)
   }
 
   return (
     <main className="min-h-screen bg-dark-950 text-white">
+      {/* Download Notification Toast */}
+      {downloadMessage?.show && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl shadow-2xl shadow-green-900/30 px-6 py-4 flex items-center gap-4 border border-green-500/30">
+            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+              <Download className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <p className="font-semibold text-white">
+                Download started for {downloadMessage.os.charAt(0).toUpperCase() + downloadMessage.os.slice(1)}
+              </p>
+              <p className="text-green-100 text-sm">
+                Your download should begin automatically. Check your downloads folder.
+              </p>
+            </div>
+            <button
+              onClick={() => setDownloadMessage(null)}
+              className="ml-2 p-1 hover:bg-white/20 rounded-full transition"
+            >
+              <X className="h-4 w-4 text-white" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-dark-950/80 backdrop-blur-lg border-b border-white/10">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -162,7 +199,7 @@ export default function DownloadPage() {
                 ) : (
                   <>
                     <Download className="h-5 w-5 mr-2" />
-                    Download .tar.gz
+                    Download Binary
                   </>
                 )}
               </button>
@@ -181,19 +218,26 @@ export default function DownloadPage() {
               <li className="flex items-start">
                 <span className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0">1</span>
                 <div>
-                  <p className="font-medium">Download & Install</p>
-                  <p className="text-gray-400 text-sm">Run the installer and follow the prompts</p>
+                  <p className="font-medium">Download & Run</p>
+                  <p className="text-gray-400 text-sm">This is a portable app - just double-click to run, no installation needed!</p>
                 </div>
               </li>
               <li className="flex items-start">
                 <span className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0">2</span>
                 <div>
-                  <p className="font-medium">Create Your Account</p>
-                  <p className="text-gray-400 text-sm">Sign up for free to start your 7-day trial</p>
+                  <p className="font-medium">Configure Audio (Important!)</p>
+                  <p className="text-gray-400 text-sm">Select your audio device on first run. To capture meeting audio, enable "Stereo Mix" in Windows Sound Settings or use VB-Cable.</p>
                 </div>
               </li>
               <li className="flex items-start">
                 <span className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0">3</span>
+                <div>
+                  <p className="font-medium">Create Your Account</p>
+                  <p className="text-gray-400 text-sm">Sign up for free to start your 14-day trial</p>
+                </div>
+              </li>
+              <li className="flex items-start">
+                <span className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0">4</span>
                 <div>
                   <p className="font-medium">Start a Meeting</p>
                   <p className="text-gray-400 text-sm">Open Teams, Zoom, or any video call - ReadIn AI activates automatically</p>
@@ -207,6 +251,21 @@ export default function DownloadPage() {
                 </div>
               </li>
             </ol>
+          </div>
+
+          {/* Audio Setup Info */}
+          <div className="mt-8 bg-yellow-900/20 border border-yellow-600/30 rounded-xl p-6 text-left max-w-2xl mx-auto">
+            <h4 className="text-yellow-400 font-semibold mb-2">Important: Audio Setup for Meeting Capture</h4>
+            <p className="text-yellow-200/80 text-sm mb-3">
+              To capture what others say in meetings, you need a "loopback" audio device enabled:
+            </p>
+            <ul className="text-yellow-200/70 text-sm space-y-1 ml-4 list-disc">
+              <li><strong>Windows:</strong> Enable "Stereo Mix" in Sound Settings → Recording devices (right-click → Show Disabled Devices)</li>
+              <li><strong>Alternative:</strong> Install free <a href="https://vb-audio.com/Cable/" target="_blank" rel="noopener noreferrer" className="text-yellow-400 underline hover:text-yellow-300">VB-Cable</a> virtual audio device</li>
+            </ul>
+            <p className="text-yellow-200/60 text-xs mt-3">
+              The app will guide you through this setup on first run.
+            </p>
           </div>
 
           {/* System Requirements */}

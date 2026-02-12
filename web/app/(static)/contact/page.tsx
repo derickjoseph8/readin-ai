@@ -4,7 +4,9 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import { Mail, MessageSquare, Building2, Clock, Send, CheckCircle } from 'lucide-react'
+import { Mail, MessageSquare, Building2, Clock, Send, CheckCircle, Loader2 } from 'lucide-react'
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://18.198.173.81:7500'
 
 export default function Contact() {
   const [formData, setFormData] = useState({
@@ -14,11 +16,32 @@ export default function Contact() {
     message: ''
   })
   const [submitted, setSubmitted] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // In production, this would send to an API
-    setSubmitted(true)
+    setLoading(true)
+    setError('')
+
+    try {
+      const response = await fetch(`${API_URL}/api/v1/contact`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      })
+
+      if (response.ok) {
+        setSubmitted(true)
+        setFormData({ name: '', email: '', subject: 'general', message: '' })
+      } else {
+        setError('Failed to send message. Please try again.')
+      }
+    } catch {
+      setError('Unable to connect. Please email us directly at support@getreadin.ai')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -153,12 +176,25 @@ export default function Contact() {
                       />
                     </div>
 
+                    {error && (
+                      <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
+                        {error}
+                      </div>
+                    )}
+
                     <button
                       type="submit"
-                      className="w-full py-4 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-xl hover:shadow-gold transition-all flex items-center justify-center"
+                      disabled={loading}
+                      className="w-full py-4 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-xl hover:shadow-gold transition-all flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <Send className="h-5 w-5 mr-2" />
-                      Send Message
+                      {loading ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <>
+                          <Send className="h-5 w-5 mr-2" />
+                          Send Message
+                        </>
+                      )}
                     </button>
                   </form>
                 </>
