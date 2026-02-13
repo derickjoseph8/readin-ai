@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "AI-powered real-time meeting assistant. Get instant talking points during video calls.",
   "author": "Brider LLC",
-  "homepage_url": "http://18.198.173.81:7500",
+  "homepage_url": "https://www.getreadin.us",
 
   "browser_specific_settings": {
     "gecko": {

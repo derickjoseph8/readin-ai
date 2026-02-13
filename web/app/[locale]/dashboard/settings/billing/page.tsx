@@ -5,7 +5,7 @@ import { CreditCard, Check, Sparkles, Calendar, ExternalLink } from 'lucide-reac
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/hooks/useAuth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://18.198.173.81:7500';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://www.getreadin.us';
 
 export default function BillingPage() {
   const { user, status, token } = useAuth();

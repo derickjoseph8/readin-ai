@@ -80,7 +80,7 @@ export default function Footer() {
               <li><a href="/#faq" className="hover:text-gold-400 transition-colors">FAQ</a></li>
               <li><Link href="/docs" className="hover:text-gold-400 transition-colors">Documentation</Link></li>
               <li><Link href="/contact" className="hover:text-gold-400 transition-colors">Contact Us</Link></li>
-              <li><a href="https://status.getreadin.ai" target="_blank" rel="noopener noreferrer" className="hover:text-gold-400 transition-colors">System Status</a></li>
+              <li><a href="https://www.getreadin.us/health" target="_blank" rel="noopener noreferrer" className="hover:text-gold-400 transition-colors">System Status</a></li>
             </ul>
           </div>
 

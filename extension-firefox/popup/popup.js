@@ -168,15 +168,15 @@ function setupEventListeners() {
 
   // Quick actions
   elements.openDashboardBtn.addEventListener('click', () => {
-    browser.tabs.create({ url: 'http://18.198.173.81:7500/dashboard' });
+    browser.tabs.create({ url: 'https://www.getreadin.us/dashboard' });
   });
 
   elements.openSettingsBtn.addEventListener('click', () => {
-    browser.tabs.create({ url: 'http://18.198.173.81:7500/dashboard/settings' });
+    browser.tabs.create({ url: 'https://www.getreadin.us/dashboard/settings' });
   });
 
   elements.openHelpBtn.addEventListener('click', () => {
-    browser.tabs.create({ url: 'http://18.198.173.81:7500/help' });
+    browser.tabs.create({ url: 'https://www.getreadin.us/help' });
   });
 }
 

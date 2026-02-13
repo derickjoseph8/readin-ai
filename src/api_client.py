@@ -9,7 +9,7 @@ from datetime import datetime
 import httpx
 
 # API base URL - check both env var names for compatibility
-API_BASE_URL = os.getenv("API_BASE_URL") or os.getenv("READIN_API_URL", "https://api.getreadin.ai")
+API_BASE_URL = os.getenv("API_BASE_URL") or os.getenv("READIN_API_URL", "https://www.getreadin.us")
 
 # Local token storage
 TOKEN_FILE = Path.home() / ".readin" / "auth.json"

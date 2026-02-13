@@ -6,7 +6,7 @@ import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { Mail, MessageSquare, Building2, Clock, Send, CheckCircle, Loader2 } from 'lucide-react'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://18.198.173.81:7500'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://www.getreadin.us'
 
 export default function Contact() {
   const [formData, setFormData] = useState({

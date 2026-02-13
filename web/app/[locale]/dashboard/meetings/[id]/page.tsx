@@ -25,7 +25,7 @@ interface MeetingDetail {
   conversations: Conversation[];
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://18.198.173.81:7500';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://www.getreadin.us';
 
 export default function MeetingDetailPage({ params }: { params: { id: string } }) {
   const [meeting, setMeeting] = useState<MeetingDetail | null>(null);

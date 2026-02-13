@@ -5,7 +5,7 @@ import { Lock, Shield, Eye, EyeOff, Loader2, Check, AlertTriangle } from 'lucide
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/hooks/useAuth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://18.198.173.81:7500';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://www.getreadin.us';
 
 function PasswordStrength({ password }: { password: string }) {
   const getStrength = (pwd: string): { score: number; label: string; color: string } => {

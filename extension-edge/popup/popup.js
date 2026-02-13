@@ -164,15 +164,15 @@ function setupEventListeners() {
 
   // Quick actions
   elements.openDashboardBtn.addEventListener('click', () => {
-    chrome.tabs.create({ url: 'http://18.198.173.81:7500/dashboard' });
+    chrome.tabs.create({ url: 'https://www.getreadin.us/dashboard' });
   });
 
   elements.openSettingsBtn.addEventListener('click', () => {
-    chrome.tabs.create({ url: 'http://18.198.173.81:7500/dashboard/settings' });
+    chrome.tabs.create({ url: 'https://www.getreadin.us/dashboard/settings' });
   });
 
   elements.openHelpBtn.addEventListener('click', () => {
-    chrome.tabs.create({ url: 'http://18.198.173.81:7500/help' });
+    chrome.tabs.create({ url: 'https://www.getreadin.us/help' });
   });
 }
 

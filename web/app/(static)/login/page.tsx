@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Mail, Lock, Loader2 } from 'lucide-react'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://18.198.173.81:7500'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://www.getreadin.us'
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true)
