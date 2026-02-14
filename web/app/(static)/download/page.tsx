@@ -25,9 +25,9 @@ export default function DownloadPage() {
     setDownloading(true)
 
     const downloadUrls: Record<string, string> = {
-      windows: 'https://www.getreadin.us/downloads/ReadInAI-Windows-1.0.0.zip',
-      mac: 'https://www.getreadin.us/downloads/ReadInAI-macOS-1.0.0.dmg',
-      linux: 'https://www.getreadin.us/downloads/ReadInAI-Linux-1.0.0.AppImage',
+      windows: 'https://www.getreadin.us/downloads/ReadInAI-Windows-1.0.1.zip',
+      mac: 'https://www.getreadin.us/downloads/ReadInAI-macOS-1.0.1.dmg',
+      linux: 'https://www.getreadin.us/downloads/ReadInAI-Linux-1.0.1.AppImage',
     }
 
     // Trigger actual download
