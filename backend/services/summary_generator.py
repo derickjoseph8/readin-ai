@@ -15,6 +15,7 @@ from models import (
     Commitment,
     User,
 )
+from services.language_service import get_localized_prompt_suffix, get_fallback_message
 
 
 class SummaryGenerator:
@@ -27,11 +28,16 @@ class SummaryGenerator:
             "SUMMARY_GENERATION_MODEL", "claude-sonnet-4-20250514"
         )
 
-    async def generate_summary(self, meeting_id: int) -> MeetingSummary:
+    async def generate_summary(self, meeting_id: int, language: Optional[str] = None) -> MeetingSummary:
         """Generate a comprehensive meeting summary."""
         meeting = self.db.query(Meeting).filter(Meeting.id == meeting_id).first()
         if not meeting:
             raise ValueError(f"Meeting {meeting_id} not found")
+
+        # Get user's preferred language if not specified
+        if language is None:
+            user = self.db.query(User).filter(User.id == meeting.user_id).first()
+            language = getattr(user, 'preferred_language', 'en') or 'en' if user else 'en'
 
         # Get all conversations from meeting
         conversations = (
@@ -49,7 +55,7 @@ class SummaryGenerator:
 
         # Generate summary with Claude
         summary_data = await self._generate_with_claude(
-            transcript, meeting.meeting_type, meeting.title
+            transcript, meeting.meeting_type, meeting.title, language
         )
 
         # Create or update summary
@@ -100,9 +106,12 @@ class SummaryGenerator:
         return "\n".join(lines)
 
     async def _generate_with_claude(
-        self, transcript: str, meeting_type: str, title: Optional[str]
+        self, transcript: str, meeting_type: str, title: Optional[str], language: str = "en"
     ) -> Dict[str, Any]:
         """Generate summary using Claude."""
+        # Get language-specific prompt suffix
+        language_instruction = get_localized_prompt_suffix(language)
+
         prompt = f"""Analyze this meeting transcript and provide a comprehensive summary.
 
 Meeting Type: {meeting_type or 'general'}
@@ -137,7 +146,7 @@ Provide analysis in this JSON format:
     "topics_discussed": ["topic1", "topic2"],
     "decisions_made": ["decision 1", "decision 2"],
     "follow_up_needed": true/false
-}}"""
+}}{language_instruction}"""
 
         try:
             response = self.client.messages.create(
@@ -157,7 +166,7 @@ Provide analysis in this JSON format:
         except Exception as e:
             print(f"Summary generation error: {e}")
             return {
-                "summary": "Unable to generate summary.",
+                "summary": get_fallback_message("summary_unavailable", language),
                 "key_points": [],
                 "action_items": [],
                 "commitments": [],

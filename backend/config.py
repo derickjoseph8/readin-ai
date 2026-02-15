@@ -118,7 +118,7 @@ REDIS_URL = os.getenv("REDIS_URL", "")
 
 APP_NAME = os.getenv("APP_NAME", "ReadIn AI")
 APP_URL = os.getenv("APP_URL", "https://www.getreadin.us")
-TRIAL_DAYS = int(os.getenv("TRIAL_DAYS", "14"))
+TRIAL_DAYS = int(os.getenv("TRIAL_DAYS", "7"))
 TRIAL_DAILY_LIMIT = int(os.getenv("TRIAL_DAILY_LIMIT", "10"))
 
 # =============================================================================

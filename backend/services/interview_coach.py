@@ -16,6 +16,7 @@ from models import (
     User,
     UserLearningProfile,
 )
+from services.language_service import get_localized_prompt_suffix, get_fallback_message
 
 
 class InterviewCoach:
@@ -28,7 +29,7 @@ class InterviewCoach:
             "SUMMARY_GENERATION_MODEL", "claude-sonnet-4-20250514"
         )
 
-    async def analyze_interview(self, interview_id: int) -> Dict[str, Any]:
+    async def analyze_interview(self, interview_id: int, language: Optional[str] = None) -> Dict[str, Any]:
         """Analyze an interview and provide improvement suggestions."""
         interview = (
             self.db.query(Interview).filter(Interview.id == interview_id).first()
@@ -36,6 +37,18 @@ class InterviewCoach:
 
         if not interview:
             raise ValueError(f"Interview {interview_id} not found")
+
+        # Get user's preferred language if not specified
+        job = (
+            self.db.query(JobApplication)
+            .filter(JobApplication.id == interview.job_application_id)
+            .first()
+        )
+        if language is None and job:
+            user = self.db.query(User).filter(User.id == job.user_id).first()
+            language = getattr(user, 'preferred_language', 'en') or 'en' if user else 'en'
+        elif language is None:
+            language = 'en'
 
         # Get linked meeting conversations
         conversations = []
@@ -50,19 +63,13 @@ class InterviewCoach:
         # Build transcript
         transcript = self._build_transcript(conversations)
 
-        # Get job application context
-        job = (
-            self.db.query(JobApplication)
-            .filter(JobApplication.id == interview.job_application_id)
-            .first()
-        )
-
         # Analyze with Claude
         analysis = await self._analyze_with_claude(
             transcript=transcript,
             interview_type=interview.interview_type,
             company=job.company if job else None,
             position=job.position if job else None,
+            language=language,
         )
 
         # Update interview with analysis
@@ -92,8 +99,12 @@ class InterviewCoach:
         interview_type: Optional[str],
         company: Optional[str],
         position: Optional[str],
+        language: str = "en",
     ) -> Dict[str, Any]:
         """Analyze interview with Claude."""
+        # Get language-specific prompt suffix
+        language_instruction = get_localized_prompt_suffix(language)
+
         prompt = f"""Analyze this job interview transcript and provide detailed feedback.
 
 Company: {company or 'Unknown'}
@@ -148,7 +159,7 @@ Provide comprehensive analysis in this JSON format:
     "next_steps": [
         "Specific preparation recommendations for next interview"
     ]
-}}"""
+}}{language_instruction}"""
 
         try:
             response = self.client.messages.create(
@@ -169,7 +180,7 @@ Provide comprehensive analysis in this JSON format:
             print(f"Interview analysis error: {e}")
             return {
                 "overall_score": 5,
-                "summary": "Unable to analyze interview",
+                "summary": get_fallback_message("unable_to_generate", language),
                 "strengths": [],
                 "improvements": [],
                 "question_handling": {},
@@ -178,8 +189,13 @@ Provide comprehensive analysis in this JSON format:
                 "next_steps": [],
             }
 
-    async def get_improvement_plan(self, user_id: int) -> Dict[str, Any]:
+    async def get_improvement_plan(self, user_id: int, language: Optional[str] = None) -> Dict[str, Any]:
         """Generate personalized interview improvement plan based on history."""
+        # Get user's preferred language if not specified
+        if language is None:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            language = getattr(user, 'preferred_language', 'en') or 'en' if user else 'en'
+
         # Get all analyzed interviews
         interviews = (
             self.db.query(Interview)
@@ -196,7 +212,7 @@ Provide comprehensive analysis in this JSON format:
         if not interviews:
             return {
                 "status": "insufficient_data",
-                "message": "Complete more interviews to get personalized improvement plan",
+                "message": get_fallback_message("no_data", language),
             }
 
         # Aggregate improvement notes
@@ -209,6 +225,9 @@ Provide comprehensive analysis in this JSON format:
                 scores.append(interview.performance_score)
 
         avg_score = sum(scores) / len(scores) if scores else 0
+
+        # Get language-specific prompt suffix
+        language_instruction = get_localized_prompt_suffix(language)
 
         # Generate improvement plan with Claude
         prompt = f"""Based on feedback from {len(interviews)} job interviews, create a personalized improvement plan.
@@ -248,7 +267,7 @@ Create a prioritized improvement plan in this JSON format:
     "mock_interview_focus": [
         "Topic to practice in mock interviews"
     ]
-}}"""
+}}{language_instruction}"""
 
         try:
             response = self.client.messages.create(
@@ -273,7 +292,7 @@ Create a prioritized improvement plan in this JSON format:
             }
 
     async def polish_response(
-        self, original_response: str, question_type: str, user_id: int
+        self, original_response: str, question_type: str, user_id: int, language: Optional[str] = None
     ) -> Dict[str, Any]:
         """Polish and improve a candidate's response."""
         # Get user's profession for context
@@ -281,6 +300,12 @@ Create a prioritized improvement plan in this JSON format:
         profession_context = ""
         if user and user.profession:
             profession_context = f"The candidate is a {user.profession.name}."
+
+        # Get user's preferred language if not specified
+        if language is None and user:
+            language = getattr(user, 'preferred_language', 'en') or 'en'
+        elif language is None:
+            language = 'en'
 
         # Get user's learning profile
         profile = (
@@ -295,6 +320,9 @@ Create a prioritized improvement plan in this JSON format:
                 style_notes = "Maintain a formal, professional tone."
             elif profile.formality_level and profile.formality_level < 0.3:
                 style_notes = "Keep a conversational but professional tone."
+
+        # Get language-specific prompt suffix
+        language_instruction = get_localized_prompt_suffix(language)
 
         prompt = f"""Improve this interview response while maintaining the candidate's voice.
 
@@ -318,7 +346,7 @@ Provide improvements in this JSON format:
     "tips": [
         "Tips for delivering this response"
     ]
-}}"""
+}}{language_instruction}"""
 
         try:
             response = self.client.messages.create(
@@ -340,13 +368,16 @@ Provide improvements in this JSON format:
             return {
                 "polished_response": original_response,
                 "key_changes": [],
-                "tips": ["Unable to process response"],
+                "tips": [get_fallback_message("unable_to_generate", language)],
             }
 
     async def get_common_questions(
-        self, position: str, company: Optional[str] = None
+        self, position: str, company: Optional[str] = None, language: str = "en"
     ) -> List[Dict[str, Any]]:
         """Get common interview questions for a position."""
+        # Get language-specific prompt suffix
+        language_instruction = get_localized_prompt_suffix(language)
+
         prompt = f"""Generate common interview questions for this role:
 
 Position: {position}
@@ -365,7 +396,7 @@ Provide questions in this JSON format:
     ]
 }}
 
-Include 10 questions across different types."""
+Include 10 questions across different types.{language_instruction}"""
 
         try:
             response = self.client.messages.create(

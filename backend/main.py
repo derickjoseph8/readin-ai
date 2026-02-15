@@ -17,7 +17,7 @@ from config import (
     TRIAL_DAILY_LIMIT, APP_NAME, API_VERSION, IS_PRODUCTION, IS_DEVELOPMENT,
     CORS_ALLOWED_ORIGINS, SENTRY_DSN, ENVIRONMENT
 )
-from database import get_db, init_db
+from database import get_db, init_db, engine
 from models import User, DailyUsage, Profession, UserLearningProfile
 from schemas import (
     UserCreate, UserLogin, Token, UserResponse, UserStatus, UserUpdate,
@@ -41,15 +41,28 @@ from routes import (
     sso_router, api_keys_router, webhooks_router, white_label_router
 )
 from routes.contact import router as contact_router
+from routes.sessions import router as sessions_router
+from routes.websocket import router as websocket_router
+from routes.bulk import router as bulk_router
+from routes.search import router as search_router
+from routes.templates import router as templates_router
+from routes.analytics_dashboard import router as analytics_dashboard_router
+from routes.ai_preferences import router as ai_preferences_router
+from routes.exports import router as exports_router
 
 # Import scheduler
 from services.scheduler import start_scheduler, stop_scheduler
+
+# Import services for initialization
+from services.template_service import TemplateService
 
 # Import middleware
 from middleware.rate_limiter import limiter, rate_limit_login, rate_limit_register
 from middleware.security import SecurityHeadersMiddleware
 from middleware.request_context import RequestContextMiddleware, get_request_id
 from middleware.error_handler import ErrorHandlerMiddleware, create_error_response, ErrorTypes
+from middleware.compression import GZipMiddleware
+from middleware.slow_query_logger import setup_slow_query_logging
 
 # Initialize Sentry for error tracking (production)
 if SENTRY_DSN:
@@ -102,6 +115,9 @@ app.add_middleware(RequestContextMiddleware)
 
 # 3. Security headers
 app.add_middleware(SecurityHeadersMiddleware)
+
+# 4. GZip compression for responses > 500 bytes
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # 4. CORS - configured based on environment
 app.add_middleware(
@@ -162,6 +178,14 @@ app.include_router(sso_router, prefix=API_V1_PREFIX)
 app.include_router(api_keys_router, prefix=API_V1_PREFIX)
 app.include_router(webhooks_router, prefix=API_V1_PREFIX)
 app.include_router(white_label_router, prefix=API_V1_PREFIX)
+app.include_router(sessions_router, prefix=API_V1_PREFIX)
+app.include_router(bulk_router, prefix=API_V1_PREFIX)
+app.include_router(search_router, prefix=API_V1_PREFIX)
+app.include_router(websocket_router, prefix=API_V1_PREFIX)
+app.include_router(templates_router, prefix=API_V1_PREFIX)
+app.include_router(analytics_dashboard_router, prefix=API_V1_PREFIX)
+app.include_router(ai_preferences_router, prefix=API_V1_PREFIX)
+app.include_router(exports_router, prefix=API_V1_PREFIX)
 app.include_router(contact_router)
 
 # Also include at root for backward compatibility (deprecated)
@@ -187,6 +211,10 @@ def startup():
     try:
         init_db()
         print("  [OK] Database connected")
+
+        # Set up slow query logging
+        setup_slow_query_logging(engine, threshold_ms=500)
+        print("  [OK] Slow query logging enabled (>500ms)")
     except Exception as e:
         print(f"  [ERROR] Database connection failed: {e}")
         raise
@@ -218,6 +246,17 @@ def startup():
     except Exception as e:
         print(f"  [WARNING] Scheduler failed to start: {e}")
 
+    # Initialize system templates
+    try:
+        from database import SessionLocal
+        db = SessionLocal()
+        template_service = TemplateService(db)
+        template_service.initialize_system_templates()
+        db.close()
+        print("  [OK] System templates initialized")
+    except Exception as e:
+        print(f"  [WARNING] Template initialization failed: {e}")
+
     # Security status
     print()
     print("  Security Configuration:")
@@ -228,7 +267,7 @@ def startup():
         print("    Error Tracking: Sentry enabled")
 
     print()
-    print(f"  Trial: {TRIAL_DAILY_LIMIT} responses/day for 14 days")
+    print(f"  Trial: {TRIAL_DAILY_LIMIT} responses/day for 7 days")
     print("  Premium: $29.99/month - Unlimited responses")
     print("=" * 60)
     print()
@@ -693,46 +732,54 @@ def root():
 
 @app.get("/health")
 @app.get("/api/v1/health")
-def health_check(db: Session = Depends(get_db)):
+def health_check(db: Session = Depends(get_db), detailed: bool = True):
     """
     Health check endpoint with detailed status.
 
     Returns status of all system components:
     - Database connectivity
-    - External services (Stripe, etc.)
-    - Application version and environment
+    - Redis connectivity (if configured)
+    - External services (Stripe, SendGrid)
+    - System memory/CPU usage
+
+    Query params:
+    - detailed: If False, returns minimal health check (for load balancers)
     """
-    checks = {}
+    from services.health_checker import get_health_status
 
-    # Check database
-    try:
-        db.execute(text("SELECT 1"))
-        checks["database"] = "healthy"
-    except Exception as e:
-        checks["database"] = f"unhealthy: {str(e)[:50]}"
+    result = get_health_status(db, detailed=detailed)
+    result["request_id"] = get_request_id()
 
-    # Check Stripe (if configured)
-    if STRIPE_SECRET_KEY:
-        try:
-            stripe.Account.retrieve()
-            checks["stripe"] = "healthy"
-        except Exception:
-            checks["stripe"] = "unhealthy"
+    return result
+
+
+@app.get("/health/live")
+def liveness_check():
+    """
+    Kubernetes liveness probe endpoint.
+
+    Returns 200 if the application is running.
+    """
+    return {"status": "alive", "version": API_VERSION}
+
+
+@app.get("/health/ready")
+def readiness_check(db: Session = Depends(get_db)):
+    """
+    Kubernetes readiness probe endpoint.
+
+    Returns 200 if the application is ready to serve traffic.
+    """
+    from services.health_checker import is_healthy
+
+    if is_healthy(db):
+        return {"status": "ready", "version": API_VERSION}
     else:
-        checks["stripe"] = "not_configured"
-
-    # Determine overall status
-    unhealthy_services = [k for k, v in checks.items() if "unhealthy" in str(v)]
-    overall_status = "unhealthy" if unhealthy_services else "healthy"
-
-    return {
-        "status": overall_status,
-        "app": APP_NAME,
-        "version": API_VERSION,
-        "environment": ENVIRONMENT,
-        "checks": checks,
-        "request_id": get_request_id(),
-    }
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "version": API_VERSION}
+        )
 
 
 if __name__ == "__main__":

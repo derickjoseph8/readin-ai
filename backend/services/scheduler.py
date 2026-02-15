@@ -72,6 +72,14 @@ class SchedulerService:
             replace_existing=True,
         )
 
+        # Run GDPR data retention tasks daily at 4 AM
+        self.scheduler.add_job(
+            self._run_data_retention_tasks,
+            CronTrigger(hour=4, minute=0),
+            id="data_retention",
+            replace_existing=True,
+        )
+
         self.scheduler.start()
         self._is_running = True
         print("Scheduler started with all jobs")
@@ -342,6 +350,46 @@ class SchedulerService:
 
         except Exception as e:
             print(f"Error in cleanup: {e}")
+            db.rollback()
+        finally:
+            db.close()
+
+    async def _run_data_retention_tasks(self):
+        """Run GDPR data retention tasks."""
+        db = SessionLocal()
+        try:
+            from .data_retention import DataRetentionService
+
+            retention_service = DataRetentionService(db)
+
+            # Process scheduled account deletions
+            print("Processing scheduled deletions...")
+            deletion_result = retention_service.process_scheduled_deletions()
+            print(f"Deletion processing result: {deletion_result}")
+
+            # Flag inactive trial accounts
+            print("Checking for inactive trial accounts...")
+            trial_result = retention_service.cleanup_inactive_trials()
+            print(f"Trial cleanup result: {trial_result}")
+
+            # Clean up old audit logs
+            print("Cleaning up old audit logs...")
+            deleted_logs = retention_service.cleanup_old_audit_logs()
+            print(f"Deleted {deleted_logs} old audit log entries")
+
+            # Archive old meetings
+            print("Archiving old meetings...")
+            archived_meetings = retention_service.archive_old_meetings()
+            print(f"Found {archived_meetings} meetings eligible for archival")
+
+            # Generate retention report for compliance
+            report = retention_service.get_retention_report()
+            print(f"Data retention report: {report}")
+
+            print("Data retention tasks completed successfully")
+
+        except Exception as e:
+            print(f"Error in data retention tasks: {e}")
             db.rollback()
         finally:
             db.close()

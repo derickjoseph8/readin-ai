@@ -1,7 +1,10 @@
 """SQLAlchemy database models for ReadIn AI."""
 
 from datetime import datetime, timedelta
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Date, ForeignKey, Text, Float, LargeBinary, JSON
+from sqlalchemy import (
+    Column, Integer, String, DateTime, Boolean, Date, ForeignKey, Text,
+    Float, LargeBinary, JSON, Index, UniqueConstraint
+)
 from sqlalchemy.orm import relationship
 
 from database import Base
@@ -136,6 +139,22 @@ class User(Base):
     email_summary_enabled = Column(Boolean, default=True)
     email_reminders_enabled = Column(Boolean, default=True)
 
+    # GDPR Consent fields
+    consent_analytics = Column(Boolean, default=False)
+    consent_marketing = Column(Boolean, default=False)
+    consent_ai_training = Column(Boolean, default=False)
+    consent_updated_at = Column(DateTime, nullable=True)
+
+    # Account deletion scheduling
+    deletion_requested = Column(Boolean, default=False)
+    deletion_scheduled = Column(DateTime, nullable=True)
+
+    # Additional user tracking
+    last_login = Column(DateTime, nullable=True)
+    timezone = Column(String, default="UTC")
+    preferred_language = Column(String, default="en")  # en, es, sw (Swahili)
+    trial_start = Column(DateTime, default=datetime.utcnow)
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -147,6 +166,7 @@ class User(Base):
     meetings = relationship("Meeting", back_populates="user")
     topics = relationship("Topic", back_populates="user")
     action_items = relationship("ActionItem", back_populates="user")
+    calendar_integrations = relationship("CalendarIntegration", back_populates="user")
     commitments = relationship("Commitment", back_populates="user")
     job_applications = relationship("JobApplication", back_populates="user")
     learning_profile = relationship("UserLearningProfile", back_populates="user", uselist=False)
@@ -195,6 +215,26 @@ class DailyUsage(Base):
     user = relationship("User", back_populates="usage")
 
 
+class CalendarIntegration(Base):
+    """Calendar provider integrations for users."""
+    __tablename__ = "calendar_integrations"
+    __table_args__ = (
+        Index("ix_calendar_user_provider", "user_id", "provider"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    provider = Column(String(50), nullable=False)  # 'google' or 'microsoft'
+    access_token = Column(Text, nullable=False)
+    refresh_token = Column(Text, nullable=True)
+    calendar_email = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True)
+    connected_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="calendar_integrations")
+
+
 # =============================================================================
 # MEETING & CONVERSATION MODELS
 # =============================================================================
@@ -202,6 +242,12 @@ class DailyUsage(Base):
 class Meeting(Base):
     """Meeting session tracking."""
     __tablename__ = "meetings"
+    __table_args__ = (
+        Index("ix_meeting_user_id", "user_id"),
+        Index("ix_meeting_user_status", "user_id", "status"),
+        Index("ix_meeting_started_at", "started_at"),
+        Index("ix_meeting_user_date", "user_id", "started_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -217,7 +263,7 @@ class Meeting(Base):
     duration_seconds = Column(Integer, nullable=True)
 
     # Status
-    status = Column(String, default="active")  # active, ended, cancelled
+    status = Column(String, default="active", index=True)  # active, ended, cancelled
 
     # Metadata
     participant_count = Column(Integer, nullable=True)
@@ -234,6 +280,10 @@ class Meeting(Base):
 class Conversation(Base):
     """Individual Q&A exchanges within a meeting."""
     __tablename__ = "conversations"
+    __table_args__ = (
+        Index("ix_conversation_meeting_id", "meeting_id"),
+        Index("ix_conversation_timestamp", "timestamp"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
@@ -262,15 +312,20 @@ class Conversation(Base):
 class Topic(Base):
     """Topics extracted from conversations for ML tracking."""
     __tablename__ = "topics"
+    __table_args__ = (
+        Index("ix_topic_user_id", "user_id"),
+        Index("ix_topic_user_frequency", "user_id", "frequency"),
+        Index("ix_topic_user_name", "user_id", "name"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     name = Column(String, nullable=False, index=True)
-    category = Column(String)  # technical, behavioral, situational, company-specific
+    category = Column(String, index=True)  # technical, behavioral, situational, company-specific
 
     # Frequency tracking
-    frequency = Column(Integer, default=1)
+    frequency = Column(Integer, default=1, index=True)
     last_discussed = Column(DateTime, default=datetime.utcnow)
 
     # ML data
@@ -339,6 +394,12 @@ class UserLearningProfile(Base):
 class ActionItem(Base):
     """Action items extracted from meetings - WHO does WHAT by WHEN."""
     __tablename__ = "action_items"
+    __table_args__ = (
+        Index("ix_action_item_user_id", "user_id"),
+        Index("ix_action_item_user_status", "user_id", "status"),
+        Index("ix_action_item_due_date", "due_date"),
+        Index("ix_action_item_meeting_id", "meeting_id"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
@@ -351,10 +412,10 @@ class ActionItem(Base):
     # Task details
     description = Column(Text, nullable=False)
     due_date = Column(DateTime, nullable=True)
-    priority = Column(String, default="medium")  # low, medium, high
+    priority = Column(String, default="medium", index=True)  # low, medium, high
 
     # Status
-    status = Column(String, default="pending")  # pending, in_progress, completed, cancelled
+    status = Column(String, default="pending", index=True)  # pending, in_progress, completed, cancelled
     completed_at = Column(DateTime, nullable=True)
 
     # Timestamps
@@ -369,6 +430,12 @@ class ActionItem(Base):
 class Commitment(Base):
     """Commitments the user made - things they promised to do."""
     __tablename__ = "commitments"
+    __table_args__ = (
+        Index("ix_commitment_user_id", "user_id"),
+        Index("ix_commitment_user_status", "user_id", "status"),
+        Index("ix_commitment_due_date", "due_date"),
+        Index("ix_commitment_next_reminder", "next_reminder_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
@@ -380,7 +447,7 @@ class Commitment(Base):
     context = Column(Text, nullable=True)  # Why/to whom the commitment was made
 
     # Status
-    status = Column(String, default="pending")  # pending, completed, overdue
+    status = Column(String, default="pending", index=True)  # pending, completed, overdue
     completed_at = Column(DateTime, nullable=True)
 
     # Reminders
@@ -512,15 +579,20 @@ class Interview(Base):
 class ParticipantMemory(Base):
     """Remember what other participants have said across meetings."""
     __tablename__ = "participant_memories"
+    __table_args__ = (
+        Index("ix_participant_memory_user_id", "user_id"),
+        Index("ix_participant_memory_user_name", "user_id", "participant_name"),
+        Index("ix_participant_memory_last_interaction", "last_interaction"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     # Participant info
     participant_name = Column(String, nullable=False, index=True)
-    participant_email = Column(String, nullable=True)
+    participant_email = Column(String, nullable=True, index=True)
     participant_role = Column(String, nullable=True)
-    company = Column(String, nullable=True)
+    company = Column(String, nullable=True, index=True)
 
     # Memory data
     key_points = Column(JSON, default=list)  # Things they've said/mentioned
@@ -613,3 +685,754 @@ class EmailNotification(Base):
 
     # Relationships
     user = relationship("User", back_populates="email_notifications")
+
+
+# =============================================================================
+# AUDIT LOG (GDPR COMPLIANCE)
+# =============================================================================
+
+class AuditLog(Base):
+    """
+    Audit log for tracking security-sensitive actions.
+
+    Used for:
+    - GDPR compliance (data access, export, deletion)
+    - Security monitoring (login attempts, password changes)
+    - Admin actions (subscription changes, user management)
+    """
+    __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_log_user_id", "user_id"),
+        Index("ix_audit_log_action", "action"),
+        Index("ix_audit_log_timestamp", "timestamp"),
+        Index("ix_audit_log_user_action", "user_id", "action"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Nullable for anonymous actions
+
+    # Action details
+    action = Column(String, nullable=False)  # login, logout, password_change, data_export, data_delete, etc.
+    resource_type = Column(String, nullable=True)  # User, Meeting, Conversation, etc.
+    resource_id = Column(Integer, nullable=True)
+
+    # Request context
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    request_id = Column(String, nullable=True)
+
+    # Change details
+    old_value = Column(JSON, nullable=True)  # Previous state (for updates)
+    new_value = Column(JSON, nullable=True)  # New state (for updates)
+    details = Column(JSON, nullable=True)  # Additional context
+
+    # Status
+    status = Column(String, default="success")  # success, failure, blocked
+    failure_reason = Column(String, nullable=True)
+
+    # Timestamp
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+# Audit action constants
+class AuditAction:
+    """Constants for audit log actions."""
+    # Authentication
+    LOGIN_SUCCESS = "login_success"
+    LOGIN_FAILURE = "login_failure"
+    LOGOUT = "logout"
+    PASSWORD_CHANGE = "password_change"
+    PASSWORD_RESET_REQUEST = "password_reset_request"
+
+    # GDPR
+    DATA_EXPORT = "data_export"
+    DATA_DELETE = "data_delete"
+    CONSENT_UPDATE = "consent_update"
+
+    # Account
+    ACCOUNT_CREATE = "account_create"
+    ACCOUNT_UPDATE = "account_update"
+    ACCOUNT_DELETE = "account_delete"
+
+    # Subscription
+    SUBSCRIPTION_CREATE = "subscription_create"
+    SUBSCRIPTION_UPDATE = "subscription_update"
+    SUBSCRIPTION_CANCEL = "subscription_cancel"
+
+    # Admin actions
+    USER_IMPERSONATION = "user_impersonation"
+    ROLE_CHANGE = "role_change"
+    ORG_MEMBER_ADD = "org_member_add"
+    ORG_MEMBER_REMOVE = "org_member_remove"
+
+    # API
+    API_KEY_CREATE = "api_key_create"
+    API_KEY_REVOKE = "api_key_revoke"
+    RATE_LIMIT_EXCEEDED = "rate_limit_exceeded"
+
+
+# =============================================================================
+# PRE-MEETING BRIEFINGS
+# =============================================================================
+
+class PreMeetingBriefing(Base):
+    """Auto-generated briefings before meetings."""
+    __tablename__ = "pre_meeting_briefings"
+    __table_args__ = (
+        Index("ix_briefing_user_id", "user_id"),
+        Index("ix_briefing_scheduled_time", "scheduled_time"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Meeting info
+    title = Column(String)
+    scheduled_time = Column(DateTime, nullable=True)
+    meeting_type = Column(String, default="general")
+
+    # Briefing content
+    content = Column(Text)
+    participants = Column(JSON, default=list)  # List of participant info
+    key_topics = Column(JSON, default=list)  # Topics to prepare for
+    suggested_questions = Column(JSON, default=list)  # Questions to ask
+    context_notes = Column(Text)  # Background info
+
+    # Participant memories included
+    participant_memories_used = Column(JSON, default=list)  # IDs of memories used
+
+    # Status
+    status = Column(String, default="generated")  # generated, sent, viewed
+    sent_at = Column(DateTime, nullable=True)
+    viewed_at = Column(DateTime, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# =============================================================================
+# LEARNING PROFILE (ALIAS)
+# =============================================================================
+
+# Alias for backward compatibility
+LearningProfile = UserLearningProfile
+
+
+# =============================================================================
+# ROLE-BASED ACCESS CONTROL (RBAC)
+# =============================================================================
+
+class Role(Base):
+    """
+    RBAC Role definition.
+
+    Roles define a set of permissions that can be assigned to users.
+    """
+    __tablename__ = "roles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(50), unique=True, nullable=False, index=True)
+    description = Column(String(255), nullable=True)
+
+    # Permission flags stored as JSON
+    permissions = Column(JSON, default=list)
+
+    # System roles cannot be deleted
+    is_system = Column(Boolean, default=False)
+
+    # Organization scope (null = global)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    organization = relationship("Organization")
+    user_roles = relationship("UserRole", back_populates="role")
+
+
+class UserRole(Base):
+    """Many-to-many relationship between users and roles."""
+    __tablename__ = "user_roles"
+    __table_args__ = (
+        UniqueConstraint("user_id", "role_id", name="uq_user_role"),
+        Index("ix_user_role_user_id", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
+
+    # Optional organization scope
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+
+    # Who assigned this role
+    assigned_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    role = relationship("Role", back_populates="user_roles")
+
+
+# Permission constants
+class Permission:
+    """Constants for RBAC permissions."""
+    # Meetings
+    VIEW_MEETINGS = "meetings:view"
+    EDIT_MEETINGS = "meetings:edit"
+    DELETE_MEETINGS = "meetings:delete"
+
+    # Analytics
+    VIEW_ANALYTICS = "analytics:view"
+    EXPORT_ANALYTICS = "analytics:export"
+
+    # Team management
+    VIEW_TEAM = "team:view"
+    MANAGE_TEAM = "team:manage"
+    INVITE_MEMBERS = "team:invite"
+    REMOVE_MEMBERS = "team:remove"
+
+    # Organization
+    VIEW_ORG_SETTINGS = "org:view_settings"
+    MANAGE_ORG_SETTINGS = "org:manage_settings"
+
+    # Billing
+    VIEW_BILLING = "billing:view"
+    MANAGE_BILLING = "billing:manage"
+
+    # SSO
+    MANAGE_SSO = "sso:manage"
+
+    # API Keys
+    VIEW_API_KEYS = "api_keys:view"
+    MANAGE_API_KEYS = "api_keys:manage"
+
+    # Admin
+    SUPER_ADMIN = "admin:super"
+
+
+# =============================================================================
+# SINGLE SIGN-ON (SSO)
+# =============================================================================
+
+class SSOProvider(Base):
+    """
+    SSO Provider configuration for organizations.
+
+    Supports SAML 2.0, OAuth 2.0 / OIDC.
+    """
+    __tablename__ = "sso_providers"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "provider_type", name="uq_org_provider"),
+        Index("ix_sso_provider_org", "organization_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+
+    # Provider type
+    provider_type = Column(String(50), nullable=False)  # saml, oidc, azure_ad, okta, google
+    name = Column(String(100), nullable=False)  # Display name
+
+    # Common settings
+    is_active = Column(Boolean, default=True)
+    is_default = Column(Boolean, default=False)
+
+    # SAML Settings
+    saml_entity_id = Column(String(500), nullable=True)
+    saml_sso_url = Column(String(500), nullable=True)
+    saml_slo_url = Column(String(500), nullable=True)  # Single Logout URL
+    saml_certificate = Column(Text, nullable=True)
+    saml_metadata_url = Column(String(500), nullable=True)
+
+    # OIDC/OAuth Settings
+    oidc_client_id = Column(String(255), nullable=True)
+    oidc_client_secret = Column(Text, nullable=True)
+    oidc_discovery_url = Column(String(500), nullable=True)
+    oidc_authorization_url = Column(String(500), nullable=True)
+    oidc_token_url = Column(String(500), nullable=True)
+    oidc_userinfo_url = Column(String(500), nullable=True)
+    oidc_scopes = Column(JSON, default=["openid", "email", "profile"])
+
+    # Attribute mapping
+    attribute_mapping = Column(JSON, default={
+        "email": "email",
+        "name": "name",
+        "given_name": "given_name",
+        "family_name": "family_name"
+    })
+
+    # Auto-provisioning
+    auto_provision_users = Column(Boolean, default=True)
+    default_role_id = Column(Integer, ForeignKey("roles.id"), nullable=True)
+
+    # Domain restrictions
+    allowed_domains = Column(JSON, default=list)  # Empty = all domains allowed
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    organization = relationship("Organization")
+    sessions = relationship("SSOSession", back_populates="provider")
+
+
+class SSOSession(Base):
+    """
+    SSO Session tracking for single logout and session management.
+    """
+    __tablename__ = "sso_sessions"
+    __table_args__ = (
+        Index("ix_sso_session_user", "user_id"),
+        Index("ix_sso_session_provider", "provider_id"),
+        Index("ix_sso_session_external", "external_session_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    provider_id = Column(Integer, ForeignKey("sso_providers.id"), nullable=False)
+
+    # Session identifiers
+    session_token = Column(String(255), unique=True, nullable=False, index=True)
+    external_session_id = Column(String(255), nullable=True)  # IdP session ID
+
+    # Session data
+    identity_data = Column(JSON, nullable=True)  # Claims/attributes from IdP
+
+    # Status
+    is_active = Column(Boolean, default=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+    last_activity = Column(DateTime, default=datetime.utcnow)
+    terminated_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    provider = relationship("SSOProvider", back_populates="sessions")
+
+
+# =============================================================================
+# API KEYS
+# =============================================================================
+
+class APIKey(Base):
+    """
+    API Keys for programmatic access.
+    """
+    __tablename__ = "api_keys"
+    __table_args__ = (
+        Index("ix_api_key_user", "user_id"),
+        Index("ix_api_key_org", "organization_id"),
+        Index("ix_api_key_hash", "key_hash"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+
+    # Key identification
+    name = Column(String(100), nullable=False)
+    description = Column(String(255), nullable=True)
+    key_prefix = Column(String(10), nullable=False)  # First 8 chars for identification
+    key_hash = Column(String(255), unique=True, nullable=False)  # SHA256 hash
+
+    # Permissions (scopes)
+    scopes = Column(JSON, default=["read"])  # read, write, admin
+
+    # Rate limiting
+    rate_limit_per_minute = Column(Integer, default=60)
+    rate_limit_per_day = Column(Integer, default=10000)
+
+    # Usage tracking
+    last_used_at = Column(DateTime, nullable=True)
+    usage_count = Column(Integer, default=0)
+
+    # Status
+    is_active = Column(Boolean, default=True)
+
+    # Expiration
+    expires_at = Column(DateTime, nullable=True)  # Null = never expires
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    revoked_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    user = relationship("User")
+    organization = relationship("Organization")
+
+
+# =============================================================================
+# WEBHOOKS
+# =============================================================================
+
+class Webhook(Base):
+    """
+    Webhook subscriptions for external integrations.
+    """
+    __tablename__ = "webhooks"
+    __table_args__ = (
+        Index("ix_webhook_user", "user_id"),
+        Index("ix_webhook_org", "organization_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+
+    # Webhook configuration
+    name = Column(String(100), nullable=False)
+    url = Column(String(500), nullable=False)
+    secret = Column(String(255), nullable=True)  # For signature verification
+
+    # Events to subscribe to
+    events = Column(JSON, default=["meeting.ended"])  # meeting.ended, meeting.started, etc.
+
+    # Headers to include
+    custom_headers = Column(JSON, default={})
+
+    # Status
+    is_active = Column(Boolean, default=True)
+
+    # Retry configuration
+    max_retries = Column(Integer, default=3)
+    retry_delay_seconds = Column(Integer, default=60)
+
+    # Stats
+    total_deliveries = Column(Integer, default=0)
+    successful_deliveries = Column(Integer, default=0)
+    failed_deliveries = Column(Integer, default=0)
+    last_triggered_at = Column(DateTime, nullable=True)
+    last_success_at = Column(DateTime, nullable=True)
+    last_failure_at = Column(DateTime, nullable=True)
+    last_error = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User")
+    organization = relationship("Organization")
+    deliveries = relationship("WebhookDelivery", back_populates="webhook")
+
+
+class WebhookDelivery(Base):
+    """
+    Log of webhook delivery attempts.
+    """
+    __tablename__ = "webhook_deliveries"
+    __table_args__ = (
+        Index("ix_webhook_delivery_webhook", "webhook_id"),
+        Index("ix_webhook_delivery_timestamp", "triggered_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    webhook_id = Column(Integer, ForeignKey("webhooks.id"), nullable=False)
+
+    # Event details
+    event_type = Column(String(100), nullable=False)
+    payload = Column(JSON, nullable=False)
+
+    # Delivery status
+    status = Column(String(20), default="pending")  # pending, success, failed
+
+    # Response
+    response_status_code = Column(Integer, nullable=True)
+    response_body = Column(Text, nullable=True)
+    response_time_ms = Column(Integer, nullable=True)
+
+    # Retry tracking
+    attempt_count = Column(Integer, default=1)
+    next_retry_at = Column(DateTime, nullable=True)
+
+    # Error
+    error_message = Column(Text, nullable=True)
+
+    # Timestamps
+    triggered_at = Column(DateTime, default=datetime.utcnow)
+    delivered_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    webhook = relationship("Webhook", back_populates="deliveries")
+
+
+# =============================================================================
+# WHITE-LABEL CONFIGURATION
+# =============================================================================
+
+class WhiteLabelConfig(Base):
+    """
+    White-label branding configuration for organizations.
+    """
+    __tablename__ = "white_label_configs"
+    __table_args__ = (
+        UniqueConstraint("organization_id", name="uq_white_label_org"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+
+    # Branding
+    company_name = Column(String(100), nullable=True)
+    logo_url = Column(String(500), nullable=True)
+    favicon_url = Column(String(500), nullable=True)
+
+    # Colors
+    primary_color = Column(String(7), default="#d4af37")  # Hex color
+    secondary_color = Column(String(7), default="#10b981")
+    background_color = Column(String(7), default="#0a0a0a")
+    text_color = Column(String(7), default="#ffffff")
+
+    # Custom domain
+    custom_domain = Column(String(255), nullable=True, unique=True)
+    domain_verified = Column(Boolean, default=False)
+    ssl_certificate = Column(Text, nullable=True)
+
+    # Email branding
+    email_from_name = Column(String(100), nullable=True)
+    email_reply_to = Column(String(255), nullable=True)
+    email_footer_text = Column(Text, nullable=True)
+
+    # Features visibility
+    hide_powered_by = Column(Boolean, default=False)
+    custom_terms_url = Column(String(500), nullable=True)
+    custom_privacy_url = Column(String(500), nullable=True)
+    custom_support_email = Column(String(255), nullable=True)
+
+    # Status
+    is_active = Column(Boolean, default=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    organization = relationship("Organization")
+
+
+# =============================================================================
+# USER SESSIONS
+# =============================================================================
+
+class UserSession(Base):
+    """
+    Active user sessions for session management.
+
+    Tracks all active sessions across devices for security monitoring
+    and session revocation.
+    """
+    __tablename__ = "user_sessions"
+    __table_args__ = (
+        Index("ix_user_session_user_id", "user_id"),
+        Index("ix_user_session_token", "session_token"),
+        Index("ix_user_session_expires", "expires_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Session identification
+    session_token = Column(String(255), unique=True, nullable=False, index=True)
+    refresh_token = Column(String(255), unique=True, nullable=True)
+
+    # Device info
+    device_name = Column(String(255), nullable=True)
+    device_type = Column(String(50), nullable=True)  # desktop, mobile, tablet, browser
+    browser = Column(String(100), nullable=True)
+    os = Column(String(100), nullable=True)
+
+    # Location
+    ip_address = Column(String(45), nullable=True)  # IPv6 compatible
+    location = Column(String(255), nullable=True)  # City, Country
+
+    # Status
+    is_active = Column(Boolean, default=True)
+    is_current = Column(Boolean, default=False)  # Mark the current session
+
+    # Activity tracking
+    last_activity = Column(DateTime, default=datetime.utcnow)
+    last_ip = Column(String(45), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+    revoked_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    user = relationship("User")
+
+
+# =============================================================================
+# IN-APP NOTIFICATIONS
+# =============================================================================
+
+class InAppNotification(Base):
+    """
+    In-app notifications for users.
+
+    Displayed in the notification center/bell icon.
+    """
+    __tablename__ = "in_app_notifications"
+    __table_args__ = (
+        Index("ix_in_app_notification_user", "user_id"),
+        Index("ix_in_app_notification_read", "user_id", "is_read"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Notification content
+    type = Column(String(100), nullable=False)
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    data = Column(JSON, nullable=True)
+
+    # Priority
+    priority = Column(String(20), default="normal")  # low, normal, high, urgent
+
+    # Status
+    is_read = Column(Boolean, default=False)
+    read_at = Column(DateTime, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    user = relationship("User")
+
+
+# =============================================================================
+# TEMPLATES
+# =============================================================================
+
+class Template(Base):
+    """
+    User-customizable templates for briefings, summaries, and AI responses.
+    """
+    __tablename__ = "templates"
+    __table_args__ = (
+        Index("ix_template_user", "user_id"),
+        Index("ix_template_type", "template_type"),
+        UniqueConstraint("user_id", "name", name="uq_user_template_name"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Null for system templates
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+
+    # Template identification
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    template_type = Column(String(50), nullable=False)  # briefing, summary, response, email
+
+    # Template content
+    content = Column(Text, nullable=False)  # Template with placeholders
+    variables = Column(JSON, default=list)  # List of available variables
+    default_values = Column(JSON, default=dict)  # Default values for variables
+
+    # Settings
+    is_default = Column(Boolean, default=False)
+    is_system = Column(Boolean, default=False)  # System templates can't be deleted
+    is_active = Column(Boolean, default=True)
+
+    # Versioning
+    version = Column(Integer, default=1)
+    parent_id = Column(Integer, ForeignKey("templates.id"), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User")
+    organization = relationship("Organization")
+
+
+class TemplateType:
+    """Template type constants."""
+    BRIEFING = "briefing"
+    SUMMARY = "summary"
+    RESPONSE = "response"
+    EMAIL = "email"
+    ACTION_ITEM = "action_item"
+
+
+# =============================================================================
+# AI MODEL PREFERENCES
+# =============================================================================
+
+class UserAIPreferences(Base):
+    """
+    User preferences for AI model selection and behavior.
+    """
+    __tablename__ = "user_ai_preferences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+
+    # Model selection
+    preferred_model = Column(String(50), default="sonnet")  # sonnet, opus, haiku
+    fallback_model = Column(String(50), default="haiku")
+
+    # Response preferences
+    response_length = Column(String(20), default="medium")  # short, medium, long
+    response_style = Column(String(50), default="professional")  # professional, casual, technical
+    bullet_points = Column(Boolean, default=True)
+    include_sources = Column(Boolean, default=False)
+
+    # Cost management
+    monthly_budget_cents = Column(Integer, nullable=True)  # Max monthly spend
+    current_month_usage_cents = Column(Integer, default=0)
+    budget_alert_threshold = Column(Float, default=0.8)  # Alert at 80%
+
+    # Advanced settings
+    temperature = Column(Float, default=0.7)
+    max_tokens = Column(Integer, default=1000)
+    custom_instructions = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User")
+
+
+# =============================================================================
+# ANALYTICS TRACKING
+# =============================================================================
+
+class AnalyticsEvent(Base):
+    """
+    Analytics events for tracking user behavior and system metrics.
+    """
+    __tablename__ = "analytics_events"
+    __table_args__ = (
+        Index("ix_analytics_user", "user_id"),
+        Index("ix_analytics_event", "event_type"),
+        Index("ix_analytics_timestamp", "timestamp"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # Event details
+    event_type = Column(String(100), nullable=False)
+    event_category = Column(String(50), nullable=True)  # meeting, ai, user, system
+    event_action = Column(String(100), nullable=True)
+
+    # Event data
+    properties = Column(JSON, default=dict)
+    value = Column(Float, nullable=True)  # Numeric value (e.g., duration, count)
+
+    # Context
+    session_id = Column(String(100), nullable=True)
+    source = Column(String(50), nullable=True)  # desktop, web, mobile, api
+
+    # Timestamp
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)

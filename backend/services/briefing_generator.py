@@ -17,6 +17,7 @@ from models import (
     Commitment,
     ActionItem,
 )
+from services.language_service import get_localized_prompt_suffix, get_fallback_message
 
 
 class BriefingGenerator:
@@ -35,9 +36,16 @@ class BriefingGenerator:
         participant_names: List[str],
         meeting_context: Optional[str] = None,
         meeting_type: Optional[str] = None,
+        language: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Generate a comprehensive pre-meeting briefing."""
         user = self.db.query(User).filter(User.id == user_id).first()
+
+        # Use user's preferred language if not specified
+        if language is None and user:
+            language = getattr(user, 'preferred_language', 'en') or 'en'
+        elif language is None:
+            language = 'en'
 
         # Get participant memories
         participant_data = []
@@ -64,6 +72,7 @@ class BriefingGenerator:
             actions=pending_actions,
             context=meeting_context,
             meeting_type=meeting_type,
+            language=language,
         )
 
         return briefing
@@ -167,11 +176,15 @@ class BriefingGenerator:
         actions: List[Dict],
         context: Optional[str],
         meeting_type: Optional[str],
+        language: str = "en",
     ) -> Dict[str, Any]:
         """Generate briefing using Claude."""
         profession_context = ""
         if user.profession:
             profession_context = f"User's profession: {user.profession.name}"
+
+        # Get language-specific prompt suffix
+        language_instruction = get_localized_prompt_suffix(language)
 
         prompt = f"""Generate a comprehensive pre-meeting briefing.
 
@@ -218,7 +231,7 @@ Generate a briefing in this JSON format:
     "questions_to_ask": [
         "Suggested questions for the meeting"
     ]
-}}"""
+}}{language_instruction}"""
 
         try:
             response = self.client.messages.create(
@@ -238,7 +251,7 @@ Generate a briefing in this JSON format:
         except Exception as e:
             print(f"Briefing generation error: {e}")
             return {
-                "summary": "Unable to generate briefing",
+                "summary": get_fallback_message("unable_to_generate", language),
                 "participant_insights": [],
                 "talking_points": [],
                 "follow_up_items": [],
@@ -352,9 +365,14 @@ For each participant (other than the user), provide:
             return []
 
     async def get_variety_suggestions(
-        self, user_id: int, topic: str
+        self, user_id: int, topic: str, language: Optional[str] = None
     ) -> Dict[str, Any]:
         """For TV/media appearances, suggest points not yet covered."""
+        # Get user's preferred language if not specified
+        if language is None:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            language = getattr(user, 'preferred_language', 'en') or 'en' if user else 'en'
+
         # Get user's media appearances on this topic
         from models import MediaAppearance
 
@@ -374,6 +392,9 @@ For each participant (other than the user), provide:
         for app in appearances:
             if app.points_made:
                 points_made.extend(app.points_made)
+
+        # Get language-specific prompt suffix
+        language_instruction = get_localized_prompt_suffix(language)
 
         # Generate new suggestions
         prompt = f"""For a TV/media appearance about "{topic}", suggest fresh talking points.
@@ -400,7 +421,7 @@ Return as JSON:
     "avoid_repeating": [
         "Point already overused"
     ]
-}}"""
+}}{language_instruction}"""
 
         try:
             response = self.client.messages.create(
