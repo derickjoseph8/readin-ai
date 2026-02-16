@@ -21,7 +21,8 @@ export const config = {
   matcher: [
     // Match all pathnames except for
     // - … if they start with /api, /_next, /_vercel, /static, /favicon.ico, /robots.txt
+    // - … static legal/info pages (terms, privacy, cookies, gdpr, docs, changelog, contact)
     // - … if they contain a dot (.) - files with extensions
-    '/((?!api|_next|_vercel|static|favicon.ico|robots.txt|.*\\..*).*)'
+    '/((?!api|_next|_vercel|static|favicon.ico|robots.txt|terms|privacy|cookies|gdpr|docs|changelog|contact|.*\\..*).*)'
   ]
 };
