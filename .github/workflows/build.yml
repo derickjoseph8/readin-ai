@@ -1,10 +1,23 @@
-name: Build ReadIn AI
+name: Build & Release ReadIn AI
 
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip CI tests (not recommended)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: write
+
+# Ensure CI passes before building releases
+# Note: This workflow runs on tags, CI runs on branches
+# For manual triggers, tests can be optionally skipped
 
 jobs:
   build-windows:
