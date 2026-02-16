@@ -39,7 +39,10 @@ from routes import (
     conversations_router, tasks_router, briefings_router, interviews_router,
     gdpr_router, metrics_router, analytics_router, calendar_router,
     sso_router, api_keys_router, webhooks_router, white_label_router,
-    two_factor_router
+    two_factor_router,
+    # Admin routes
+    admin_dashboard_router, admin_teams_router, admin_tickets_router,
+    customer_tickets_router, admin_chat_router, customer_chat_router
 )
 from routes.contact import router as contact_router
 from routes.sessions import router as sessions_router
@@ -189,6 +192,16 @@ app.include_router(analytics_dashboard_router, prefix=API_V1_PREFIX)
 app.include_router(ai_preferences_router, prefix=API_V1_PREFIX)
 app.include_router(exports_router, prefix=API_V1_PREFIX)
 app.include_router(contact_router)
+
+# Admin dashboard routes
+app.include_router(admin_dashboard_router, prefix=API_V1_PREFIX)
+app.include_router(admin_teams_router, prefix=API_V1_PREFIX)
+app.include_router(admin_tickets_router, prefix=API_V1_PREFIX)
+app.include_router(admin_chat_router, prefix=API_V1_PREFIX)
+
+# Customer-facing support routes
+app.include_router(customer_tickets_router, prefix=API_V1_PREFIX)
+app.include_router(customer_chat_router, prefix=API_V1_PREFIX)
 
 # Also include at root for backward compatibility (deprecated)
 app.include_router(professions_router, tags=["Deprecated - Use /api/v1"])

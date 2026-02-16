@@ -122,6 +122,10 @@ class User(Base):
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     role_in_org = Column(String, default="member")  # admin, member
 
+    # Staff/Team Member status (for internal teams - lifetime access while active)
+    is_staff = Column(Boolean, default=False)
+    staff_role = Column(String(50), nullable=True)  # super_admin, admin, manager, agent
+
     # Stripe (for individual users)
     stripe_customer_id = Column(String, unique=True, nullable=True)
 
@@ -1441,3 +1445,386 @@ class AnalyticsEvent(Base):
 
     # Timestamp
     timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+# =============================================================================
+# SUPPORT TEAMS & TICKETING SYSTEM
+# =============================================================================
+
+class SupportTeam(Base):
+    """
+    Internal support teams (Tech Support, Sales, Accounts, etc.)
+    Team members get lifetime app access while active.
+    """
+    __tablename__ = "support_teams"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    slug = Column(String(50), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    color = Column(String(7), default="#3B82F6")  # Hex color for UI
+
+    # Settings
+    is_active = Column(Boolean, default=True)
+    accepts_tickets = Column(Boolean, default=True)
+    accepts_chat = Column(Boolean, default=True)
+
+    # Working hours (JSON: {"monday": {"start": "09:00", "end": "17:00"}, ...})
+    working_hours = Column(JSON, default=dict)
+    timezone = Column(String(50), default="UTC")
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    members = relationship("TeamMember", back_populates="team", cascade="all, delete-orphan")
+    tickets = relationship("SupportTicket", back_populates="team")
+    chat_sessions = relationship("ChatSession", back_populates="team")
+
+
+class TeamMember(Base):
+    """
+    Internal staff members assigned to support teams.
+    Members have lifetime app access while active - no subscription needed.
+    """
+    __tablename__ = "team_members"
+    __table_args__ = (
+        UniqueConstraint("user_id", "team_id", name="uq_user_team"),
+        Index("ix_team_member_user", "user_id"),
+        Index("ix_team_member_team", "team_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    team_id = Column(Integer, ForeignKey("support_teams.id"), nullable=False)
+
+    # Role within team
+    role = Column(String(50), default="agent")  # super_admin, admin, manager, agent
+
+    # Status
+    is_active = Column(Boolean, default=True)
+
+    # Timestamps
+    joined_at = Column(DateTime, default=datetime.utcnow)
+    removed_at = Column(DateTime, nullable=True)
+    invited_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])
+    team = relationship("SupportTeam", back_populates="members")
+    invited_by = relationship("User", foreign_keys=[invited_by_id])
+    assigned_tickets = relationship("SupportTicket", back_populates="assigned_to_member", foreign_keys="SupportTicket.assigned_to_id")
+    ticket_messages = relationship("TicketMessage", back_populates="sender_member")
+    agent_status = relationship("AgentStatus", back_populates="team_member", uselist=False)
+    chat_sessions = relationship("ChatSession", back_populates="agent")
+
+
+class TeamInvite(Base):
+    """Invitations for team members to join a support team."""
+    __tablename__ = "team_invites"
+    __table_args__ = (
+        Index("ix_team_invite_email", "email"),
+        Index("ix_team_invite_token", "token"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    team_id = Column(Integer, ForeignKey("support_teams.id"), nullable=False)
+    email = Column(String(255), nullable=False)
+    role = Column(String(50), default="agent")  # admin, manager, agent
+
+    # Invitation details
+    token = Column(String(100), unique=True, nullable=False)
+    invited_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Status
+    status = Column(String(20), default="pending")  # pending, accepted, expired, cancelled
+    expires_at = Column(DateTime, nullable=False)
+    accepted_at = Column(DateTime, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    team = relationship("SupportTeam")
+    invited_by = relationship("User")
+
+
+class SLAConfig(Base):
+    """SLA configuration for ticket priorities."""
+    __tablename__ = "sla_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    priority = Column(String(20), unique=True, nullable=False)  # urgent, high, medium, low
+
+    # Response times in minutes
+    first_response_minutes = Column(Integer, nullable=False)
+    resolution_minutes = Column(Integer, nullable=False)
+
+    # Escalation
+    escalation_enabled = Column(Boolean, default=True)
+    escalation_after_minutes = Column(Integer, nullable=True)
+
+    # Active
+    is_active = Column(Boolean, default=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SupportTicket(Base):
+    """Customer support tickets."""
+    __tablename__ = "support_tickets"
+    __table_args__ = (
+        Index("ix_ticket_user", "user_id"),
+        Index("ix_ticket_team", "team_id"),
+        Index("ix_ticket_status", "status"),
+        Index("ix_ticket_priority", "priority"),
+        Index("ix_ticket_number", "ticket_number"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticket_number = Column(String(20), unique=True, nullable=False)  # TKT-2026-00001
+
+    # Customer
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Assignment
+    team_id = Column(Integer, ForeignKey("support_teams.id"), nullable=True)
+    assigned_to_id = Column(Integer, ForeignKey("team_members.id"), nullable=True)
+
+    # Ticket details
+    category = Column(String(50), nullable=False)  # billing, technical, sales, general, account
+    priority = Column(String(20), default="medium")  # urgent, high, medium, low
+    status = Column(String(30), default="open")  # open, in_progress, waiting_customer, waiting_internal, resolved, closed
+
+    # Content
+    subject = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+
+    # SLA tracking
+    sla_first_response_due = Column(DateTime, nullable=True)
+    sla_resolution_due = Column(DateTime, nullable=True)
+    first_response_at = Column(DateTime, nullable=True)
+    sla_breached = Column(Boolean, default=False)
+
+    # Source
+    source = Column(String(30), default="dashboard")  # dashboard, chat, email, api
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+    closed_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    user = relationship("User")
+    team = relationship("SupportTeam", back_populates="tickets")
+    assigned_to_member = relationship("TeamMember", back_populates="assigned_tickets", foreign_keys=[assigned_to_id])
+    messages = relationship("TicketMessage", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketMessage.created_at")
+    chat_session = relationship("ChatSession", back_populates="ticket", uselist=False)
+
+
+class TicketMessage(Base):
+    """Messages/replies within a ticket."""
+    __tablename__ = "ticket_messages"
+    __table_args__ = (
+        Index("ix_ticket_message_ticket", "ticket_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticket_id = Column(Integer, ForeignKey("support_tickets.id"), nullable=False)
+
+    # Sender
+    sender_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    sender_member_id = Column(Integer, ForeignKey("team_members.id"), nullable=True)
+    sender_type = Column(String(20), nullable=False)  # customer, agent, system
+
+    # Content
+    message = Column(Text, nullable=False)
+    attachments = Column(JSON, default=list)  # List of attachment URLs
+
+    # Visibility
+    is_internal = Column(Boolean, default=False)  # Internal notes not visible to customer
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    ticket = relationship("SupportTicket", back_populates="messages")
+    sender_user = relationship("User")
+    sender_member = relationship("TeamMember", back_populates="ticket_messages")
+
+
+class ChatSession(Base):
+    """Live chat sessions between customers and agents."""
+    __tablename__ = "chat_sessions"
+    __table_args__ = (
+        Index("ix_chat_session_user", "user_id"),
+        Index("ix_chat_session_agent", "agent_id"),
+        Index("ix_chat_session_status", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_token = Column(String(100), unique=True, nullable=False)
+
+    # Participants
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    agent_id = Column(Integer, ForeignKey("team_members.id"), nullable=True)
+    team_id = Column(Integer, ForeignKey("support_teams.id"), nullable=True)
+
+    # Status
+    status = Column(String(20), default="waiting")  # waiting, active, ended, abandoned
+
+    # Linked ticket (if converted)
+    ticket_id = Column(Integer, ForeignKey("support_tickets.id"), nullable=True)
+
+    # Queue position (for waiting chats)
+    queue_position = Column(Integer, nullable=True)
+
+    # Timestamps
+    started_at = Column(DateTime, default=datetime.utcnow)
+    accepted_at = Column(DateTime, nullable=True)
+    ended_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    user = relationship("User")
+    agent = relationship("TeamMember", back_populates="chat_sessions")
+    team = relationship("SupportTeam", back_populates="chat_sessions")
+    ticket = relationship("SupportTicket", back_populates="chat_session")
+    messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan", order_by="ChatMessage.created_at")
+
+
+class ChatMessage(Base):
+    """Messages within a chat session."""
+    __tablename__ = "chat_messages"
+    __table_args__ = (
+        Index("ix_chat_message_session", "session_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("chat_sessions.id"), nullable=False)
+
+    # Sender
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    sender_type = Column(String(20), nullable=False)  # customer, agent, bot, system
+
+    # Content
+    message = Column(Text, nullable=False)
+    message_type = Column(String(20), default="text")  # text, image, file, system
+
+    # Read status
+    is_read = Column(Boolean, default=False)
+    read_at = Column(DateTime, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    session = relationship("ChatSession", back_populates="messages")
+    sender = relationship("User")
+
+
+class AgentStatus(Base):
+    """Agent availability status for chat routing."""
+    __tablename__ = "agent_status"
+    __table_args__ = (
+        Index("ix_agent_status_member", "team_member_id"),
+        Index("ix_agent_status_status", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    team_member_id = Column(Integer, ForeignKey("team_members.id"), unique=True, nullable=False)
+
+    # Status
+    status = Column(String(20), default="offline")  # online, away, busy, offline
+
+    # Chat capacity
+    current_chats = Column(Integer, default=0)
+    max_chats = Column(Integer, default=3)
+
+    # Activity tracking
+    last_seen = Column(DateTime, default=datetime.utcnow)
+    went_online_at = Column(DateTime, nullable=True)
+    went_offline_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    team_member = relationship("TeamMember", back_populates="agent_status")
+
+
+class AdminActivityLog(Base):
+    """Audit log for admin/team member actions."""
+    __tablename__ = "admin_activity_logs"
+    __table_args__ = (
+        Index("ix_admin_log_user", "user_id"),
+        Index("ix_admin_log_action", "action"),
+        Index("ix_admin_log_timestamp", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Action details
+    action = Column(String(100), nullable=False)
+    entity_type = Column(String(50), nullable=True)  # ticket, team, user, subscription
+    entity_id = Column(Integer, nullable=True)
+
+    # Details
+    details = Column(JSON, nullable=True)
+    ip_address = Column(String(45), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User")
+
+
+# =============================================================================
+# ADMIN ROLE CONSTANTS
+# =============================================================================
+
+class StaffRole:
+    """Staff role constants."""
+    SUPER_ADMIN = "super_admin"  # Only owner - can add/remove admins
+    ADMIN = "admin"  # Same as super admin except cannot manage other admins
+    MANAGER = "manager"  # Team manager
+    AGENT = "agent"  # Support agent
+
+
+class TicketCategory:
+    """Ticket category constants."""
+    BILLING = "billing"
+    TECHNICAL = "technical"
+    SALES = "sales"
+    ACCOUNT = "account"
+    GENERAL = "general"
+
+
+class TicketStatus:
+    """Ticket status constants."""
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    WAITING_CUSTOMER = "waiting_customer"
+    WAITING_INTERNAL = "waiting_internal"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
+
+
+# Category to team mapping
+CATEGORY_TEAM_MAP = {
+    "billing": "accounts",
+    "payment": "accounts",
+    "refund": "accounts",
+    "subscription": "accounts",
+    "technical": "tech-support",
+    "bug": "tech-support",
+    "installation": "tech-support",
+    "feature": "tech-support",
+    "sales": "sales",
+    "pricing": "sales",
+    "enterprise": "sales",
+    "account": "tech-support",
+    "general": "tech-support",
+}

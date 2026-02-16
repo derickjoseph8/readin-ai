@@ -830,9 +830,373 @@ class UsageResponse(BaseModel):
 
 
 # =============================================================================
+# SUPPORT TEAM SCHEMAS
+# =============================================================================
+
+class SupportTeamCreate(BaseModel):
+    """Support team creation schema."""
+    name: str = Field(..., min_length=2, max_length=100)
+    slug: str = Field(..., min_length=2, max_length=50, pattern="^[a-z0-9-]+$")
+    description: Optional[str] = Field(None, max_length=500)
+    color: str = Field("#3B82F6", pattern="^#[0-9A-Fa-f]{6}$")
+    accepts_tickets: bool = True
+    accepts_chat: bool = True
+    working_hours: Optional[Dict[str, Any]] = None
+    timezone: str = Field("UTC", max_length=50)
+
+
+class SupportTeamUpdate(BaseModel):
+    """Support team update schema."""
+    name: Optional[str] = Field(None, min_length=2, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    color: Optional[str] = Field(None, pattern="^#[0-9A-Fa-f]{6}$")
+    is_active: Optional[bool] = None
+    accepts_tickets: Optional[bool] = None
+    accepts_chat: Optional[bool] = None
+    working_hours: Optional[Dict[str, Any]] = None
+    timezone: Optional[str] = Field(None, max_length=50)
+
+
+class SupportTeamResponse(BaseModel):
+    id: int
+    name: str
+    slug: str
+    description: Optional[str]
+    color: str
+    is_active: bool
+    accepts_tickets: bool
+    accepts_chat: bool
+    working_hours: Optional[Dict[str, Any]]
+    timezone: str
+    member_count: Optional[int] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SupportTeamList(BaseModel):
+    teams: List[SupportTeamResponse]
+    total: int
+
+
+# =============================================================================
+# TEAM MEMBER SCHEMAS
+# =============================================================================
+
+class TeamMemberCreate(BaseModel):
+    """Team member assignment schema."""
+    user_id: int
+    role: str = Field("agent", pattern="^(admin|manager|agent)$")
+
+
+class TeamMemberInvite(BaseModel):
+    """Team member invitation schema."""
+    email: EmailStr
+    role: str = Field("agent", pattern="^(admin|manager|agent)$")
+    team_id: int
+
+
+class TeamMemberResponse(BaseModel):
+    id: int
+    user_id: int
+    team_id: int
+    role: str
+    is_active: bool
+    joined_at: datetime
+    user_email: Optional[str] = None
+    user_name: Optional[str] = None
+    team_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TeamMemberList(BaseModel):
+    members: List[TeamMemberResponse]
+    total: int
+
+
+class TeamInviteResponse(BaseModel):
+    id: int
+    team_id: int
+    email: str
+    role: str
+    status: str
+    expires_at: datetime
+    created_at: datetime
+    team_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
+# SLA SCHEMAS
+# =============================================================================
+
+class SLAConfigCreate(BaseModel):
+    """SLA configuration creation schema."""
+    priority: str = Field(..., pattern="^(urgent|high|medium|low)$")
+    first_response_minutes: int = Field(..., ge=1)
+    resolution_minutes: int = Field(..., ge=1)
+    escalation_enabled: bool = True
+    escalation_after_minutes: Optional[int] = Field(None, ge=1)
+
+
+class SLAConfigUpdate(BaseModel):
+    """SLA configuration update schema."""
+    first_response_minutes: Optional[int] = Field(None, ge=1)
+    resolution_minutes: Optional[int] = Field(None, ge=1)
+    escalation_enabled: Optional[bool] = None
+    escalation_after_minutes: Optional[int] = Field(None, ge=1)
+    is_active: Optional[bool] = None
+
+
+class SLAConfigResponse(BaseModel):
+    id: int
+    priority: str
+    first_response_minutes: int
+    resolution_minutes: int
+    escalation_enabled: bool
+    escalation_after_minutes: Optional[int]
+    is_active: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
+# SUPPORT TICKET SCHEMAS
+# =============================================================================
+
+class TicketCreate(BaseModel):
+    """Support ticket creation schema."""
+    category: str = Field(..., pattern="^(billing|technical|sales|account|general)$")
+    priority: str = Field("medium", pattern="^(urgent|high|medium|low)$")
+    subject: str = Field(..., min_length=5, max_length=255)
+    description: str = Field(..., min_length=10, max_length=10000)
+
+
+class TicketUpdate(BaseModel):
+    """Support ticket update schema."""
+    priority: Optional[str] = Field(None, pattern="^(urgent|high|medium|low)$")
+    status: Optional[str] = Field(None, pattern="^(open|in_progress|waiting_customer|waiting_internal|resolved|closed)$")
+    team_id: Optional[int] = None
+    assigned_to_id: Optional[int] = None
+
+
+class TicketResponse(BaseModel):
+    id: int
+    ticket_number: str
+    user_id: int
+    team_id: Optional[int]
+    assigned_to_id: Optional[int]
+    category: str
+    priority: str
+    status: str
+    subject: str
+    description: str
+    source: str
+    sla_first_response_due: Optional[datetime]
+    sla_resolution_due: Optional[datetime]
+    first_response_at: Optional[datetime]
+    sla_breached: bool
+    created_at: datetime
+    updated_at: datetime
+    resolved_at: Optional[datetime]
+    closed_at: Optional[datetime]
+    # Related data
+    user_email: Optional[str] = None
+    user_name: Optional[str] = None
+    team_name: Optional[str] = None
+    assigned_to_name: Optional[str] = None
+    message_count: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TicketDetail(TicketResponse):
+    messages: List["TicketMessageResponse"] = []
+
+
+class TicketList(BaseModel):
+    tickets: List[TicketResponse]
+    total: int
+    by_status: Dict[str, int]
+    by_priority: Dict[str, int]
+
+
+class TicketMessageCreate(BaseModel):
+    """Ticket message creation schema."""
+    message: str = Field(..., min_length=1, max_length=10000)
+    is_internal: bool = False
+    attachments: Optional[List[str]] = None
+
+
+class TicketMessageResponse(BaseModel):
+    id: int
+    ticket_id: int
+    sender_type: str
+    message: str
+    attachments: List[str]
+    is_internal: bool
+    created_at: datetime
+    sender_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
+# CHAT SESSION SCHEMAS
+# =============================================================================
+
+class ChatSessionCreate(BaseModel):
+    """Chat session initiation schema."""
+    team_id: Optional[int] = None
+
+
+class ChatSessionResponse(BaseModel):
+    id: int
+    session_token: str
+    user_id: int
+    agent_id: Optional[int]
+    team_id: Optional[int]
+    status: str
+    queue_position: Optional[int]
+    started_at: datetime
+    accepted_at: Optional[datetime]
+    ended_at: Optional[datetime]
+    ticket_id: Optional[int]
+    user_name: Optional[str] = None
+    agent_name: Optional[str] = None
+    team_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ChatSessionList(BaseModel):
+    sessions: List[ChatSessionResponse]
+    total: int
+    waiting: int
+    active: int
+
+
+class ChatMessageCreate(BaseModel):
+    """Chat message creation schema."""
+    message: str = Field(..., min_length=1, max_length=5000)
+    message_type: str = Field("text", pattern="^(text|image|file|system)$")
+
+
+class ChatMessageResponse(BaseModel):
+    id: int
+    session_id: int
+    sender_type: str
+    message: str
+    message_type: str
+    is_read: bool
+    created_at: datetime
+    sender_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
+# AGENT STATUS SCHEMAS
+# =============================================================================
+
+class AgentStatusUpdate(BaseModel):
+    """Agent status update schema."""
+    status: str = Field(..., pattern="^(online|away|busy|offline)$")
+    max_chats: Optional[int] = Field(None, ge=1, le=10)
+
+
+class AgentStatusResponse(BaseModel):
+    id: int
+    team_member_id: int
+    status: str
+    current_chats: int
+    max_chats: int
+    last_seen: datetime
+    agent_name: Optional[str] = None
+    team_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
+# ADMIN DASHBOARD SCHEMAS
+# =============================================================================
+
+class AdminDashboardStats(BaseModel):
+    """Admin dashboard statistics."""
+    # Users
+    total_users: int
+    active_users: int
+    trial_users: int
+    paying_users: int
+    new_users_today: int
+    new_users_this_week: int
+    new_users_this_month: int
+
+    # Subscriptions
+    total_revenue_this_month: float
+    mrr: float  # Monthly recurring revenue
+    churn_rate: float
+
+    # Support
+    open_tickets: int
+    tickets_today: int
+    avg_response_time_minutes: float
+    sla_breach_rate: float
+    active_chats: int
+    waiting_chats: int
+
+    # Teams
+    total_teams: int
+    online_agents: int
+    total_agents: int
+
+
+class TicketTrend(BaseModel):
+    """Ticket trend data point."""
+    date: str
+    count: int
+    resolved: int
+    avg_response_minutes: Optional[float]
+
+
+class SubscriptionTrend(BaseModel):
+    """Subscription trend data point."""
+    date: str
+    new_subscriptions: int
+    cancellations: int
+    revenue: float
+
+
+class AdminTrends(BaseModel):
+    """Admin dashboard trends."""
+    tickets: List[TicketTrend]
+    subscriptions: List[SubscriptionTrend]
+    period: str  # daily, weekly, monthly
+
+
+class AdminActivityLogResponse(BaseModel):
+    id: int
+    user_id: int
+    action: str
+    entity_type: Optional[str]
+    entity_id: Optional[int]
+    details: Optional[Dict[str, Any]]
+    ip_address: Optional[str]
+    created_at: datetime
+    user_email: Optional[str] = None
+    user_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
 # FORWARD REFERENCES
 # =============================================================================
 
 # Update forward references for nested models
 MeetingDetail.model_rebuild()
 JobApplicationDetail.model_rebuild()
+TicketDetail.model_rebuild()

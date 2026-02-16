@@ -14,15 +14,18 @@ import {
   X,
   CreditCard,
   Shield,
-  ChevronDown
+  ChevronDown,
+  HelpCircle
 } from 'lucide-react'
 import { AuthProvider, useAuth } from '@/lib/hooks/useAuth'
+import ChatWidget from '@/components/ChatWidget'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Meetings', href: '/dashboard/meetings', icon: Calendar },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Team', href: '/dashboard/team', icon: Users },
+  { name: 'Support', href: '/dashboard/support', icon: HelpCircle },
 ]
 
 const settingsNav = [
@@ -189,6 +192,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       <main className="lg:pl-64">
         <div className="p-6 lg:p-8">{children}</div>
       </main>
+      <ChatWidget />
     </div>
   )
 }
