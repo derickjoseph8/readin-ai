@@ -1,30 +1,174 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { CreditCard, Check, Sparkles, Calendar, ExternalLink } from 'lucide-react';
+import { useState } from 'react';
+import { CreditCard, Check, Sparkles, Calendar, ExternalLink, Users, Building2, Zap, Shield, Clock, HeadphonesIcon } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/hooks/useAuth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://www.getreadin.us';
 
+const pricingTiers = {
+  individual: [
+    {
+      name: 'Free',
+      price: 0,
+      period: 'forever',
+      description: 'For trying out ReadIn AI',
+      features: [
+        '5 AI responses per day',
+        'Basic meeting transcription',
+        'Standard AI suggestions',
+        'Email support',
+      ],
+      limitations: [
+        'No meeting summaries',
+        'No team features',
+      ],
+      cta: 'Current Plan',
+      highlighted: false,
+    },
+    {
+      name: 'Pro Monthly',
+      price: 29.99,
+      period: '/month',
+      description: 'For professionals who want more',
+      features: [
+        'Unlimited AI responses',
+        'Advanced GPT-4 integration',
+        'Meeting summaries & action items',
+        'Interview coaching',
+        'Priority support',
+        'Export to PDF/Word',
+      ],
+      limitations: [],
+      cta: 'Upgrade to Pro',
+      highlighted: true,
+      priceId: 'price_pro_monthly',
+    },
+    {
+      name: 'Pro Annual',
+      price: 299.90,
+      period: '/year',
+      description: '2 months free with annual billing',
+      features: [
+        'Everything in Pro',
+        'Save $60 per year',
+        'Priority feature requests',
+      ],
+      limitations: [],
+      cta: 'Save with Annual',
+      highlighted: false,
+      priceId: 'price_pro_annual',
+    },
+  ],
+  business: [
+    {
+      name: 'Team Monthly',
+      price: 19.99,
+      period: '/user/month',
+      description: '5-10 users (5 seats minimum)',
+      features: [
+        'Everything in Pro',
+        '5 mandatory seats included',
+        'Up to 10 team members',
+        'Team analytics dashboard',
+        'Admin controls',
+      ],
+      limitations: [],
+      cta: 'Sign Up',
+      highlighted: true,
+      priceId: 'price_team_monthly',
+    },
+    {
+      name: 'Team Annual',
+      price: 199.90,
+      period: '/user/year',
+      description: '2 months free - 5 seats minimum',
+      features: [
+        'Everything in Team Monthly',
+        'Save $40/user per year',
+        '5-10 team members',
+      ],
+      limitations: [],
+      cta: 'Sign Up',
+      highlighted: false,
+      priceId: 'price_team_annual',
+    },
+    {
+      name: 'Growth',
+      price: 14.99,
+      period: '/user/month',
+      description: 'For teams of 11-50 users',
+      features: [
+        'Everything in Team',
+        '11-50 team members',
+        'Volume discount applied',
+        'Advanced analytics',
+        'API access',
+        'SAML SSO',
+      ],
+      limitations: [],
+      cta: 'Sign Up',
+      highlighted: false,
+      priceId: 'price_growth_monthly',
+    },
+    {
+      name: 'Growth Annual',
+      price: 149.90,
+      period: '/user/year',
+      description: '2 months free for 11-50 users',
+      features: [
+        'Everything in Growth Monthly',
+        'Save $30/user per year',
+        'Best value for mid-size teams',
+      ],
+      limitations: [],
+      cta: 'Sign Up',
+      highlighted: false,
+      priceId: 'price_growth_annual',
+    },
+    {
+      name: 'Enterprise',
+      price: null,
+      period: 'Custom',
+      description: 'For 50+ users with volume discounts',
+      features: [
+        'Everything in Growth',
+        'Unlimited team members',
+        'Best volume pricing',
+        'Custom deployment',
+        'SLA guarantees',
+        'On-premise option',
+        'Dedicated success manager',
+        '2 months free on annual',
+      ],
+      limitations: [],
+      cta: 'Contact Sales',
+      highlighted: false,
+    },
+  ],
+};
+
 export default function BillingPage() {
   const { user, status, token } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedTab, setSelectedTab] = useState<'individual' | 'business'>(
+    user?.account_type === 'business' ? 'business' : 'individual'
+  );
   const t = useTranslations('settings.billing');
-  const tp = useTranslations('pricing');
 
-  const handleUpgrade = async () => {
-    if (!token) return;
+  const handleUpgrade = async (priceId?: string) => {
+    if (!token || !priceId) return;
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/stripe/create-checkout`, {
+      const response = await fetch(`${API_URL}/subscription/create-checkout`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ price_id: 'price_monthly' })
+        body: JSON.stringify({ price_id: priceId })
       });
 
       const data = await response.json();
@@ -43,7 +187,7 @@ export default function BillingPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/stripe/customer-portal`, {
+      const response = await fetch(`${API_URL}/subscription/manage`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -59,160 +203,230 @@ export default function BillingPage() {
     }
   };
 
+  const handleContactSales = () => {
+    window.location.href = '/contact?type=sales';
+  };
+
   const isPremium = status?.subscription.status === 'active';
   const isTrial = status?.subscription.status === 'trial';
+  const isBusinessAccount = user?.account_type === 'business';
+
+  const currentTiers = pricingTiers[selectedTab];
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-5xl">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white">{t('title')}</h1>
         <p className="text-gray-400 mt-1">
-          Manage your subscription and payment method
+          Choose the plan that fits your needs
         </p>
       </div>
 
-      {/* Current Plan */}
+      {/* Current Status Banner */}
       <div className="bg-premium-card border border-premium-border rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-white mb-4">{t('currentPlan')}</h2>
-
-        <div className="flex items-start justify-between">
+        <div className="flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xl font-bold text-white">
-                {isPremium ? 'Premium' : isTrial ? 'Trial' : 'Free'}
-              </span>
-              {isPremium && (
-                <span className="px-2 py-0.5 bg-gold-500/20 text-gold-400 text-xs rounded-full">
-                  Active
-                </span>
-              )}
-              {isTrial && (
-                <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded-full">
-                  {status?.subscription.trial_days_remaining} days left
-                </span>
-              )}
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                isPremium ? 'bg-gold-500/20' : isTrial ? 'bg-blue-500/20' : 'bg-gray-500/20'
+              }`}>
+                {isPremium ? (
+                  <Sparkles className="h-5 w-5 text-gold-400" />
+                ) : isTrial ? (
+                  <Clock className="h-5 w-5 text-blue-400" />
+                ) : (
+                  <Zap className="h-5 w-5 text-gray-400" />
+                )}
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-white">
+                  {isPremium ? 'Premium Plan' : isTrial ? 'Free Trial' : 'Free Plan'}
+                </p>
+                <p className="text-sm text-gray-400">
+                  {isPremium && 'You have access to all premium features'}
+                  {isTrial && `${status?.subscription.trial_days_remaining} days remaining in trial`}
+                  {!isPremium && !isTrial && 'Upgrade to unlock all features'}
+                </p>
+              </div>
             </div>
-
-            <ul className="mt-4 space-y-2">
-              {isPremium || isTrial ? (
-                <>
-                  <li className="flex items-center text-gray-400 text-sm">
-                    <Check className="h-4 w-4 text-emerald-400 mr-2" />
-                    Unlimited AI responses
-                  </li>
-                  <li className="flex items-center text-gray-400 text-sm">
-                    <Check className="h-4 w-4 text-emerald-400 mr-2" />
-                    Advanced GPT-4 integration
-                  </li>
-                  <li className="flex items-center text-gray-400 text-sm">
-                    <Check className="h-4 w-4 text-emerald-400 mr-2" />
-                    Meeting summaries & action items
-                  </li>
-                  <li className="flex items-center text-gray-400 text-sm">
-                    <Check className="h-4 w-4 text-emerald-400 mr-2" />
-                    Priority support
-                  </li>
-                </>
-              ) : (
-                <>
-                  <li className="flex items-center text-gray-400 text-sm">
-                    <Check className="h-4 w-4 text-gray-600 mr-2" />
-                    5 meetings per month
-                  </li>
-                  <li className="flex items-center text-gray-400 text-sm">
-                    <Check className="h-4 w-4 text-gray-600 mr-2" />
-                    Basic AI suggestions
-                  </li>
-                </>
-              )}
-            </ul>
           </div>
 
-          <div className="text-right">
-            {isPremium && (
-              <>
-                <p className="text-3xl font-bold text-white">$19</p>
-                <p className="text-gray-500 text-sm">/month</p>
-              </>
-            )}
-            {isTrial && (
-              <p className="text-gold-400 font-medium">Free Trial</p>
-            )}
-            {!isPremium && !isTrial && (
-              <p className="text-gray-400 font-medium">Free</p>
-            )}
-          </div>
+          {isPremium && (
+            <button
+              onClick={handleManageBilling}
+              disabled={isLoading}
+              className="flex items-center px-4 py-2 bg-premium-surface border border-premium-border rounded-lg text-gray-400 hover:text-white hover:border-gold-500/30 transition-colors"
+            >
+              Manage Billing
+              <ExternalLink className="h-4 w-4 ml-2" />
+            </button>
+          )}
         </div>
 
-        {/* Next billing date */}
         {isPremium && status?.subscription.current_period_end && (
-          <div className="mt-6 pt-4 border-t border-premium-border flex items-center text-gray-400 text-sm">
+          <div className="mt-4 pt-4 border-t border-premium-border flex items-center text-gray-400 text-sm">
             <Calendar className="h-4 w-4 mr-2" />
-            {t('nextBilling')}: {new Date(status.subscription.current_period_end).toLocaleDateString()}
+            Next billing: {new Date(status.subscription.current_period_end).toLocaleDateString()}
           </div>
         )}
       </div>
 
-      {/* Upgrade CTA */}
-      {!isPremium && (
-        <div className="bg-gradient-to-r from-gold-600/20 to-gold-500/10 border border-gold-500/30 rounded-xl p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <Sparkles className="h-6 w-6 text-gold-400" />
-            <h2 className="text-lg font-semibold text-white">
-              {isTrial ? 'Upgrade Before Trial Ends' : 'Upgrade to Premium'}
-            </h2>
-          </div>
-
-          <p className="text-gray-400 mb-4">
-            Unlock unlimited AI responses, advanced features, and priority support.
-          </p>
-
+      {/* Plan Type Toggle */}
+      <div className="flex justify-center">
+        <div className="inline-flex bg-premium-surface rounded-lg p-1">
           <button
-            onClick={handleUpgrade}
-            disabled={isLoading}
-            className="px-6 py-3 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-lg hover:shadow-gold transition-all disabled:opacity-50"
+            onClick={() => setSelectedTab('individual')}
+            className={`flex items-center px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              selectedTab === 'individual'
+                ? 'bg-gold-500 text-premium-bg'
+                : 'text-gray-400 hover:text-white'
+            }`}
           >
-            {isLoading ? 'Loading...' : tp('pro.cta')}
+            <Users className="h-4 w-4 mr-2" />
+            Individual
+          </button>
+          <button
+            onClick={() => setSelectedTab('business')}
+            className={`flex items-center px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              selectedTab === 'business'
+                ? 'bg-gold-500 text-premium-bg'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Building2 className="h-4 w-4 mr-2" />
+            Business
           </button>
         </div>
-      )}
+      </div>
 
-      {/* Manage Billing */}
-      {isPremium && (
-        <div className="bg-premium-card border border-premium-border rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">{t('paymentMethod')}</h2>
+      {/* Pricing Cards */}
+      <div className={`grid gap-6 ${selectedTab === 'individual' ? 'md:grid-cols-3' : 'md:grid-cols-3'}`}>
+        {currentTiers.map((tier) => (
+          <div
+            key={tier.name}
+            className={`relative bg-premium-card border rounded-xl p-6 ${
+              tier.highlighted
+                ? 'border-gold-500 shadow-gold'
+                : 'border-premium-border'
+            }`}
+          >
+            {tier.highlighted && (
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                <span className="px-3 py-1 bg-gold-500 text-premium-bg text-xs font-semibold rounded-full">
+                  Most Popular
+                </span>
+              </div>
+            )}
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-premium-surface rounded-lg flex items-center justify-center">
-                <CreditCard className="h-5 w-5 text-gray-400" />
-              </div>
-              <div>
-                <p className="text-white">**** **** **** 4242</p>
-                <p className="text-gray-500 text-sm">Expires 12/25</p>
-              </div>
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-white">{tier.name}</h3>
+              <p className="text-sm text-gray-500 mt-1">{tier.description}</p>
             </div>
 
+            <div className="mb-6">
+              {tier.price !== null ? (
+                <div className="flex items-baseline">
+                  <span className="text-3xl font-bold text-white">${tier.price}</span>
+                  <span className="text-gray-500 ml-1">{tier.period}</span>
+                </div>
+              ) : (
+                <div className="text-3xl font-bold text-white">{tier.period}</div>
+              )}
+            </div>
+
+            <ul className="space-y-3 mb-6">
+              {tier.features.map((feature, idx) => (
+                <li key={idx} className="flex items-start text-sm">
+                  <Check className="h-4 w-4 text-emerald-400 mr-2 mt-0.5 flex-shrink-0" />
+                  <span className="text-gray-300">{feature}</span>
+                </li>
+              ))}
+              {tier.limitations?.map((limitation, idx) => (
+                <li key={idx} className="flex items-start text-sm">
+                  <span className="h-4 w-4 text-gray-600 mr-2 mt-0.5 flex-shrink-0">—</span>
+                  <span className="text-gray-500">{limitation}</span>
+                </li>
+              ))}
+            </ul>
+
             <button
-              onClick={handleManageBilling}
-              disabled={isLoading}
-              className="flex items-center px-4 py-2 bg-premium-surface border border-premium-border rounded-lg text-gray-400 hover:text-white hover:border-gold-500/30 transition-colors disabled:opacity-50"
+              onClick={() => {
+                if (tier.cta === 'Contact Sales') {
+                  handleContactSales();
+                } else if (tier.priceId) {
+                  handleUpgrade(tier.priceId);
+                }
+              }}
+              disabled={isLoading || (!tier.priceId && tier.cta !== 'Contact Sales')}
+              className={`w-full py-3 rounded-lg font-medium transition-all ${
+                tier.highlighted
+                  ? 'bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg hover:shadow-gold'
+                  : tier.priceId || tier.cta === 'Contact Sales'
+                  ? 'bg-premium-surface border border-premium-border text-white hover:border-gold-500/30'
+                  : 'bg-premium-surface border border-premium-border text-gray-500 cursor-not-allowed'
+              }`}
             >
-              {t('updateCard')}
-              <ExternalLink className="h-4 w-4 ml-2" />
+              {tier.cta}
             </button>
           </div>
+        ))}
+      </div>
 
-          <button
-            onClick={handleManageBilling}
-            disabled={isLoading}
-            className="mt-4 text-sm text-gray-500 hover:text-red-400 transition-colors"
-          >
-            {t('cancel')}
-          </button>
+      {/* Business Features */}
+      {selectedTab === 'business' && (
+        <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Enterprise Features</h3>
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="flex items-start">
+              <Shield className="h-5 w-5 text-gold-400 mr-3 mt-0.5" />
+              <div>
+                <p className="font-medium text-white">SSO Integration</p>
+                <p className="text-sm text-gray-500">SAML, OAuth, Azure AD, Okta</p>
+              </div>
+            </div>
+            <div className="flex items-start">
+              <Users className="h-5 w-5 text-gold-400 mr-3 mt-0.5" />
+              <div>
+                <p className="font-medium text-white">Team Management</p>
+                <p className="text-sm text-gray-500">Roles, permissions, analytics</p>
+              </div>
+            </div>
+            <div className="flex items-start">
+              <HeadphonesIcon className="h-5 w-5 text-gold-400 mr-3 mt-0.5" />
+              <div>
+                <p className="font-medium text-white">Dedicated Support</p>
+                <p className="text-sm text-gray-500">24/7 priority support</p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
+
+      {/* FAQ */}
+      <div className="bg-premium-surface border border-premium-border rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Billing FAQ</h3>
+        <div className="space-y-4">
+          <div>
+            <p className="font-medium text-white">Can I cancel anytime?</p>
+            <p className="text-sm text-gray-400 mt-1">
+              Yes, you can cancel your subscription at any time. You'll continue to have access until the end of your billing period.
+            </p>
+          </div>
+          <div>
+            <p className="font-medium text-white">What payment methods do you accept?</p>
+            <p className="text-sm text-gray-400 mt-1">
+              We accept all major credit cards (Visa, Mastercard, Amex) and PayPal through our secure payment provider Stripe.
+            </p>
+          </div>
+          <div>
+            <p className="font-medium text-white">Do you offer refunds?</p>
+            <p className="text-sm text-gray-400 mt-1">
+              We offer a 14-day money-back guarantee. If you're not satisfied, contact us for a full refund.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

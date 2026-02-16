@@ -139,6 +139,11 @@ class User(Base):
     email_summary_enabled = Column(Boolean, default=True)
     email_reminders_enabled = Column(Boolean, default=True)
 
+    # Two-Factor Authentication (TOTP)
+    totp_secret = Column(String(32), nullable=True)
+    totp_enabled = Column(Boolean, default=False)
+    totp_backup_codes = Column(JSON, default=list)  # Encrypted backup codes
+
     # GDPR Consent fields
     consent_analytics = Column(Boolean, default=False)
     consent_marketing = Column(Boolean, default=False)

@@ -97,13 +97,25 @@ class APIClient:
 
     # ============== Auth ==============
 
-    def register(self, email: str, password: str, full_name: Optional[str] = None) -> Dict:
+    def register(
+        self,
+        email: str,
+        password: str,
+        full_name: Optional[str] = None,
+        account_type: str = "individual",
+        company_name: Optional[str] = None
+    ) -> Dict:
         """Register a new account."""
-        result = self._request("POST", "/auth/register", {
+        data = {
             "email": email,
             "password": password,
-            "full_name": full_name
-        })
+            "full_name": full_name,
+            "account_type": account_type
+        }
+        if account_type == "business" and company_name:
+            data["company_name"] = company_name
+
+        result = self._request("POST", "/auth/register", data)
         if "access_token" in result:
             self._save_token(result["access_token"])
         return result

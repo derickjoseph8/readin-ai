@@ -1,18 +1,22 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Mail, Lock, Loader2 } from 'lucide-react';
+import { ArrowLeft, Mail, Lock, Loader2, User, Building2, UserCircle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://www.getreadin.us';
 
 export default function LoginPage() {
+  const router = useRouter();
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [accountType, setAccountType] = useState<'individual' | 'business'>('individual');
+  const [companyName, setCompanyName] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const t = useTranslations('login');
@@ -28,7 +32,13 @@ export default function LoginPage() {
       const endpoint = isLogin ? '/auth/login' : '/auth/register';
       const body = isLogin
         ? { email, password }
-        : { email, password, full_name: name };
+        : {
+            email,
+            password,
+            full_name: name,
+            account_type: accountType,
+            company_name: accountType === 'business' ? companyName : undefined
+          };
 
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
@@ -39,9 +49,23 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok) {
-        setSuccess(isLogin ? 'Login successful! Open the desktop app to continue.' : 'Account created! You can now log in to the desktop app.');
         if (data.access_token) {
           localStorage.setItem('readin_token', data.access_token);
+        }
+        if (isLogin) {
+          // Check if 2FA is required
+          if (data.requires_2fa) {
+            localStorage.setItem('readin_temp_token', data.temp_token);
+            router.push('/login/2fa');
+          } else {
+            setSuccess('Login successful! Redirecting to dashboard...');
+            setTimeout(() => {
+              router.push('/dashboard');
+            }, 500);
+          }
+        } else {
+          setSuccess('Account created! You can now log in.');
+          setIsLogin(true);
         }
       } else {
         setError(data.detail || 'Something went wrong. Please try again.');
@@ -79,25 +103,86 @@ export default function LoginPage() {
               {isLogin ? t('title') : tc('signUp')}
             </h1>
             <p className="text-gray-400 mt-2">
-              {isLogin ? t('subtitle') : 'Start your 14-day free trial'}
+              {isLogin ? t('subtitle') : 'Start your 7-day free trial'}
             </p>
           </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none transition text-white"
-                  placeholder="John Doe"
-                />
-              </div>
+              <>
+                {/* Account Type Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-3">
+                    Account Type
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setAccountType('individual')}
+                      className={`flex flex-col items-center p-4 rounded-lg border transition-all ${
+                        accountType === 'individual'
+                          ? 'border-gold-500 bg-gold-500/10 text-gold-400'
+                          : 'border-premium-border bg-premium-surface text-gray-400 hover:border-gray-600'
+                      }`}
+                    >
+                      <UserCircle className="h-6 w-6 mb-2" />
+                      <span className="text-sm font-medium">Individual</span>
+                      <span className="text-xs text-gray-500 mt-1">Personal use</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAccountType('business')}
+                      className={`flex flex-col items-center p-4 rounded-lg border transition-all ${
+                        accountType === 'business'
+                          ? 'border-gold-500 bg-gold-500/10 text-gold-400'
+                          : 'border-premium-border bg-premium-surface text-gray-400 hover:border-gray-600'
+                      }`}
+                    >
+                      <Building2 className="h-6 w-6 mb-2" />
+                      <span className="text-sm font-medium">Business</span>
+                      <span className="text-xs text-gray-500 mt-1">Team features</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Company Name (for business accounts) */}
+                {accountType === 'business' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Company Name
+                    </label>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+                      <input
+                        type="text"
+                        value={companyName}
+                        onChange={(e) => setCompanyName(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none transition text-white"
+                        placeholder="Acme Inc."
+                        required={accountType === 'business'}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Full Name
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none transition text-white"
+                      placeholder="John Doe"
+                      required
+                    />
+                  </div>
+                </div>
+              </>
             )}
 
             <div>

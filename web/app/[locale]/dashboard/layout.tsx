@@ -27,11 +27,14 @@ function DashboardSidebar() {
   const t = useTranslations('dashboard');
   const ts = useTranslations('settings');
 
+  const isBusinessAccount = user?.account_type === 'business';
+
   const navigation = [
     { name: t('title'), href: '/dashboard', icon: LayoutDashboard },
     { name: 'Meetings', href: '/dashboard/meetings', icon: Calendar },
     { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-    { name: 'Team', href: '/dashboard/team', icon: Users },
+    // Only show Team menu for business accounts
+    ...(isBusinessAccount ? [{ name: 'Team', href: '/dashboard/team', icon: Users }] : []),
   ];
 
   const settingsNav = [

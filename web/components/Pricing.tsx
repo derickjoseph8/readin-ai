@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { Check, Sparkles, Shield, Building2, Users, Globe } from 'lucide-react'
 
@@ -23,8 +24,11 @@ const plans = [
   {
     name: 'Premium',
     price: '$29.99',
+    annualPrice: '$299.90',
     period: '/month',
+    annualPeriod: '/year',
     description: 'Complete meeting intelligence for individuals',
+    annualSavings: 'Save $60 (2 months free)',
     features: [
       'Unlimited AI responses',
       'Profession-specific knowledge base',
@@ -45,36 +49,43 @@ const plans = [
 const corporatePlans = [
   {
     name: 'Team',
-    price: '$24.99',
+    price: '$19.99',
+    annualPrice: '$199.90',
     period: '/user/month',
+    annualPeriod: '/user/year',
     users: '5-10 users',
-    description: 'Admin pays, team joins free',
+    minSeats: '5 seats minimum',
+    description: 'Perfect for small teams',
+    annualSavings: '2 months free',
     features: [
       'Everything in Premium',
-      'Invite team members (no extra payment)',
+      '5 mandatory seats included',
       'Team admin dashboard',
       'Shared meeting insights',
       'Centralized billing',
     ],
-    cta: 'Contact Sales',
-    href: 'mailto:sales@getreadin.ai?subject=Team Plan Inquiry',
+    cta: 'Sign Up',
+    href: '/login',
   },
   {
-    name: 'Business',
-    price: '$19.99',
+    name: 'Growth',
+    price: '$14.99',
+    annualPrice: '$149.90',
     period: '/user/month',
+    annualPeriod: '/user/year',
     users: '11-50 users',
-    description: 'One bill, unlimited team invites',
+    description: 'Volume discount for growing teams',
+    annualSavings: '2 months free',
     features: [
       'Everything in Team',
       'Add unlimited team members',
       'Advanced admin controls',
       'Usage analytics & reports',
       'Custom profession profiles',
-      'Dedicated account manager',
+      'SAML SSO',
     ],
-    cta: 'Contact Sales',
-    href: 'mailto:sales@getreadin.ai?subject=Business Plan Inquiry',
+    cta: 'Sign Up',
+    href: '/login',
     popular: true,
   },
   {
@@ -82,9 +93,10 @@ const corporatePlans = [
     price: 'Custom',
     period: '',
     users: '50+ users',
-    description: 'Unlimited seats, custom pricing',
+    description: 'Best volume pricing available',
+    annualSavings: '2 months free on annual',
     features: [
-      'Everything in Business',
+      'Everything in Growth',
       'Unlimited team members',
       'Single Sign-On (SSO)',
       'On-premise deployment option',
@@ -98,18 +110,49 @@ const corporatePlans = [
 ]
 
 export default function Pricing() {
+  const [isAnnual, setIsAnnual] = useState(false)
+
   return (
     <section id="pricing" className="py-24 px-4 bg-premium-surface/50">
       <div className="max-w-7xl mx-auto">
         {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16">
+        <div className="text-center max-w-3xl mx-auto mb-12">
           <h2 className="text-4xl md:text-5xl font-bold mb-6">
             Simple,{' '}
             <span className="text-gradient-gold">Transparent Pricing</span>
           </h2>
-          <p className="text-xl text-gray-400">
+          <p className="text-xl text-gray-400 mb-8">
             Start free, upgrade when you're ready. No hidden fees, cancel anytime.
           </p>
+
+          {/* Billing Toggle */}
+          <div className="inline-flex items-center p-1 bg-premium-card rounded-xl border border-premium-border">
+            <button
+              onClick={() => setIsAnnual(false)}
+              className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                !isAnnual
+                  ? 'bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setIsAnnual(true)}
+              className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center ${
+                isAnnual
+                  ? 'bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Annual
+              <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+                isAnnual ? 'bg-premium-bg/20 text-premium-bg' : 'bg-emerald-500/20 text-emerald-400'
+              }`}>
+                2 months free
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* Pricing Cards */}
@@ -137,9 +180,16 @@ export default function Pricing() {
               <div className="text-center mb-8">
                 <h3 className="text-xl font-semibold mb-2 text-white">{plan.name}</h3>
                 <div className="flex items-baseline justify-center mb-2">
-                  <span className={`text-5xl font-bold ${plan.popular ? 'text-gradient-gold' : 'text-white'}`}>{plan.price}</span>
-                  <span className="text-gray-400 ml-2">{plan.period}</span>
+                  <span className={`text-5xl font-bold ${plan.popular ? 'text-gradient-gold' : 'text-white'}`}>
+                    {isAnnual && plan.annualPrice ? plan.annualPrice : plan.price}
+                  </span>
+                  <span className="text-gray-400 ml-2">
+                    {isAnnual && plan.annualPeriod ? plan.annualPeriod : plan.period}
+                  </span>
                 </div>
+                {isAnnual && plan.annualSavings && (
+                  <p className="text-emerald-400 text-sm mb-2">{plan.annualSavings}</p>
+                )}
                 <p className="text-gray-400">{plan.description}</p>
               </div>
 
@@ -228,9 +278,21 @@ export default function Pricing() {
                   </div>
                   <h4 className="text-lg font-semibold mb-1 text-white">{plan.name}</h4>
                   <div className="flex items-baseline justify-center mb-1">
-                    <span className={`text-3xl font-bold ${plan.popular ? 'text-gradient-gold' : 'text-white'}`}>{plan.price}</span>
-                    {plan.period && <span className="text-gray-400 ml-1 text-sm">{plan.period}</span>}
+                    <span className={`text-3xl font-bold ${plan.popular ? 'text-gradient-gold' : 'text-white'}`}>
+                      {isAnnual && plan.annualPrice ? plan.annualPrice : plan.price}
+                    </span>
+                    {(isAnnual ? plan.annualPeriod : plan.period) && (
+                      <span className="text-gray-400 ml-1 text-sm">
+                        {isAnnual && plan.annualPeriod ? plan.annualPeriod : plan.period}
+                      </span>
+                    )}
                   </div>
+                  {plan.minSeats && (
+                    <p className="text-gold-400 text-xs mb-1">{plan.minSeats}</p>
+                  )}
+                  {isAnnual && plan.annualSavings && (
+                    <p className="text-emerald-400 text-xs mb-1">{plan.annualSavings}</p>
+                  )}
                   <p className="text-gray-400 text-sm">{plan.description}</p>
                 </div>
 

@@ -1,8 +1,62 @@
 """Pydantic schemas for request/response validation."""
 
+import re
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
+
+from config import (
+    PASSWORD_MIN_LENGTH,
+    PASSWORD_REQUIRE_UPPERCASE,
+    PASSWORD_REQUIRE_LOWERCASE,
+    PASSWORD_REQUIRE_DIGIT,
+    PASSWORD_REQUIRE_SPECIAL,
+)
+
+
+# =============================================================================
+# VALIDATORS
+# =============================================================================
+
+def validate_password(password: str) -> str:
+    """
+    Validate password meets security requirements.
+
+    Requirements (configurable):
+    - Minimum length (default 12 characters)
+    - At least one uppercase letter
+    - At least one lowercase letter
+    - At least one digit
+    - At least one special character
+    """
+    errors = []
+
+    if len(password) < PASSWORD_MIN_LENGTH:
+        errors.append(f"Password must be at least {PASSWORD_MIN_LENGTH} characters")
+
+    if PASSWORD_REQUIRE_UPPERCASE and not re.search(r"[A-Z]", password):
+        errors.append("Password must contain at least one uppercase letter")
+
+    if PASSWORD_REQUIRE_LOWERCASE and not re.search(r"[a-z]", password):
+        errors.append("Password must contain at least one lowercase letter")
+
+    if PASSWORD_REQUIRE_DIGIT and not re.search(r"\d", password):
+        errors.append("Password must contain at least one digit")
+
+    if PASSWORD_REQUIRE_SPECIAL and not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        errors.append("Password must contain at least one special character (!@#$%^&*(),.?\":{}|<>)")
+
+    if errors:
+        raise ValueError("; ".join(errors))
+
+    return password
+
+
+def validate_string_length(value: str, field_name: str, max_length: int) -> str:
+    """Validate string doesn't exceed maximum length."""
+    if value and len(value) > max_length:
+        raise ValueError(f"{field_name} must not exceed {max_length} characters")
+    return value
 
 
 # =============================================================================
@@ -10,21 +64,53 @@ from pydantic import BaseModel, EmailStr, Field
 # =============================================================================
 
 class UserCreate(BaseModel):
+    """User registration schema with password validation."""
     email: EmailStr
-    password: str
-    full_name: Optional[str] = None
-    profession_id: Optional[int] = None
-    specialization: Optional[str] = None
+    password: str = Field(..., min_length=8, max_length=128)
+    full_name: Optional[str] = Field(None, max_length=255)
+    profession_id: Optional[int] = Field(None, ge=1)
+    specialization: Optional[str] = Field(None, max_length=255)
+    preferred_language: Optional[str] = Field(default="en", pattern="^(en|es|sw)$")
+    account_type: Optional[str] = Field(default="individual", pattern="^(individual|business)$")
+    company_name: Optional[str] = Field(None, max_length=255)
+
+    @field_validator("password")
+    @classmethod
+    def password_validation(cls, v: str) -> str:
+        return validate_password(v)
+
+    @field_validator("full_name")
+    @classmethod
+    def full_name_validation(cls, v: Optional[str]) -> Optional[str]:
+        if v:
+            # Remove excessive whitespace
+            v = " ".join(v.split())
+            # Check for potentially dangerous characters
+            if re.search(r"[<>\"']", v):
+                raise ValueError("Name contains invalid characters")
+        return v
 
 
 class UserLogin(BaseModel):
+    """User login schema."""
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=1, max_length=128)
 
 
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class PasswordChangeRequest(BaseModel):
+    """Password change request schema."""
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        return validate_password(v)
 
 
 class TokenData(BaseModel):
@@ -76,13 +162,23 @@ class ProfessionCategory(BaseModel):
 # =============================================================================
 
 class OrganizationCreate(BaseModel):
-    name: str
-    plan_type: str = "team"  # team, business, enterprise
-    billing_email: Optional[str] = None
+    """Organization creation schema with validation."""
+    name: str = Field(..., min_length=2, max_length=255)
+    plan_type: str = Field("team", pattern="^(team|business|enterprise)$")
+    billing_email: Optional[EmailStr] = None
+
+    @field_validator("name")
+    @classmethod
+    def name_validation(cls, v: str) -> str:
+        v = " ".join(v.split())  # Normalize whitespace
+        if re.search(r"[<>\"']", v):
+            raise ValueError("Name contains invalid characters")
+        return v
 
 
 class OrganizationUpdate(BaseModel):
-    name: Optional[str] = None
+    """Organization update schema with validation."""
+    name: Optional[str] = Field(None, min_length=2, max_length=255)
     allow_personal_professions: Optional[bool] = None
     shared_insights_enabled: Optional[bool] = None
 
@@ -149,6 +245,9 @@ class UserResponse(BaseModel):
     email_notifications_enabled: bool
     email_summary_enabled: bool
     email_reminders_enabled: bool
+    preferred_language: str = "en"
+    account_type: str = "individual"
+    company_name: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -160,6 +259,7 @@ class UserUpdate(BaseModel):
     profession_id: Optional[int] = None
     specialization: Optional[str] = None
     years_experience: Optional[int] = None
+    preferred_language: Optional[str] = Field(None, pattern="^(en|es|sw)$")
 
 
 class UserEmailPreferences(BaseModel):
@@ -185,14 +285,19 @@ class UserStatus(BaseModel):
 # =============================================================================
 
 class MeetingCreate(BaseModel):
-    meeting_type: str = "general"  # interview, tv_appearance, manager_meeting, general
-    title: Optional[str] = None
-    meeting_app: Optional[str] = None
-    participant_count: Optional[int] = None
+    """Meeting creation schema with validation."""
+    meeting_type: str = Field(
+        "general",
+        pattern="^(interview|tv_appearance|manager_meeting|general|panel|webinar|phone_call)$"
+    )
+    title: Optional[str] = Field(None, max_length=500)
+    meeting_app: Optional[str] = Field(None, max_length=100)
+    participant_count: Optional[int] = Field(None, ge=1, le=1000)
 
 
 class MeetingEnd(BaseModel):
-    notes: Optional[str] = None
+    """Meeting end schema with validation."""
+    notes: Optional[str] = Field(None, max_length=10000)
     generate_summary: bool = True
     send_email: bool = True
 
@@ -230,10 +335,11 @@ class MeetingList(BaseModel):
 # =============================================================================
 
 class ConversationCreate(BaseModel):
-    meeting_id: int
-    speaker: str = "other"  # user, other, unknown
-    heard_text: str
-    response_text: Optional[str] = None
+    """Conversation creation schema with validation."""
+    meeting_id: int = Field(..., ge=1)
+    speaker: str = Field("other", pattern="^(user|other|unknown)$")
+    heard_text: str = Field(..., min_length=1, max_length=50000)
+    response_text: Optional[str] = Field(None, max_length=50000)
 
 
 class ConversationResponse(BaseModel):
@@ -297,19 +403,21 @@ class UserLearningProfileResponse(BaseModel):
 # =============================================================================
 
 class ActionItemCreate(BaseModel):
-    meeting_id: int
-    assignee: str
-    assignee_role: Optional[str] = None
-    description: str
+    """Action item creation schema with validation."""
+    meeting_id: int = Field(..., ge=1)
+    assignee: str = Field(..., min_length=1, max_length=255)
+    assignee_role: Optional[str] = Field(None, max_length=100)
+    description: str = Field(..., min_length=1, max_length=2000)
     due_date: Optional[datetime] = None
-    priority: str = "medium"
+    priority: str = Field("medium", pattern="^(low|medium|high|urgent)$")
 
 
 class ActionItemUpdate(BaseModel):
-    description: Optional[str] = None
+    """Action item update schema with validation."""
+    description: Optional[str] = Field(None, min_length=1, max_length=2000)
     due_date: Optional[datetime] = None
-    priority: Optional[str] = None
-    status: Optional[str] = None
+    priority: Optional[str] = Field(None, pattern="^(low|medium|high|urgent)$")
+    status: Optional[str] = Field(None, pattern="^(pending|in_progress|completed|cancelled)$")
 
 
 class ActionItemResponse(BaseModel):
@@ -340,16 +448,18 @@ class ActionItemList(BaseModel):
 # =============================================================================
 
 class CommitmentCreate(BaseModel):
-    meeting_id: int
-    description: str
+    """Commitment creation schema with validation."""
+    meeting_id: int = Field(..., ge=1)
+    description: str = Field(..., min_length=1, max_length=2000)
     due_date: Optional[datetime] = None
-    context: Optional[str] = None
+    context: Optional[str] = Field(None, max_length=2000)
 
 
 class CommitmentUpdate(BaseModel):
-    description: Optional[str] = None
+    """Commitment update schema with validation."""
+    description: Optional[str] = Field(None, min_length=1, max_length=2000)
     due_date: Optional[datetime] = None
-    status: Optional[str] = None
+    status: Optional[str] = Field(None, pattern="^(pending|completed|overdue)$")
 
 
 class CommitmentResponse(BaseModel):
