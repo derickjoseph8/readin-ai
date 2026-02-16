@@ -21,9 +21,9 @@ export default function DownloadPage() {
   }, [])
 
   const downloadUrls: Record<string, string> = {
-    windows: 'https://www.getreadin.us/downloads/ReadInAI-Windows-1.0.1.zip',
-    mac: 'https://www.getreadin.us/downloads/ReadInAI-macOS-1.0.1.dmg',
-    linux: 'https://www.getreadin.us/downloads/ReadInAI-Linux-1.0.1.AppImage',
+    windows: 'https://www.getreadin.us/downloads/ReadInAI-Windows-1.2.1.zip',
+    mac: 'https://www.getreadin.us/downloads/ReadInAI-macOS-1.2.1.dmg',
+    linux: 'https://www.getreadin.us/downloads/ReadInAI-Linux-1.2.1.AppImage',
   }
 
   const handleDownloadClick = (os: string) => {
@@ -37,7 +37,7 @@ export default function DownloadPage() {
     <main className="min-h-screen bg-dark-950 text-white">
       {/* Download Notification Toast */}
       {downloadMessage?.show && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-4 duration-300">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
           <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl shadow-2xl shadow-green-900/30 px-6 py-4 flex items-center gap-4 border border-green-500/30">
             <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
               <Download className="h-5 w-5 text-white" />
@@ -70,10 +70,7 @@ export default function DownloadPage() {
               </div>
               <span className="text-xl font-bold text-white">ReadIn AI</span>
             </Link>
-            <Link
-              href="/"
-              className="flex items-center text-gray-300 hover:text-white transition"
-            >
+            <Link href="/" className="flex items-center text-gray-300 hover:text-white transition">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Home
             </Link>
@@ -199,7 +196,7 @@ export default function DownloadPage() {
                 <span className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0">3</span>
                 <div>
                   <p className="font-medium">Create Your Account</p>
-                  <p className="text-gray-400 text-sm">Sign up for free to start your 14-day trial</p>
+                  <p className="text-gray-400 text-sm">Sign up for free to start your 7-day trial</p>
                 </div>
               </li>
               <li className="flex items-start">
