@@ -404,8 +404,8 @@ export function useMyChat() {
       const sessionData = await supportApi.getMyChat()
       setSession(sessionData)
       if (sessionData) {
-        const messageData = await supportApi.getMyChatMessages()
-        setMessages(messageData)
+        const data = await supportApi.getChatMessages(sessionData.id)
+        setMessages(data.messages)
       }
       setError(null)
     } catch (err) {
