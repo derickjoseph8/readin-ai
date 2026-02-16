@@ -209,7 +209,7 @@ class HealthChecker:
             return HealthStatus.DEGRADED
 
         unhealthy_optional = [
-            status for name, check in self.checks.items()
+            name for name, check in self.checks.items()
             if check.get("status") == HealthStatus.UNHEALTHY
             and name not in ["database"]  # Non-critical services
         ]

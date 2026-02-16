@@ -455,6 +455,6 @@ def start_scheduler():
 
 def stop_scheduler():
     """Stop the global scheduler."""
-    global _scheduler
+    global _scheduler  # noqa: F824
     if _scheduler:
         _scheduler.stop()
