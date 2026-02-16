@@ -18,7 +18,7 @@ export default function Header() {
         <div className="max-w-7xl mx-auto px-4 py-2">
           <p className="text-center text-sm text-gold-300">
             <Sparkles className="inline h-4 w-4 mr-1" />
-            <span className="font-medium">Limited Time:</span> Extended 14-day free trial for new users
+            <span className="font-medium">Limited Time:</span> 7-day free trial for new users
           </p>
         </div>
       </div>

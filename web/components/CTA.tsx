@@ -15,7 +15,7 @@ export default function CTA() {
         {/* Badge */}
         <div className="inline-flex items-center px-4 py-2 bg-gold-500/10 border border-gold-500/30 rounded-full mb-8">
           <Sparkles className="h-4 w-4 text-gold-400 mr-2" />
-          <span className="text-sm text-gold-300">14-day free trial • No credit card required</span>
+          <span className="text-sm text-gold-300">7-day free trial • No credit card required</span>
         </div>
 
         {/* Headline */}

@@ -22,7 +22,7 @@ const faqs = [
   },
   {
     question: 'What happens after my free trial?',
-    answer: 'After 14 days, you can continue with limited free usage (10 responses/day) or upgrade to Premium ($19.99/month) for unlimited responses. No credit card required to start your trial.',
+    answer: 'After 7 days, you can continue with limited free usage (10 responses/day) or upgrade to Premium ($29.99/month) for unlimited responses. No credit card required to start your trial.',
   },
   {
     question: 'Can I use it for in-person meetings?',

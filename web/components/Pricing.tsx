@@ -8,7 +8,7 @@ const plans = [
   {
     name: 'Free Trial',
     price: '$0',
-    period: 'for 14 days',
+    period: 'for 7 days',
     description: 'Try ReadIn AI risk-free',
     features: [
       '10 AI responses per day',

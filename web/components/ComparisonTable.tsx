@@ -88,7 +88,7 @@ export default function ComparisonTable() {
               </div>
               <div className="p-6 text-center bg-premium-surface border-x border-premium-border">
                 <span className="text-white font-semibold">Free Trial</span>
-                <p className="text-sm text-gray-500 mt-1">14 days</p>
+                <p className="text-sm text-gray-500 mt-1">7 days</p>
               </div>
               <div className="p-6 text-center bg-gradient-to-b from-gold-500/10 to-transparent">
                 <div className="flex items-center justify-center">
