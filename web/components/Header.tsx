@@ -1,11 +1,15 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import Link from 'next/link'
-import { Menu, X, Sparkles } from 'lucide-react'
+import { useState } from 'react';
+import Link from 'next/link';
+import { Menu, X, Sparkles } from 'lucide-react';
+import { useTranslations } from 'next-intl';
+import LanguageSwitcher from './LanguageSwitcher';
 
 export default function Header() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const t = useTranslations('header');
+  const tc = useTranslations('common');
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-premium-bg/80 backdrop-blur-xl border-b border-premium-border">
@@ -31,22 +35,23 @@ export default function Header() {
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
-            <a href="#features" className="text-gray-400 hover:text-gold-400 transition-colors">Features</a>
+            <a href="#features" className="text-gray-400 hover:text-gold-400 transition-colors">{t('features')}</a>
             <a href="#how-it-works" className="text-gray-400 hover:text-gold-400 transition-colors">How It Works</a>
-            <a href="#pricing" className="text-gray-400 hover:text-gold-400 transition-colors">Pricing</a>
+            <a href="#pricing" className="text-gray-400 hover:text-gold-400 transition-colors">{t('pricing')}</a>
             <a href="#faq" className="text-gray-400 hover:text-gold-400 transition-colors">FAQ</a>
           </div>
 
-          {/* CTA Buttons */}
+          {/* CTA Buttons & Language Switcher */}
           <div className="hidden md:flex items-center space-x-4">
+            <LanguageSwitcher />
             <Link href="/login" className="px-4 py-2 text-gray-400 hover:text-white transition-colors">
-              Login
+              {tc('login')}
             </Link>
             <Link
               href="/download"
               className="px-5 py-2.5 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-lg hover:shadow-gold transition-all hover:-translate-y-0.5"
             >
-              Download Free
+              {t('download')}
             </Link>
           </div>
 
@@ -63,21 +68,31 @@ export default function Header() {
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-premium-border animate-fade-in">
             <div className="flex flex-col space-y-4">
-              <a href="#features" className="text-gray-400 hover:text-gold-400 transition-colors" onClick={() => setMobileMenuOpen(false)}>Features</a>
+              <a href="#features" className="text-gray-400 hover:text-gold-400 transition-colors" onClick={() => setMobileMenuOpen(false)}>{t('features')}</a>
               <a href="#how-it-works" className="text-gray-400 hover:text-gold-400 transition-colors" onClick={() => setMobileMenuOpen(false)}>How It Works</a>
-              <a href="#pricing" className="text-gray-400 hover:text-gold-400 transition-colors" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
+              <a href="#pricing" className="text-gray-400 hover:text-gold-400 transition-colors" onClick={() => setMobileMenuOpen(false)}>{t('pricing')}</a>
               <a href="#faq" className="text-gray-400 hover:text-gold-400 transition-colors" onClick={() => setMobileMenuOpen(false)}>FAQ</a>
+              <div className="py-2">
+                <LanguageSwitcher />
+              </div>
+              <Link
+                href="/login"
+                className="text-gray-400 hover:text-gold-400 transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                {tc('login')}
+              </Link>
               <Link
                 href="/download"
                 className="px-5 py-2.5 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-lg text-center"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                Download Free
+                {t('download')}
               </Link>
             </div>
           </div>
         )}
       </nav>
     </header>
-  )
+  );
 }

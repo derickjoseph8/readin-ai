@@ -27,6 +27,10 @@ jinja2>=3.1.0
 slowapi>=0.1.9
 limits>=3.6.0
 
+# Two-Factor Authentication (TOTP)
+pyotp>=2.9.0
+qrcode[pil]>=7.4.0
+
 # Logging & Monitoring
 structlog>=24.1.0
 sentry-sdk[fastapi]>=1.40.0

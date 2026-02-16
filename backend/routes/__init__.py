@@ -15,6 +15,7 @@ from .sso import router as sso_router
 from .api_keys import router as api_keys_router
 from .api_keys import webhooks_router
 from .white_label import router as white_label_router
+from .two_factor import router as two_factor_router
 
 __all__ = [
     "professions_router",
@@ -32,4 +33,5 @@ __all__ = [
     "api_keys_router",
     "webhooks_router",
     "white_label_router",
+    "two_factor_router",
 ]

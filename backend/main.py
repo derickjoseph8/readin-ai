@@ -38,7 +38,8 @@ from routes import (
     professions_router, organizations_router, meetings_router,
     conversations_router, tasks_router, briefings_router, interviews_router,
     gdpr_router, metrics_router, analytics_router, calendar_router,
-    sso_router, api_keys_router, webhooks_router, white_label_router
+    sso_router, api_keys_router, webhooks_router, white_label_router,
+    two_factor_router
 )
 from routes.contact import router as contact_router
 from routes.sessions import router as sessions_router
@@ -178,6 +179,7 @@ app.include_router(sso_router, prefix=API_V1_PREFIX)
 app.include_router(api_keys_router, prefix=API_V1_PREFIX)
 app.include_router(webhooks_router, prefix=API_V1_PREFIX)
 app.include_router(white_label_router, prefix=API_V1_PREFIX)
+app.include_router(two_factor_router)  # Already has /api/v1 prefix
 app.include_router(sessions_router, prefix=API_V1_PREFIX)
 app.include_router(bulk_router, prefix=API_V1_PREFIX)
 app.include_router(search_router, prefix=API_V1_PREFIX)
@@ -345,14 +347,17 @@ def register(request: Request, user_data: UserCreate, db: Session = Depends(get_
     return Token(access_token=token)
 
 
-@app.post("/auth/login", response_model=Token)
-@app.post("/api/v1/auth/login", response_model=Token)
+@app.post("/auth/login")
+@app.post("/api/v1/auth/login")
 @limiter.limit("5/minute")  # Strict rate limit to prevent brute force
 def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db)):
     """
     Login and get access token.
 
     Rate limited to 5 attempts per minute per IP to prevent brute force attacks.
+
+    If 2FA is enabled, returns requires_2fa=True and a temporary token.
+    Use /api/v1/auth/login/2fa to complete login with TOTP code.
     """
     user = db.query(User).filter(User.email == credentials.email).first()
 
@@ -362,6 +367,88 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
             detail="Invalid email or password"
         )
 
+    # Check if 2FA is enabled
+    if user.totp_enabled:
+        # Create a temporary token for 2FA verification
+        import pyotp
+        temp_token = create_access_token(user.id)
+        return {
+            "requires_2fa": True,
+            "temp_token": temp_token,
+            "message": "Two-factor authentication required"
+        }
+
+    token = create_access_token(user.id)
+    return Token(access_token=token)
+
+
+from pydantic import BaseModel as PydanticBaseModel
+
+
+class TwoFactorLoginVerify(PydanticBaseModel):
+    """Schema for 2FA login verification."""
+    temp_token: str
+    code: str
+    is_backup_code: bool = False
+
+
+@app.post("/api/v1/auth/login/2fa", response_model=Token)
+@limiter.limit("5/minute")
+def login_2fa(request: Request, data: TwoFactorLoginVerify, db: Session = Depends(get_db)):
+    """
+    Complete login with 2FA verification.
+
+    After initial login returns requires_2fa=True, use this endpoint
+    with the temp_token and TOTP code to get the final access token.
+    """
+    import pyotp
+    from auth import decode_token
+
+    # Verify the temporary token
+    user_id = decode_token(data.temp_token)
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+
+    if not user.totp_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Two-factor authentication is not enabled for this account"
+        )
+
+    # Verify the code
+    if data.is_backup_code:
+        # Check backup codes
+        backup_codes = user.totp_backup_codes or []
+        code_upper = data.code.upper().replace("-", "")
+        if code_upper not in backup_codes:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid backup code"
+            )
+        # Remove used backup code
+        backup_codes.remove(code_upper)
+        user.totp_backup_codes = backup_codes
+        db.commit()
+    else:
+        # Verify TOTP code
+        totp = pyotp.TOTP(user.totp_secret)
+        if not totp.verify(data.code, valid_window=1):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid verification code"
+            )
+
+    # Issue final access token
     token = create_access_token(user.id)
     return Token(access_token=token)
 

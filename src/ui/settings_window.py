@@ -139,6 +139,15 @@ class SettingsWindow(QDialog):
         device_row.addWidget(self.refresh_devices_btn)
         device_layout.addRow("Input Device:", device_row)
 
+        # Audio setup wizard button
+        self.setup_wizard_btn = QPushButton("Run Audio Setup Wizard")
+        self.setup_wizard_btn.setToolTip(
+            "Opens the guided audio setup dialog to help select\n"
+            "the correct device for capturing meeting audio."
+        )
+        self.setup_wizard_btn.clicked.connect(self.run_audio_setup_wizard)
+        device_layout.addRow("", self.setup_wizard_btn)
+
         layout.addWidget(device_group)
 
         # Audio settings group
@@ -154,12 +163,41 @@ class SettingsWindow(QDialog):
         audio_layout.addRow("Channels:", self.channels_combo)
 
         layout.addWidget(audio_group)
+
+        # Help text
+        help_label = QLabel(
+            "Tip: To capture what others say in meetings, select a loopback device\n"
+            "(Stereo Mix, CABLE Output, etc.) instead of your microphone.\n"
+            "Use the Audio Setup Wizard if you're not sure which device to use."
+        )
+        help_label.setWordWrap(True)
+        help_label.setStyleSheet("color: #888888; font-size: 11px;")
+        layout.addWidget(help_label)
+
         layout.addStretch()
 
         # Populate devices
         self.refresh_audio_devices()
 
         return widget
+
+    def run_audio_setup_wizard(self):
+        """Run the audio setup wizard dialog."""
+        from ui.audio_setup_dialog import AudioSetupDialog
+        device_index = AudioSetupDialog.get_audio_device(self)
+        if device_index is not None:
+            # Update the combo box to match
+            for i in range(self.device_combo.count()):
+                if self.device_combo.itemData(i) == device_index:
+                    self.device_combo.setCurrentIndex(i)
+                    break
+            # Also save immediately
+            self.settings.set("audio_device", device_index)
+            QMessageBox.information(
+                self,
+                "Audio Setup Complete",
+                "Audio device configured. The new device will be used for capturing."
+            )
 
     def create_ai_tab(self) -> QWidget:
         """Create the AI settings tab."""
@@ -338,6 +376,17 @@ class SettingsWindow(QDialog):
         export_layout.addLayout(export_btn_layout)
         layout.addWidget(export_group)
 
+        # Startup settings
+        startup_group = QGroupBox("Startup")
+        startup_layout = QFormLayout(startup_group)
+
+        self.auto_start_check = QCheckBox("Start ReadIn AI when Windows starts")
+        self.auto_start_check.setChecked(self._is_in_startup())
+        self.auto_start_check.stateChanged.connect(self._toggle_startup)
+        startup_layout.addRow("", self.auto_start_check)
+
+        layout.addWidget(startup_group)
+
         # Updates
         update_group = QGroupBox("Updates")
         update_layout = QFormLayout(update_group)
@@ -374,11 +423,31 @@ class SettingsWindow(QDialog):
 
         try:
             devices = AudioCapture.get_available_devices()
+
+            # Sort: loopback first, then default, then others
+            def sort_key(d):
+                if d['is_loopback']:
+                    return (0, d['name'])
+                if d['is_default']:
+                    return (1, d['name'])
+                return (2, d['name'])
+
+            devices.sort(key=sort_key)
+
             for device in devices:
-                self.device_combo.addItem(
-                    f"{device['name']} ({device['channels']} ch)",
-                    device['index']
-                )
+                # Build display name with indicators
+                name = device['name']
+                badges = []
+                if device['is_loopback']:
+                    badges.append("LOOPBACK")
+                if device['is_default']:
+                    badges.append("DEFAULT")
+
+                display_name = f"{name} ({device['channels']} ch)"
+                if badges:
+                    display_name += f" [{', '.join(badges)}]"
+
+                self.device_combo.addItem(display_name, device['index'])
         except Exception as e:
             self.device_combo.addItem("Default Device", -1)
 
@@ -570,3 +639,85 @@ class SettingsWindow(QDialog):
         """Apply settings and close dialog."""
         self.apply_settings()
         self.accept()
+
+    def _is_in_startup(self) -> bool:
+        """Check if the app is set to start with Windows."""
+        if sys.platform != 'win32':
+            return False
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+                0, winreg.KEY_READ
+            )
+            try:
+                winreg.QueryValueEx(key, "ReadInAI")
+                return True
+            except WindowsError:
+                return False
+            finally:
+                winreg.CloseKey(key)
+        except Exception:
+            return False
+
+    def _toggle_startup(self, state):
+        """Toggle auto-start with Windows."""
+        if sys.platform != 'win32':
+            QMessageBox.information(
+                self,
+                "Not Supported",
+                "Auto-start is only supported on Windows."
+            )
+            return
+
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+                0, winreg.KEY_SET_VALUE
+            )
+
+            if state:  # Enable auto-start
+                # Get the path to the current executable
+                exe_path = sys.executable
+                if getattr(sys, 'frozen', False):
+                    # Running as compiled exe
+                    exe_path = sys.executable
+                else:
+                    # Running as script - use pythonw to avoid console
+                    import os
+                    main_script = os.path.join(
+                        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                        "main.py"
+                    )
+                    exe_path = f'"{sys.executable}" "{main_script}"'
+
+                winreg.SetValueEx(key, "ReadInAI", 0, winreg.REG_SZ, exe_path)
+                QMessageBox.information(
+                    self,
+                    "Auto-Start Enabled",
+                    "ReadIn AI will now start automatically when Windows starts."
+                )
+            else:  # Disable auto-start
+                try:
+                    winreg.DeleteValue(key, "ReadInAI")
+                    QMessageBox.information(
+                        self,
+                        "Auto-Start Disabled",
+                        "ReadIn AI will no longer start automatically."
+                    )
+                except WindowsError:
+                    pass  # Value doesn't exist
+
+            winreg.CloseKey(key)
+
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Could not modify startup settings: {e}"
+            )
+            # Revert checkbox state
+            self.auto_start_check.setChecked(self._is_in_startup())

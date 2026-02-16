@@ -71,17 +71,17 @@ def get_analytics_dashboard(
     # Usage stats
     daily_count = db.query(func.count(Conversation.id)).join(Meeting).filter(
         Meeting.user_id == user.id,
-        Conversation.created_at >= today_start
+        Conversation.timestamp >= today_start
     ).scalar() or 0
 
     weekly_count = db.query(func.count(Conversation.id)).join(Meeting).filter(
         Meeting.user_id == user.id,
-        Conversation.created_at >= week_ago
+        Conversation.timestamp >= week_ago
     ).scalar() or 0
 
     monthly_count = db.query(func.count(Conversation.id)).join(Meeting).filter(
         Meeting.user_id == user.id,
-        Conversation.created_at >= month_ago
+        Conversation.timestamp >= month_ago
     ).scalar() or 0
 
     total_count = db.query(func.count(Conversation.id)).join(Meeting).filter(
@@ -182,17 +182,17 @@ def get_usage_stats(
 
     daily_count = db.query(func.count(Conversation.id)).join(Meeting).filter(
         Meeting.user_id == user.id,
-        Conversation.created_at >= today_start
+        Conversation.timestamp >= today_start
     ).scalar() or 0
 
     weekly_count = db.query(func.count(Conversation.id)).join(Meeting).filter(
         Meeting.user_id == user.id,
-        Conversation.created_at >= week_ago
+        Conversation.timestamp >= week_ago
     ).scalar() or 0
 
     monthly_count = db.query(func.count(Conversation.id)).join(Meeting).filter(
         Meeting.user_id == user.id,
-        Conversation.created_at >= month_ago
+        Conversation.timestamp >= month_ago
     ).scalar() or 0
 
     total_count = db.query(func.count(Conversation.id)).join(Meeting).filter(
@@ -489,8 +489,8 @@ def get_advanced_analytics(
 
         avg_response_time = db.query(func.avg(Conversation.response_time_ms)).join(Meeting).filter(
             Meeting.user_id == user.id,
-            Conversation.created_at >= day_start,
-            Conversation.created_at < day_end,
+            Conversation.timestamp >= day_start,
+            Conversation.timestamp < day_end,
             Conversation.response_time_ms.isnot(None)
         ).scalar()
 

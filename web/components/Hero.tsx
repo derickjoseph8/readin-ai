@@ -1,9 +1,12 @@
-'use client'
+'use client';
 
-import Link from 'next/link'
-import { Play, Download, ArrowRight, Shield, Zap, Check } from 'lucide-react'
+import Link from 'next/link';
+import { Play, Download, ArrowRight, Shield, Zap, Check } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 export default function Hero() {
+  const t = useTranslations('hero');
+
   return (
     <section className="relative pt-40 pb-24 px-4 overflow-hidden">
       {/* Background effects */}
@@ -28,8 +31,7 @@ export default function Hero() {
 
           {/* Subheadline */}
           <p className="text-xl md:text-2xl text-gray-400 mb-10 max-w-3xl mx-auto animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-            AI-powered talking points in real-time. Glance, rephrase, and sound natural
-            — like you always knew the answer.
+            {t('subtitle')}
           </p>
 
           {/* CTA Buttons */}
@@ -39,7 +41,7 @@ export default function Hero() {
               className="group flex items-center px-8 py-4 bg-gradient-to-r from-gold-600 via-gold-500 to-gold-600 text-premium-bg font-semibold rounded-xl hover:shadow-gold-lg transition-all duration-300 hover:-translate-y-1"
             >
               <Download className="mr-2 h-5 w-5" />
-              Download for Free
+              {t('tryFree')}
               <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition" />
             </Link>
             <a
@@ -47,7 +49,7 @@ export default function Hero() {
               className="flex items-center px-8 py-4 bg-premium-surface text-white font-semibold rounded-xl hover:bg-premium-card transition-all border border-premium-border hover:border-gold-500/30"
             >
               <Play className="mr-2 h-5 w-5 text-gold-400" />
-              See How It Works
+              {t('watchDemo')}
             </a>
           </div>
 
@@ -63,7 +65,7 @@ export default function Hero() {
             </div>
             <div className="flex items-center text-sm text-gray-500">
               <Check className="h-4 w-4 mr-1 text-emerald-500" />
-              No credit card required
+              {t('noCreditCard')}
             </div>
           </div>
 
@@ -131,5 +133,5 @@ export default function Hero() {
         </div>
       </div>
     </section>
-  )
+  );
 }
