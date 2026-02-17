@@ -19,7 +19,13 @@ from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt
 
 from config import ANTHROPIC_API_KEY
 from src.process_monitor import ProcessMonitor
-from src.audio_capture import AudioCapture
+# Use enhanced audio capture for better quality
+try:
+    from src.audio_capture_enhanced import EnhancedAudioCapture as AudioCapture, CaptureMode
+    ENHANCED_AUDIO = True
+except ImportError:
+    from src.audio_capture import AudioCapture
+    ENHANCED_AUDIO = False
 from src.transcriber import Transcriber
 from src.ai_assistant import AIAssistant
 from src.ui.overlay import OverlayWindow
@@ -125,13 +131,27 @@ class ReadInApp:
         self.transcriber.set_language(language)
 
         # Setup audio capture with device selection and level monitoring
+        # Enhanced version has better quality and stealth mode support
         device_index = self.settings.get("audio_device", -1)
-        self.audio_capture = AudioCapture(
-            on_audio_chunk=self.transcriber.process_audio,
-            device_index=device_index if device_index >= 0 else None,
-            on_audio_level=lambda level: self.signals.audio_level_updated.emit(level),
-            on_error=self._on_audio_error
-        )
+        if ENHANCED_AUDIO:
+            # Use system loopback for stealth mode (captures what you hear, invisible to others)
+            self.audio_capture = AudioCapture(
+                on_audio_chunk=self.transcriber.process_audio,
+                device_index=device_index if device_index >= 0 else None,
+                capture_mode=CaptureMode.SYSTEM_LOOPBACK,
+                on_audio_level=lambda level: self.signals.audio_level_updated.emit(level),
+                on_error=self._on_audio_error,
+                enable_preprocessing=True,  # Noise reduction, normalization
+                low_latency=False,  # Balanced latency for quality
+            )
+            print("Using ENHANCED audio capture (better quality, stealth mode)")
+        else:
+            self.audio_capture = AudioCapture(
+                on_audio_chunk=self.transcriber.process_audio,
+                device_index=device_index if device_index >= 0 else None,
+                on_audio_level=lambda level: self.signals.audio_level_updated.emit(level),
+                on_error=self._on_audio_error
+            )
 
         self.process_monitor = ProcessMonitor(
             on_meeting_detected=lambda name: self.signals.meeting_detected.emit(name),

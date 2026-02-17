@@ -42,6 +42,11 @@ hidden_imports = [
     'numpy.core._methods',
     'numpy.lib.format',
 
+    # Audio processing (high-quality resampling)
+    'scipy',
+    'scipy.signal',
+    'scipy.signal.signaltools',
+
     # AI and Transcription
     'faster_whisper',
     'faster_whisper.tokenizer',
@@ -178,7 +183,7 @@ a = Analysis(
         # Exclude unnecessary modules to reduce size
         'tkinter',
         'matplotlib',
-        'scipy',
+        # 'scipy', - KEEP scipy for high-quality audio resampling
         'pandas',
         'PIL.ImageTk',
         'IPython',

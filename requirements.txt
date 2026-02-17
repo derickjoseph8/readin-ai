@@ -1,13 +1,14 @@
 anthropic>=0.18.0       # Claude API
 faster-whisper>=0.10.0  # Optimized Whisper (local, fast)
 numpy>=1.24.0           # Audio processing
+scipy>=1.10.0           # High-quality audio resampling
 PyQt6>=6.6.0            # UI framework
 psutil>=5.9.0           # Process monitoring
 python-dotenv>=1.0.0    # Config management
 httpx>=0.25.0           # API client
 
 # Platform-specific audio
-pyaudio>=0.2.14; sys_platform == "win32"       # Windows audio
+pyaudio>=0.2.14; sys_platform == "win32"       # Windows audio (WASAPI support)
 sounddevice>=0.4.6; sys_platform != "win32"    # macOS/Linux audio
 
 # New dependencies for enhanced features

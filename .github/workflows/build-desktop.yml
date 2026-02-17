@@ -31,7 +31,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
-          pip install PyQt6 anthropic faster-whisper httpx psutil pynput python-dotenv websockets pyaudio numpy pillow
+          pip install PyQt6 anthropic faster-whisper httpx psutil pynput python-dotenv websockets pyaudio numpy pillow scipy
 
       - name: Build executable
         run: python -m PyInstaller build.spec --noconfirm
@@ -65,7 +65,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
-          pip install PyQt6 anthropic faster-whisper httpx psutil pynput python-dotenv websockets sounddevice numpy pillow
+          pip install PyQt6 anthropic faster-whisper httpx psutil pynput python-dotenv websockets sounddevice numpy pillow scipy
 
       - name: Build app bundle
         run: python -m PyInstaller build.spec --noconfirm
@@ -109,7 +109,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
-          pip install PyQt6 anthropic faster-whisper httpx psutil pynput python-dotenv websockets sounddevice numpy pillow
+          pip install PyQt6 anthropic faster-whisper httpx psutil pynput python-dotenv websockets sounddevice numpy pillow scipy
 
       - name: Build executable
         run: python -m PyInstaller build.spec --noconfirm
