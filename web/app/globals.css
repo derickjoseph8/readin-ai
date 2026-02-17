@@ -153,10 +153,92 @@ body {
   color: white;
 }
 
-/* Focus styles */
+/* =============================================================================
+   ACCESSIBILITY ENHANCEMENTS
+   ============================================================================= */
+
+/* Enhanced Focus styles - WCAG 2.1 AA compliant */
 *:focus-visible {
-  outline: 2px solid rgba(212, 175, 55, 0.5);
+  outline: 3px solid #fbbf24;
   outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* High contrast focus for dark backgrounds */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #fbbf24;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px rgba(251, 191, 36, 0.2);
+}
+
+/* Skip to main content link */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.sr-only:focus,
+.sr-only.focus\:not-sr-only:focus {
+  position: absolute;
+  width: auto;
+  height: auto;
+  padding: 0.75rem 1rem;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .bg-premium-card {
+    border-width: 2px !important;
+  }
+
+  .text-gray-400,
+  .text-gray-500 {
+    color: #a3a3a3 !important;
+  }
+}
+
+/* Minimum touch target size (44x44px) */
+@layer utilities {
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Improved text contrast - ensuring gray text is readable */
+.text-gray-400 {
+  color: #a3a3a3; /* Improved from #9ca3af for better contrast */
+}
+
+.text-gray-500 {
+  color: #8b8b8b; /* Improved from #6b7280 for better contrast on dark */
 }
 
 /* Noise texture overlay */

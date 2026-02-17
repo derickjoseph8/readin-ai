@@ -21,6 +21,10 @@ import { useAuth } from '@/lib/hooks/useAuth'
 import { usePermissions } from '@/lib/hooks/usePermissions'
 import { useMeetings, useMeetingStats } from '@/lib/hooks/useMeetings'
 import { useAdminStats, useAdminTrends } from '@/lib/hooks/useAdmin'
+import Onboarding from '@/components/Onboarding'
+
+// Storage key for onboarding completion
+const ONBOARDING_COMPLETED_KEY = 'readin_onboarding_completed'
 
 function StatCard({
   title,
@@ -43,21 +47,24 @@ function StatCard({
   }
 
   return (
-    <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+    <article
+      className="bg-premium-card border border-premium-border rounded-xl p-6"
+      aria-label={`${title}: ${value}${trend ? `, trend: ${trend}` : ''}`}
+    >
       <div className="flex items-center justify-between mb-4">
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colorClasses[color]}`}>
-          <Icon className="h-5 w-5" />
+          <Icon className="h-5 w-5" aria-hidden="true" />
         </div>
         {trend && (
-          <span className="text-emerald-400 text-sm flex items-center">
-            <TrendingUp className="h-4 w-4 mr-1" />
+          <span className="text-emerald-400 text-sm flex items-center" aria-label={`Trend: ${trend}`}>
+            <TrendingUp className="h-4 w-4 mr-1" aria-hidden="true" />
             {trend}
           </span>
         )}
       </div>
       <p className="text-2xl font-bold text-white">{value}</p>
-      <p className="text-gray-500 text-sm mt-1">{title}</p>
-    </div>
+      <p className="text-gray-400 text-sm mt-1">{title}</p>
+    </article>
   )
 }
 
@@ -285,6 +292,34 @@ export default function DashboardPage() {
   const { permissions } = usePermissions()
   const { meetings } = useMeetings(1, 5)
   const { stats } = useMeetingStats()
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [isNewUser, setIsNewUser] = useState(false)
+
+  // Check if user needs onboarding
+  useEffect(() => {
+    if (typeof window !== 'undefined' && user) {
+      const onboardingCompleted = localStorage.getItem(ONBOARDING_COMPLETED_KEY)
+      const userCreatedAt = new Date(user.created_at)
+      const now = new Date()
+      const daysSinceCreation = (now.getTime() - userCreatedAt.getTime()) / (1000 * 60 * 60 * 24)
+
+      // Show onboarding for users created within last 7 days who haven't completed it
+      if (!onboardingCompleted && daysSinceCreation < 7 && !permissions.isStaff) {
+        setShowOnboarding(true)
+        setIsNewUser(true)
+      }
+    }
+  }, [user, permissions.isStaff])
+
+  const handleOnboardingComplete = () => {
+    localStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true')
+    setShowOnboarding(false)
+  }
+
+  const handleOnboardingSkip = () => {
+    localStorage.setItem(ONBOARDING_COMPLETED_KEY, 'skipped')
+    setShowOnboarding(false)
+  }
 
   const greeting = () => {
     const hour = new Date().getHours()
@@ -294,18 +329,36 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">
-          {greeting()}, {user?.full_name?.split(' ')[0] || 'there'}
-        </h1>
-        <p className="text-gray-400 mt-1">
-          {permissions.isAdmin
-            ? "Here's your admin overview"
-            : "Here's what's happening with your meetings"}
-        </p>
-      </div>
+    <>
+      {/* Onboarding Modal */}
+      {showOnboarding && (
+        <Onboarding
+          userName={user?.full_name?.split(' ')[0]}
+          onComplete={handleOnboardingComplete}
+          onSkip={handleOnboardingSkip}
+        />
+      )}
+
+      <main className="space-y-8" role="main" aria-label="Dashboard">
+        {/* Skip to main content link for accessibility */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-gold-500 focus:text-premium-bg focus:rounded-lg"
+        >
+          Skip to main content
+        </a>
+
+        {/* Header */}
+        <header id="main-content">
+          <h1 className="text-2xl font-bold text-white">
+            {greeting()}, {user?.full_name?.split(' ')[0] || 'there'}
+          </h1>
+          <p className="text-gray-400 mt-1">
+            {permissions.isAdmin
+              ? "Here's your admin overview"
+              : "Here's what's happening with your meetings"}
+          </p>
+        </header>
 
       {/* Admin Dashboard for staff */}
       {permissions.isAdmin && <AdminDashboard />}
@@ -341,7 +394,7 @@ export default function DashboardPage() {
       )}
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <section aria-label="Your statistics" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Meetings"
           value={stats?.total_meetings || 0}
@@ -367,7 +420,7 @@ export default function DashboardPage() {
           icon={Clock}
           color="purple"
         />
-      </div>
+      </section>
 
       {/* Usage & Recent Meetings */}
       <div className="grid lg:grid-cols-3 gap-6">
@@ -449,43 +502,47 @@ export default function DashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid md:grid-cols-3 gap-4">
+      <nav className="grid md:grid-cols-3 gap-4" aria-label="Quick actions">
         <Link
           href="/download"
-          className="p-4 bg-premium-card border border-premium-border rounded-xl hover:border-gold-500/30 transition-colors group"
+          className="p-4 bg-premium-card border border-premium-border rounded-xl hover:border-gold-500/30 transition-colors group focus:outline-none focus:ring-2 focus:ring-gold-500"
+          aria-label="Download Desktop App - Get ReadIn AI for Windows, Mac, or Linux"
         >
           <h4 className="font-medium text-white group-hover:text-gold-400 transition-colors">
             Download Desktop App
           </h4>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="text-gray-400 text-sm mt-1">
             Get ReadIn AI for Windows, Mac, or Linux
           </p>
         </Link>
 
         <Link
           href="/docs"
-          className="p-4 bg-premium-card border border-premium-border rounded-xl hover:border-gold-500/30 transition-colors group"
+          className="p-4 bg-premium-card border border-premium-border rounded-xl hover:border-gold-500/30 transition-colors group focus:outline-none focus:ring-2 focus:ring-gold-500"
+          aria-label="View Documentation - Learn how to get the most out of ReadIn AI"
         >
           <h4 className="font-medium text-white group-hover:text-gold-400 transition-colors">
             View Documentation
           </h4>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="text-gray-400 text-sm mt-1">
             Learn how to get the most out of ReadIn AI
           </p>
         </Link>
 
         <Link
-          href="/contact"
-          className="p-4 bg-premium-card border border-premium-border rounded-xl hover:border-gold-500/30 transition-colors group"
+          href="/dashboard/support"
+          className="p-4 bg-premium-card border border-premium-border rounded-xl hover:border-gold-500/30 transition-colors group focus:outline-none focus:ring-2 focus:ring-gold-500"
+          aria-label="Get Support - Contact our team for help or feedback"
         >
           <h4 className="font-medium text-white group-hover:text-gold-400 transition-colors">
             Get Support
           </h4>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="text-gray-400 text-sm mt-1">
             Contact our team for help or feedback
           </p>
         </Link>
-      </div>
-    </div>
+      </nav>
+      </main>
+    </>
   )
 }

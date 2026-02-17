@@ -1910,3 +1910,73 @@ CATEGORY_TEAM_MAP = {
     "account": "tech-support",
     "general": "tech-support",
 }
+
+
+# =============================================================================
+# USER INTEGRATIONS (SLACK, TEAMS, ETC.)
+# =============================================================================
+
+class UserIntegration(Base):
+    """
+    Third-party service integrations for users.
+
+    Stores OAuth tokens and settings for Slack, Teams, and other integrations.
+    """
+    __tablename__ = "user_integrations"
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider", name="uq_user_integration_provider"),
+        Index("ix_user_integration_user", "user_id"),
+        Index("ix_user_integration_provider", "provider"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Provider info
+    provider = Column(String(50), nullable=False)  # slack, teams
+    provider_user_id = Column(String(255), nullable=True)  # User ID in provider system
+    provider_team_id = Column(String(255), nullable=True)  # Workspace/tenant ID
+    provider_team_name = Column(String(255), nullable=True)  # Workspace/team display name
+
+    # OAuth tokens (encrypted in production)
+    access_token = Column(Text, nullable=False)
+    refresh_token = Column(Text, nullable=True)
+    token_expires_at = Column(DateTime, nullable=True)
+
+    # User info from provider
+    display_name = Column(String(255), nullable=True)
+    email = Column(String(255), nullable=True)
+
+    # Settings
+    default_channel_id = Column(String(255), nullable=True)  # Default channel for notifications
+    default_channel_name = Column(String(255), nullable=True)
+    notifications_enabled = Column(Boolean, default=True)
+    meeting_summaries_enabled = Column(Boolean, default=True)
+    action_item_reminders_enabled = Column(Boolean, default=True)
+    briefing_notifications_enabled = Column(Boolean, default=True)
+
+    # Status
+    is_active = Column(Boolean, default=True)
+    last_used_at = Column(DateTime, nullable=True)
+    error_message = Column(Text, nullable=True)  # Last error if any
+
+    # Timestamps
+    connected_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User")
+
+
+class IntegrationProvider:
+    """Integration provider constants."""
+    SLACK = "slack"
+    TEAMS = "teams"
+
+
+class IntegrationNotificationType:
+    """Types of notifications that can be sent via integrations."""
+    MEETING_SUMMARY = "meeting_summary"
+    ACTION_ITEM_REMINDER = "action_item_reminder"
+    BRIEFING = "briefing"
+    COMMITMENT_REMINDER = "commitment_reminder"

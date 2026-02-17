@@ -21,7 +21,8 @@ import {
   MessageSquare,
   UserCog,
   Building2,
-  ClipboardCheck
+  ClipboardCheck,
+  Plug
 } from 'lucide-react'
 import { AuthProvider, useAuth } from '@/lib/hooks/useAuth'
 import { usePermissions } from '@/lib/hooks/usePermissions'
@@ -89,6 +90,7 @@ function DashboardSidebar() {
   const settingsNav = [
     { name: 'Profile', href: '/dashboard/settings', icon: Settings },
     { name: 'Calendar', href: '/dashboard/settings/calendar', icon: CalendarClock },
+    { name: 'Integrations', href: '/dashboard/settings/integrations', icon: Plug },
     { name: 'Billing', href: '/dashboard/settings/billing', icon: CreditCard },
     { name: 'Security', href: '/dashboard/settings/security', icon: Shield },
   ]
@@ -162,18 +164,19 @@ function DashboardSidebar() {
       )}
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto" aria-label="Main navigation">
         {navigation.map((item) => (
           <Link
             key={item.name}
             href={item.href}
-            className={`flex items-center px-3 py-2.5 rounded-lg transition-colors ${
+            aria-current={isActive(item.href) ? 'page' : undefined}
+            className={`flex items-center px-3 py-2.5 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gold-500 ${
               isActive(item.href)
                 ? 'bg-gold-500/20 text-gold-400'
                 : 'text-gray-400 hover:bg-premium-surface hover:text-white'
             }`}
           >
-            <item.icon className="h-5 w-5 mr-3" />
+            <item.icon className="h-5 w-5 mr-3" aria-hidden="true" />
             {item.name}
           </Link>
         ))}
@@ -234,10 +237,10 @@ function DashboardSidebar() {
           </div>
           <button
             onClick={handleLogout}
-            className="p-2 text-gray-500 hover:text-red-400 transition-colors"
-            title="Logout"
+            className="p-2 text-gray-500 hover:text-red-400 transition-colors focus:outline-none focus:ring-2 focus:ring-gold-500 rounded-lg"
+            aria-label="Logout from your account"
           >
-            <LogOut className="h-5 w-5" />
+            <LogOut className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -249,25 +252,39 @@ function DashboardSidebar() {
       {/* Mobile menu button */}
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-premium-card border border-premium-border rounded-lg"
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-premium-card border border-premium-border rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-500"
+        aria-expanded={mobileOpen}
+        aria-controls="mobile-sidebar"
+        aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
       >
-        {mobileOpen ? <X className="h-5 w-5 text-white" /> : <Menu className="h-5 w-5 text-white" />}
+        {mobileOpen ? <X className="h-5 w-5 text-white" aria-hidden="true" /> : <Menu className="h-5 w-5 text-white" aria-hidden="true" />}
       </button>
 
       {/* Mobile sidebar */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-40">
-          <div className="fixed inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
-          <div className="fixed left-0 top-0 bottom-0 w-64 bg-premium-card border-r border-premium-border flex flex-col">
+        <div className="lg:hidden fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="Navigation menu">
+          <div
+            className="fixed inset-0 bg-black/50"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden="true"
+          />
+          <aside
+            id="mobile-sidebar"
+            className="fixed left-0 top-0 bottom-0 w-64 bg-premium-card border-r border-premium-border flex flex-col"
+            aria-label="Main navigation"
+          >
             <SidebarContent />
-          </div>
+          </aside>
         </div>
       )}
 
       {/* Desktop sidebar */}
-      <div className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-premium-card border-r border-premium-border">
+      <aside
+        className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-premium-card border-r border-premium-border"
+        aria-label="Main navigation"
+      >
         <SidebarContent />
-      </div>
+      </aside>
     </>
   )
 }
@@ -278,8 +295,20 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-premium-bg flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gold-400"></div>
+      <div
+        className="min-h-screen bg-premium-bg flex items-center justify-center"
+        role="status"
+        aria-live="polite"
+        aria-label="Loading dashboard"
+      >
+        <div className="flex flex-col items-center">
+          <div
+            className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gold-400"
+            aria-hidden="true"
+          />
+          <span className="sr-only">Loading dashboard...</span>
+          <p className="text-gray-400 mt-4">Loading...</p>
+        </div>
       </div>
     )
   }
@@ -293,10 +322,18 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-premium-bg">
+      {/* Skip to main content link */}
+      <a
+        href="#dashboard-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-20 focus:z-50 focus:px-4 focus:py-2 focus:bg-gold-500 focus:text-premium-bg focus:rounded-lg focus:font-medium"
+      >
+        Skip to main content
+      </a>
+
       <DashboardSidebar />
-      <main className="lg:pl-64">
+      <div id="dashboard-main" className="lg:pl-64">
         <div className="p-6 lg:p-8">{children}</div>
-      </main>
+      </div>
       {/* Only show chat widget for non-staff users */}
       {!permissions.isStaff && <ChatWidget />}
     </div>

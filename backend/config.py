@@ -113,6 +113,22 @@ SENTRY_DSN = os.getenv("SENTRY_DSN", "")
 REDIS_URL = os.getenv("REDIS_URL", "")
 
 # =============================================================================
+# SLACK INTEGRATION
+# =============================================================================
+
+SLACK_CLIENT_ID = os.getenv("SLACK_CLIENT_ID", "")
+SLACK_CLIENT_SECRET = os.getenv("SLACK_CLIENT_SECRET", "")
+SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET", "")
+
+# =============================================================================
+# MICROSOFT TEAMS INTEGRATION
+# =============================================================================
+
+TEAMS_CLIENT_ID = os.getenv("TEAMS_CLIENT_ID", "")
+TEAMS_CLIENT_SECRET = os.getenv("TEAMS_CLIENT_SECRET", "")
+TEAMS_TENANT_ID = os.getenv("TEAMS_TENANT_ID", "")  # Use "common" for multi-tenant
+
+# =============================================================================
 # APP SETTINGS
 # =============================================================================
 
