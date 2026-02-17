@@ -23,8 +23,8 @@ export default function SettingsPage() {
       setFormData({
         full_name: user.full_name || '',
         email: user.email || '',
-        profession: user.profession || '',
-        company: user.company || '',
+        profession: user.profession_name || '',
+        company: user.company_name || '',
       })
     }
   }, [user])

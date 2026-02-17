@@ -11,10 +11,39 @@ import {
   MessageSquare,
   Search,
   ChevronRight,
-  HelpCircle
+  HelpCircle,
+  MessagesSquare,
+  Wrench,
+  CreditCard,
+  Building2,
+  X
 } from 'lucide-react'
 import { useMyTickets } from '@/lib/hooks/useAdmin'
 import { SupportTicket } from '@/lib/api/admin'
+
+const supportCategories = [
+  {
+    id: 'technical',
+    name: 'Technical Support',
+    description: 'Help with app issues, bugs, or technical problems',
+    icon: Wrench,
+    color: 'bg-blue-500/20 text-blue-400',
+  },
+  {
+    id: 'billing',
+    name: 'Billing & Subscription',
+    description: 'Questions about payments, plans, or invoices',
+    icon: CreditCard,
+    color: 'bg-emerald-500/20 text-emerald-400',
+  },
+  {
+    id: 'enterprise',
+    name: 'Enterprise Inquiry',
+    description: 'Custom solutions, volume licensing, or partnerships',
+    icon: Building2,
+    color: 'bg-purple-500/20 text-purple-400',
+  },
+]
 
 const statusColors = {
   open: 'bg-blue-500/20 text-blue-400',
@@ -92,6 +121,8 @@ function TicketCard({ ticket }: { ticket: SupportTicket }) {
 export default function SupportPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [showSupportOptions, setShowSupportOptions] = useState(false)
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const { tickets, isLoading } = useMyTickets({
     status: statusFilter || undefined,
   })
@@ -106,25 +137,152 @@ export default function SupportPage() {
   const openCount = tickets.filter((t) => ['open', 'in_progress', 'waiting_customer', 'waiting_internal'].includes(t.status)).length
   const resolvedCount = tickets.filter((t) => ['resolved', 'closed'].includes(t.status)).length
 
+  const handleGetSupport = () => {
+    setShowSupportOptions(true)
+    setSelectedCategory(null)
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* Support Options Modal */}
+      {showSupportOptions && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-premium-card border border-premium-border rounded-2xl max-w-2xl w-full p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-white">
+                {selectedCategory ? 'Choose Support Method' : 'How can we help?'}
+              </h2>
+              <button
+                onClick={() => setShowSupportOptions(false)}
+                className="p-2 text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {!selectedCategory ? (
+              <div className="space-y-3">
+                <p className="text-gray-400 mb-4">Select the type of support you need:</p>
+                {supportCategories.map((category) => (
+                  <button
+                    key={category.id}
+                    onClick={() => setSelectedCategory(category.id)}
+                    className="w-full flex items-center p-4 bg-premium-surface border border-premium-border rounded-xl hover:border-gold-500/30 transition-colors text-left"
+                  >
+                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center mr-4 ${category.color}`}>
+                      <category.icon className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-white">{category.name}</h3>
+                      <p className="text-sm text-gray-400">{category.description}</p>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-gray-500 ml-auto" />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <button
+                  onClick={() => setSelectedCategory(null)}
+                  className="text-sm text-gold-400 hover:text-gold-300 flex items-center"
+                >
+                  ← Back to categories
+                </button>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  {/* Create Ticket Option */}
+                  <Link
+                    href={`/dashboard/support/new?category=${selectedCategory}`}
+                    onClick={() => setShowSupportOptions(false)}
+                    className="flex flex-col items-center p-6 bg-premium-surface border border-premium-border rounded-xl hover:border-gold-500/30 transition-colors text-center"
+                  >
+                    <div className="w-16 h-16 bg-gold-500/20 rounded-xl flex items-center justify-center mb-4">
+                      <Ticket className="h-8 w-8 text-gold-400" />
+                    </div>
+                    <h3 className="font-semibold text-white mb-2">Create a Ticket</h3>
+                    <p className="text-sm text-gray-400">
+                      Submit a detailed request and get a response within 24 hours
+                    </p>
+                  </Link>
+
+                  {/* Live Chat Option */}
+                  <button
+                    onClick={() => {
+                      setShowSupportOptions(false)
+                      // Open chat widget or navigate to chat
+                      window.open(`mailto:support@getreadin.ai?subject=${encodeURIComponent(
+                        supportCategories.find(c => c.id === selectedCategory)?.name || 'Support'
+                      )}`, '_blank')
+                    }}
+                    className="flex flex-col items-center p-6 bg-premium-surface border border-premium-border rounded-xl hover:border-gold-500/30 transition-colors text-center"
+                  >
+                    <div className="w-16 h-16 bg-emerald-500/20 rounded-xl flex items-center justify-center mb-4">
+                      <MessagesSquare className="h-8 w-8 text-emerald-400" />
+                    </div>
+                    <h3 className="font-semibold text-white mb-2">Start a Chat</h3>
+                    <p className="text-sm text-gray-400">
+                      Get instant help from our support team (Business hours)
+                    </p>
+                  </button>
+                </div>
+
+                {selectedCategory === 'enterprise' && (
+                  <div className="mt-4 p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+                    <p className="text-sm text-purple-300">
+                      For enterprise inquiries, you can also reach us directly at{' '}
+                      <a href="mailto:enterprise@getreadin.ai" className="text-purple-400 hover:underline">
+                        enterprise@getreadin.ai
+                      </a>
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Support</h1>
           <p className="text-gray-400 mt-1">Get help with ReadIn AI</p>
         </div>
-        <Link
-          href="/dashboard/support/new"
+        <button
+          onClick={handleGetSupport}
           className="flex items-center px-4 py-2 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-medium rounded-lg hover:shadow-gold transition-all"
         >
           <Plus className="h-5 w-5 mr-2" />
-          New Ticket
-        </Link>
+          Get Support
+        </button>
+      </div>
+
+      {/* Quick Support Options */}
+      <div className="grid md:grid-cols-3 gap-4">
+        {supportCategories.map((category) => (
+          <button
+            key={category.id}
+            onClick={() => {
+              setShowSupportOptions(true)
+              setSelectedCategory(category.id)
+            }}
+            className="bg-premium-card border border-premium-border rounded-xl p-4 hover:border-gold-500/30 transition-colors text-left"
+          >
+            <div className="flex items-center space-x-3">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${category.color}`}>
+                <category.icon className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-medium text-white text-sm">{category.name}</p>
+                <p className="text-xs text-gray-500">Get help</p>
+              </div>
+            </div>
+          </button>
+        ))}
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className="bg-premium-card border border-premium-border rounded-xl p-4">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
@@ -158,20 +316,6 @@ export default function SupportPage() {
             </div>
           </div>
         </div>
-        <Link
-          href="/dashboard/support/new"
-          className="bg-premium-card border border-premium-border rounded-xl p-4 hover:border-gold-500/30 transition-colors"
-        >
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gold-500/20 rounded-lg flex items-center justify-center">
-              <HelpCircle className="h-5 w-5 text-gold-400" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-white">Need Help?</p>
-              <p className="text-sm text-gray-500">Create a ticket</p>
-            </div>
-          </div>
-        </Link>
       </div>
 
       {/* Filters */}

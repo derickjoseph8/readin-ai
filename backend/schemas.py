@@ -257,6 +257,8 @@ class UserResponse(BaseModel):
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     profession_id: Optional[int] = None
+    profession: Optional[str] = None  # String name, will be mapped to profession_id
+    company: Optional[str] = None
     specialization: Optional[str] = None
     years_experience: Optional[int] = None
     preferred_language: Optional[str] = Field(None, pattern="^(en|es|sw)$")

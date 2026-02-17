@@ -15,46 +15,46 @@ import { useAuth } from '@/lib/hooks/useAuth'
 const plans = [
   {
     id: 'free',
-    name: 'Free',
+    name: 'Free Trial',
     price: 0,
-    period: 'forever',
+    period: 'for 7 days',
     features: [
-      '5 AI responses per day',
-      'Basic meeting transcription',
-      '7-day history',
-      'Standard support',
+      '10 AI responses per day',
+      'All video conferencing apps',
+      'Real-time transcription',
+      'Profession-tailored responses',
     ],
     cta: 'Current Plan',
     current: true,
   },
   {
-    id: 'pro',
-    name: 'Pro',
-    price: 19,
+    id: 'premium',
+    name: 'Premium',
+    price: 29.99,
     period: 'per month',
     features: [
       'Unlimited AI responses',
-      'Advanced transcription',
-      'Unlimited history',
-      'Meeting summaries',
-      'Action item tracking',
+      'Profession-specific knowledge base',
+      'Smart meeting notes emailed to you',
+      'Action item & commitment tracking',
+      'Pre-meeting briefings & context',
+      'Participant memory across meetings',
       'Priority support',
     ],
-    cta: 'Upgrade to Pro',
+    cta: 'Upgrade to Premium',
     popular: true,
   },
   {
     id: 'team',
     name: 'Team',
-    price: 49,
-    period: 'per month',
+    price: 19.99,
+    period: 'per user/month',
     features: [
-      'Everything in Pro',
-      'Up to 10 team members',
-      'Shared meeting library',
-      'Team analytics',
-      'Admin controls',
-      'SSO (coming soon)',
+      'Everything in Premium',
+      '5 seats included',
+      'Team admin dashboard',
+      'Shared meeting insights',
+      'Centralized billing',
     ],
     cta: 'Contact Sales',
   },
@@ -64,7 +64,7 @@ export default function BillingPage() {
   const { status } = useAuth()
   const [isLoading, setIsLoading] = useState<string | null>(null)
 
-  const currentPlan = status?.subscription.status === 'active' ? 'pro' :
+  const currentPlan = status?.subscription.status === 'active' ? 'premium' :
                       status?.subscription.status === 'trial' ? 'trial' : 'free'
 
   const handleUpgrade = async (planId: string) => {
@@ -237,21 +237,21 @@ export default function BillingPage() {
 
               <button
                 onClick={() => plan.id !== 'free' && handleUpgrade(plan.id)}
-                disabled={plan.id === 'free' || isLoading === plan.id || (currentPlan === 'pro' && plan.id === 'pro')}
+                disabled={plan.id === 'free' || isLoading === plan.id || (currentPlan === 'premium' && plan.id === 'premium')}
                 className={`w-full py-2.5 rounded-lg font-medium transition-all ${
                   plan.popular
                     ? 'bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg hover:shadow-gold'
                     : plan.id === 'free'
                     ? 'bg-premium-surface text-gray-400 cursor-not-allowed'
                     : 'border border-premium-border text-white hover:bg-premium-surface'
-                } ${isLoading === plan.id || (currentPlan === 'pro' && plan.id === 'pro') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                } ${isLoading === plan.id || (currentPlan === 'premium' && plan.id === 'premium') ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {isLoading === plan.id ? (
                   <span className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-current mr-2"></div>
                     Processing...
                   </span>
-                ) : currentPlan === 'pro' && plan.id === 'pro' ? (
+                ) : currentPlan === 'premium' && plan.id === 'premium' ? (
                   'Current Plan'
                 ) : (
                   plan.cta

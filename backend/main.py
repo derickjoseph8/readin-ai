@@ -539,6 +539,7 @@ def get_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)
         email_summary_enabled=user.email_summary_enabled,
         email_reminders_enabled=user.email_reminders_enabled,
         preferred_language=user.preferred_language or "en",
+        company_name=getattr(user, 'company', None),
         created_at=user.created_at
     )
 
@@ -553,7 +554,7 @@ def update_me(
     if data.full_name is not None:
         user.full_name = data.full_name
     if data.profession_id is not None:
-        # Validate profession
+        # Validate profession by ID
         profession = db.query(Profession).filter(
             Profession.id == data.profession_id,
             Profession.is_active == True
@@ -564,6 +565,29 @@ def update_me(
                 detail="Invalid profession"
             )
         user.profession_id = data.profession_id
+    elif data.profession is not None:
+        # Map profession string to profession_id
+        profession_map = {
+            'software_engineer': 1,
+            'product_manager': 2,
+            'designer': 3,
+            'sales': 4,
+            'marketing': 5,
+            'consultant': 6,
+            'executive': 7,
+            'student': 8,
+            'other': 9,
+        }
+        profession_id = profession_map.get(data.profession.lower())
+        if profession_id:
+            profession = db.query(Profession).filter(
+                Profession.id == profession_id,
+                Profession.is_active == True
+            ).first()
+            if profession:
+                user.profession_id = profession_id
+    if data.company is not None and hasattr(user, 'company'):
+        user.company = data.company
     if data.specialization is not None:
         user.specialization = data.specialization
     if data.years_experience is not None:
@@ -594,6 +618,7 @@ def update_me(
         email_summary_enabled=user.email_summary_enabled,
         email_reminders_enabled=user.email_reminders_enabled,
         preferred_language=user.preferred_language or "en",
+        company_name=getattr(user, 'company', None),
         created_at=user.created_at
     )
 

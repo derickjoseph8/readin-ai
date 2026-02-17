@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -12,14 +12,17 @@ import {
   Settings,
   HelpCircle,
   Bug,
-  Lightbulb
+  Lightbulb,
+  Building2,
+  Wrench
 } from 'lucide-react'
 import { supportApi } from '@/lib/api/admin'
 
 const categories = [
-  { id: 'technical', name: 'Technical Issue', icon: Bug, description: 'App crashes, errors, bugs' },
-  { id: 'billing', name: 'Billing & Payments', icon: CreditCard, description: 'Subscriptions, charges, refunds' },
-  { id: 'account', name: 'Account Help', icon: Settings, description: 'Login, settings, profile' },
+  { id: 'technical', name: 'Technical Support', icon: Wrench, description: 'App issues, bugs, or technical problems' },
+  { id: 'billing', name: 'Billing & Subscription', icon: CreditCard, description: 'Payments, plans, invoices, refunds' },
+  { id: 'enterprise', name: 'Enterprise Inquiry', icon: Building2, description: 'Custom solutions, volume licensing' },
+  { id: 'account', name: 'Account Help', icon: Settings, description: 'Login, settings, profile issues' },
   { id: 'feature', name: 'Feature Request', icon: Lightbulb, description: 'Suggestions and ideas' },
   { id: 'general', name: 'General Question', icon: HelpCircle, description: 'Other inquiries' },
 ]
@@ -33,12 +36,22 @@ const priorities = [
 
 export default function NewTicketPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const categoryParam = searchParams.get('category')
+
   const [category, setCategory] = useState('')
   const [priority, setPriority] = useState('medium')
   const [subject, setSubject] = useState('')
   const [description, setDescription] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  // Set initial category from URL param
+  useEffect(() => {
+    if (categoryParam && categories.some(c => c.id === categoryParam)) {
+      setCategory(categoryParam)
+    }
+  }, [categoryParam])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

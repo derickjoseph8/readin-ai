@@ -8,13 +8,13 @@ export interface User {
   id: number
   email: string
   full_name: string | null
-  profession: string | null
-  company: string | null
+  profession_id: number | null
+  profession_name: string | null
+  company_name: string | null
   subscription_status: string
   trial_ends_at: string | null
   created_at: string
   account_type?: string
-  company_name?: string | null
   organization_id?: number | null
 }
 
