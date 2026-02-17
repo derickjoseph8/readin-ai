@@ -1283,6 +1283,130 @@ class UserSession(Base):
 
 
 # =============================================================================
+# LOGIN ANOMALY DETECTION
+# =============================================================================
+
+class LoginAttempt(Base):
+    """
+    Track login attempts for anomaly detection.
+
+    Records both successful and failed login attempts to detect
+    suspicious activity patterns.
+    """
+    __tablename__ = "login_attempts"
+    __table_args__ = (
+        Index("ix_login_attempt_user_id", "user_id"),
+        Index("ix_login_attempt_email", "email"),
+        Index("ix_login_attempt_ip", "ip_address"),
+        Index("ix_login_attempt_timestamp", "timestamp"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # User info (user_id may be null for failed attempts with unknown email)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    email = Column(String(255), nullable=False, index=True)
+
+    # Attempt details
+    ip_address = Column(String(45), nullable=True)  # IPv6 compatible
+    user_agent = Column(String(512), nullable=True)
+    device_type = Column(String(50), nullable=True)  # desktop, mobile, tablet
+    browser = Column(String(100), nullable=True)
+    os = Column(String(100), nullable=True)
+
+    # Location (if available via IP geolocation)
+    country = Column(String(100), nullable=True)
+    city = Column(String(100), nullable=True)
+
+    # Result
+    success = Column(Boolean, default=False)
+    failure_reason = Column(String(255), nullable=True)
+
+    # Anomaly flags
+    is_new_device = Column(Boolean, default=False)
+    is_new_location = Column(Boolean, default=False)
+    is_suspicious = Column(Boolean, default=False)
+    anomaly_score = Column(Float, default=0.0)  # 0-100 score
+
+    # Timestamps
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User")
+
+
+class SecurityAlert(Base):
+    """
+    Security alerts for users.
+
+    Generated when suspicious activity is detected.
+    """
+    __tablename__ = "security_alerts"
+    __table_args__ = (
+        Index("ix_security_alert_user_id", "user_id"),
+        Index("ix_security_alert_type", "alert_type"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Alert details
+    alert_type = Column(String(50), nullable=False)  # new_device, new_location, failed_attempts, etc.
+    severity = Column(String(20), default="medium")  # low, medium, high, critical
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+
+    # Related data
+    ip_address = Column(String(45), nullable=True)
+    device_info = Column(JSON, nullable=True)
+    location_info = Column(JSON, nullable=True)
+
+    # Status
+    is_read = Column(Boolean, default=False)
+    is_resolved = Column(Boolean, default=False)
+    resolved_at = Column(DateTime, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User")
+
+
+class TrustedDevice(Base):
+    """
+    User's trusted devices for login.
+
+    When a user logs in from a new device and marks it as trusted,
+    future logins from that device won't trigger alerts.
+    """
+    __tablename__ = "trusted_devices"
+    __table_args__ = (
+        Index("ix_trusted_device_user_id", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Device fingerprint
+    device_fingerprint = Column(String(255), nullable=False)  # Hash of device characteristics
+    device_name = Column(String(255), nullable=True)  # User-friendly name
+    device_type = Column(String(50), nullable=True)
+    browser = Column(String(100), nullable=True)
+    os = Column(String(100), nullable=True)
+
+    # Trust metadata
+    last_used = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User")
+
+
+# =============================================================================
 # IN-APP NOTIFICATIONS
 # =============================================================================
 
