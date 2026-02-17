@@ -149,6 +149,7 @@ export interface ChatSession {
   user_name: string | null
   agent_name: string | null
   team_name: string | null
+  is_ai_handled?: boolean
 }
 
 export interface ChatMessage {
@@ -453,11 +454,12 @@ export const supportApi = {
     return apiClient.post('/api/v1/tickets/', data)
   },
 
-  async getMyTickets(status?: string, limit: number = 20, offset: number = 0): Promise<TicketList> {
+  async getMyTickets(status?: string, limit: number = 20, offset: number = 0, orgTickets?: boolean): Promise<TicketList> {
     const params = new URLSearchParams()
     if (status) params.append('status', status)
     params.append('limit', String(limit))
     params.append('offset', String(offset))
+    if (orgTickets) params.append('org_tickets', 'true')
     return apiClient.get(`/api/v1/tickets/my-tickets?${params.toString()}`)
   },
 
@@ -477,7 +479,7 @@ export const supportApi = {
     return apiClient.get('/api/v1/chat/session')
   },
 
-  async getChatMessages(sessionId: number, limit: number = 50): Promise<{ messages: ChatMessage[]; status: string; queue_position: number | null }> {
+  async getChatMessages(sessionId: number, limit: number = 50): Promise<{ messages: ChatMessage[]; status: string; queue_position: number | null; is_ai_handled?: boolean }> {
     return apiClient.get(`/api/v1/chat/sessions/${sessionId}/messages?limit=${limit}`)
   },
 
@@ -487,6 +489,10 @@ export const supportApi = {
 
   async endChat(sessionId: number): Promise<{ message: string }> {
     return apiClient.post(`/api/v1/chat/sessions/${sessionId}/end`, {})
+  },
+
+  async requestHumanAgent(sessionId: number): Promise<{ message: string; queue_position?: number }> {
+    return apiClient.post('/api/v1/chat/session/transfer-to-agent', {})
   },
 }
 

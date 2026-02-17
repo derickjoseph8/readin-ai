@@ -337,7 +337,7 @@ export function useSLAConfigs() {
 }
 
 // Customer Support Hooks
-export function useMyTickets(params: { status?: string } = {}) {
+export function useMyTickets(params: { status?: string; orgTickets?: boolean } = {}) {
   const [tickets, setTickets] = useState<SupportTicket[]>([])
   const [total, setTotal] = useState(0)
   const [byStatus, setByStatus] = useState<Record<string, number>>({})
@@ -347,7 +347,7 @@ export function useMyTickets(params: { status?: string } = {}) {
   const refresh = useCallback(async () => {
     try {
       setIsLoading(true)
-      const data = await supportApi.getMyTickets(params.status)
+      const data = await supportApi.getMyTickets(params.status, 20, 0, params.orgTickets)
       setTickets(data.tickets)
       setTotal(data.total)
       setByStatus(data.by_status)
@@ -357,7 +357,7 @@ export function useMyTickets(params: { status?: string } = {}) {
     } finally {
       setIsLoading(false)
     }
-  }, [params.status])
+  }, [params.status, params.orgTickets])
 
   useEffect(() => {
     refresh()

@@ -19,6 +19,10 @@ export interface Permissions {
   isAdmin: boolean
   isSuperAdmin: boolean
 
+  // Organization role
+  isOrgAdmin: boolean
+  isOrgMember: boolean
+
   // Dashboard sections
   canViewAdminDashboard: boolean
   canViewAnalytics: boolean
@@ -27,6 +31,7 @@ export interface Permissions {
   canManageTeams: boolean
   canViewBilling: boolean
   canManageBilling: boolean
+  canManageOrgBilling: boolean
 
   // Tickets
   canViewAllTickets: boolean
@@ -65,6 +70,14 @@ export function usePermissions() {
     const isManager = staffRole === 'manager'
     const isAgent = staffRole === 'agent'
 
+    // Organization role checks
+    const hasOrg = !!user?.organization_id
+    const isOrgAdmin = hasOrg && user?.role_in_org === 'admin'
+    const isOrgMember = hasOrg && user?.role_in_org === 'member'
+
+    // User can manage billing if they're an org admin OR not in an organization
+    const canManageOrgBilling = !hasOrg || isOrgAdmin
+
     const userTeams = user?.team_memberships || []
     const userTeamSlugs = userTeams.map(t => t.team_slug)
 
@@ -90,6 +103,10 @@ export function usePermissions() {
       isAdmin,
       isSuperAdmin,
 
+      // Organization role
+      isOrgAdmin,
+      isOrgMember,
+
       // Dashboard sections
       canViewAdminDashboard: isAdmin,
       canViewAnalytics: isAdmin,
@@ -98,6 +115,7 @@ export function usePermissions() {
       canManageTeams: isAdmin,
       canViewBilling: isAdmin || userTeamSlugs.includes('accounts'),
       canManageBilling: isAdmin,
+      canManageOrgBilling,
 
       // Tickets
       canViewAllTickets: isStaff,

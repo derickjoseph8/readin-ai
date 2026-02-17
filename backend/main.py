@@ -774,6 +774,20 @@ def increment_usage(user: User = Depends(get_current_user), db: Session = Depend
 
 # ============== Subscription Endpoints ==============
 
+def require_billing_access(user: User):
+    """Check if user can access billing management.
+
+    Only organization admins or users not in an organization can manage billing.
+    Organization members must contact their admin.
+    """
+    if user.organization_id:
+        if user.role_in_org != "admin":
+            raise HTTPException(
+                status_code=403,
+                detail="Only organization administrators can manage billing. Please contact your admin."
+            )
+
+
 @app.post("/subscription/create-checkout", response_model=CheckoutSessionResponse)
 def create_checkout(
     data: CreateCheckoutSession,
@@ -781,6 +795,8 @@ def create_checkout(
     db: Session = Depends(get_db)
 ):
     """Create Stripe checkout session for subscription."""
+    require_billing_access(user)
+
     price_id = data.price_id or STRIPE_PRICE_MONTHLY
 
     checkout_url = create_checkout_session(
@@ -796,6 +812,8 @@ def create_checkout(
 @app.post("/subscription/manage")
 def manage_subscription(user: User = Depends(get_current_user)):
     """Get Stripe billing portal URL to manage subscription."""
+    require_billing_access(user)
+
     portal_url = create_billing_portal_session(
         user=user,
         return_url="https://www.getreadin.us/account"

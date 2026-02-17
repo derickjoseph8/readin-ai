@@ -9,7 +9,9 @@ import {
   User,
   Shield,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Bot,
+  UserCircle
 } from 'lucide-react'
 import { useMyChat } from '@/lib/hooks/useAdmin'
 import { supportApi, ChatMessage } from '@/lib/api/admin'
@@ -26,6 +28,8 @@ export default function ChatWidget() {
   const [isSending, setIsSending] = useState(false)
   const [queuePosition, setQueuePosition] = useState<number | null>(null)
   const [error, setError] = useState('')
+  const [isAiHandled, setIsAiHandled] = useState(true)
+  const [isRequestingHuman, setIsRequestingHuman] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -44,6 +48,11 @@ export default function ChatWidget() {
             setChatStatus('ended')
           } else if (data.status === 'waiting') {
             setQueuePosition(data.queue_position || null)
+          }
+
+          // Track if AI is handling or transferred to human
+          if (data.is_ai_handled !== undefined) {
+            setIsAiHandled(data.is_ai_handled)
           }
         } catch (err) {
           console.error('Failed to poll messages:', err)
@@ -72,8 +81,25 @@ export default function ChatWidget() {
       setSessionId(session.id)
       setChatStatus(session.status === 'active' ? 'active' : 'waiting')
       setQueuePosition(session.queue_position || null)
+      setIsAiHandled(session.is_ai_handled !== false)
     } catch (err: any) {
       setError(err.message || 'Failed to start chat')
+    }
+  }
+
+  const handleRequestHuman = async () => {
+    if (!sessionId) return
+    setIsRequestingHuman(true)
+    setError('')
+
+    try {
+      await supportApi.requestHumanAgent(sessionId)
+      setIsAiHandled(false)
+      setChatStatus('waiting')
+    } catch (err: any) {
+      setError(err.message || 'Failed to request human agent')
+    } finally {
+      setIsRequestingHuman(false)
     }
   }
 
@@ -118,6 +144,7 @@ export default function ChatWidget() {
     setMessages([])
     setQueuePosition(null)
     setError('')
+    setIsAiHandled(true)
   }
 
   const formatTime = (dateStr: string) => {
@@ -145,12 +172,20 @@ export default function ChatWidget() {
       <div className="h-14 px-4 bg-gradient-to-r from-gold-600 to-gold-500 flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-            <MessageSquare className="h-4 w-4 text-premium-bg" />
+            {isAiHandled ? (
+              <Bot className="h-4 w-4 text-premium-bg" />
+            ) : (
+              <UserCircle className="h-4 w-4 text-premium-bg" />
+            )}
           </div>
           <div>
-            <p className="font-medium text-premium-bg">Support Chat</p>
+            <p className="font-medium text-premium-bg">
+              {isAiHandled ? 'Novah AI' : 'Support Chat'}
+            </p>
             {chatStatus === 'active' && (
-              <p className="text-xs text-premium-bg/80">Connected</p>
+              <p className="text-xs text-premium-bg/80">
+                {isAiHandled ? 'AI Assistant' : 'Connected to Agent'}
+              </p>
             )}
           </div>
         </div>
@@ -177,11 +212,11 @@ export default function ChatWidget() {
             {chatStatus === 'idle' && (
               <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
                 <div className="w-16 h-16 bg-gold-500/20 rounded-full flex items-center justify-center mb-4">
-                  <MessageSquare className="h-8 w-8 text-gold-400" />
+                  <Bot className="h-8 w-8 text-gold-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-white mb-2">Start a Conversation</h3>
+                <h3 className="text-lg font-semibold text-white mb-2">Chat with Novah</h3>
                 <p className="text-gray-400 text-sm mb-6">
-                  Chat with our support team for real-time assistance.
+                  Our AI assistant will help you instantly. Need a human? Just ask!
                 </p>
                 {error && (
                   <div className="mb-4 text-sm text-red-400 flex items-center">
@@ -236,10 +271,16 @@ export default function ChatWidget() {
                             : 'bg-premium-surface text-white'
                         }`}
                       >
+                        {msg.sender_type === 'bot' && (
+                          <p className="text-xs text-purple-400 mb-1 flex items-center">
+                            <Bot className="h-3 w-3 mr-1" />
+                            Novah (AI)
+                          </p>
+                        )}
                         {msg.sender_type === 'agent' && (
                           <p className="text-xs text-blue-400 mb-1 flex items-center">
                             <Shield className="h-3 w-3 mr-1" />
-                            {msg.sender_name || 'Support'}
+                            {msg.sender_name || 'Support Agent'}
                           </p>
                         )}
                         <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
@@ -277,12 +318,23 @@ export default function ChatWidget() {
                     </div>
                     <div className="flex justify-between items-center mt-2">
                       <p className="text-xs text-gray-500">Press Enter to send</p>
-                      <button
-                        onClick={handleEndChat}
-                        className="text-xs text-red-400 hover:text-red-300"
-                      >
-                        End Chat
-                      </button>
+                      <div className="flex items-center gap-3">
+                        {isAiHandled && (
+                          <button
+                            onClick={handleRequestHuman}
+                            disabled={isRequestingHuman}
+                            className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50"
+                          >
+                            {isRequestingHuman ? 'Connecting...' : 'Talk to Human'}
+                          </button>
+                        )}
+                        <button
+                          onClick={handleEndChat}
+                          className="text-xs text-red-400 hover:text-red-300"
+                        >
+                          End Chat
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : (

@@ -8,9 +8,11 @@ import {
   Crown,
   ExternalLink,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Lock
 } from 'lucide-react'
 import { useAuth } from '@/lib/hooks/useAuth'
+import { usePermissions } from '@/lib/hooks/usePermissions'
 
 const plans = [
   {
@@ -62,12 +64,17 @@ const plans = [
 
 export default function BillingPage() {
   const { status } = useAuth()
+  const { permissions } = usePermissions()
   const [isLoading, setIsLoading] = useState<string | null>(null)
 
   const currentPlan = status?.subscription.status === 'active' ? 'premium' :
                       status?.subscription.status === 'trial' ? 'trial' : 'free'
 
+  // Check if user can manage billing (org admins or non-org users)
+  const canManageBilling = permissions.canManageOrgBilling
+
   const handleUpgrade = async (planId: string) => {
+    if (!canManageBilling) return
     setIsLoading(planId)
     try {
       // Redirect to Stripe checkout
@@ -88,6 +95,8 @@ export default function BillingPage() {
   }
 
   const handleManageSubscription = async () => {
+    if (!canManageBilling) return
+
     try {
       const response = await fetch('/api/stripe/portal', {
         method: 'POST',
@@ -99,6 +108,51 @@ export default function BillingPage() {
     } catch (error) {
       console.error('Portal access failed:', error)
     }
+  }
+
+  // Show restricted access message for org members who can't manage billing
+  if (!canManageBilling) {
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-white">Billing & Subscription</h1>
+          <p className="text-gray-400 mt-1">
+            Manage your subscription and billing information
+          </p>
+        </div>
+
+        {/* Restricted Access Notice */}
+        <div className="bg-premium-card border border-premium-border rounded-xl p-8 text-center">
+          <div className="w-16 h-16 bg-gold-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Lock className="h-8 w-8 text-gold-400" />
+          </div>
+          <h2 className="text-xl font-semibold text-white mb-2">Billing Access Restricted</h2>
+          <p className="text-gray-400 max-w-md mx-auto mb-6">
+            Only organization administrators can manage billing and subscription settings.
+            Please contact your organization admin to make changes.
+          </p>
+
+          {/* Show current status read-only */}
+          <div className="bg-premium-surface rounded-lg p-4 max-w-sm mx-auto">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-400 text-sm">Current Plan</span>
+              <span className="text-white font-medium capitalize">
+                {currentPlan === 'trial' ? 'Pro Trial' : currentPlan}
+              </span>
+            </div>
+            {status?.subscription.status === 'trial' && status.subscription.trial_days_remaining && (
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-premium-border">
+                <span className="text-gray-400 text-sm">Trial Remaining</span>
+                <span className="text-gold-400 text-sm">
+                  {status.subscription.trial_days_remaining} days
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

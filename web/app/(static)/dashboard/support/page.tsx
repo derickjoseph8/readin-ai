@@ -16,9 +16,11 @@ import {
   Wrench,
   CreditCard,
   Building2,
-  X
+  X,
+  Users
 } from 'lucide-react'
 import { useMyTickets } from '@/lib/hooks/useAdmin'
+import { usePermissions } from '@/lib/hooks/usePermissions'
 import { SupportTicket } from '@/lib/api/admin'
 
 const supportCategories = [
@@ -70,7 +72,7 @@ const priorityColors = {
   low: 'text-gray-400',
 }
 
-function TicketCard({ ticket }: { ticket: SupportTicket }) {
+function TicketCard({ ticket, showCreator = false }: { ticket: SupportTicket; showCreator?: boolean }) {
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     const now = new Date()
@@ -96,6 +98,11 @@ function TicketCard({ ticket }: { ticket: SupportTicket }) {
             <span className={`text-xs px-2 py-0.5 rounded ${statusColors[ticket.status as keyof typeof statusColors]}`}>
               {statusLabels[ticket.status as keyof typeof statusLabels] || ticket.status}
             </span>
+            {showCreator && ticket.user_name && (
+              <span className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">
+                By: {ticket.user_name}
+              </span>
+            )}
           </div>
           <h3 className="font-medium text-white truncate">{ticket.subject}</h3>
           <div className="flex items-center space-x-4 mt-3 text-sm text-gray-500">
@@ -119,12 +126,17 @@ function TicketCard({ ticket }: { ticket: SupportTicket }) {
 }
 
 export default function SupportPage() {
+  const { permissions } = usePermissions()
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [showSupportOptions, setShowSupportOptions] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [viewOrgTickets, setViewOrgTickets] = useState(false)
+
+  // Fetch tickets - my tickets or org tickets based on toggle
   const { tickets, isLoading } = useMyTickets({
     status: statusFilter || undefined,
+    orgTickets: viewOrgTickets && permissions.isOrgAdmin,
   })
 
   const filteredTickets = tickets.filter(
@@ -257,6 +269,34 @@ export default function SupportPage() {
         </button>
       </div>
 
+      {/* Org Admin Tabs */}
+      {permissions.isOrgAdmin && (
+        <div className="flex space-x-1 bg-premium-surface p-1 rounded-lg w-fit">
+          <button
+            onClick={() => setViewOrgTickets(false)}
+            className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              !viewOrgTickets
+                ? 'bg-premium-card text-white'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Ticket className="h-4 w-4 mr-2" />
+            My Tickets
+          </button>
+          <button
+            onClick={() => setViewOrgTickets(true)}
+            className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              viewOrgTickets
+                ? 'bg-premium-card text-white'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Users className="h-4 w-4 mr-2" />
+            Company Tickets
+          </button>
+        </div>
+      )}
+
       {/* Quick Support Options */}
       <div className="grid md:grid-cols-3 gap-4">
         {supportCategories.map((category) => (
@@ -351,7 +391,9 @@ export default function SupportPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gold-400"></div>
           </div>
         ) : filteredTickets.length > 0 ? (
-          filteredTickets.map((ticket) => <TicketCard key={ticket.id} ticket={ticket} />)
+          filteredTickets.map((ticket) => (
+            <TicketCard key={ticket.id} ticket={ticket} showCreator={viewOrgTickets} />
+          ))
         ) : (
           <div className="bg-premium-card border border-premium-border rounded-xl p-12 text-center">
             <Ticket className="h-12 w-12 mx-auto mb-4 text-gray-600" />

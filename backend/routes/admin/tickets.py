@@ -493,25 +493,44 @@ async def create_ticket(
 @customer_router.get("/my-tickets", response_model=TicketList)
 async def list_my_tickets(
     status: Optional[str] = None,
+    org_tickets: bool = False,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """List current user's tickets."""
-    query = db.query(SupportTicket).filter(SupportTicket.user_id == current_user.id)
+    """List current user's tickets.
+
+    If org_tickets=True and user is an org admin, shows all tickets from org members.
+    """
+    # Base query - user's own tickets
+    if org_tickets and current_user.is_org_admin:
+        # Get all org member IDs
+        org_member_ids = db.query(User.id).filter(
+            User.organization_id == current_user.organization_id
+        ).all()
+        org_member_ids = [m[0] for m in org_member_ids]
+        query = db.query(SupportTicket).filter(SupportTicket.user_id.in_(org_member_ids))
+    else:
+        query = db.query(SupportTicket).filter(SupportTicket.user_id == current_user.id)
 
     if status:
         query = query.filter(SupportTicket.status == status)
 
     total = query.count()
 
-    # Status counts
+    # Status counts - use same filter logic
     status_counts = {}
-    for s in ["open", "in_progress", "waiting_customer", "waiting_internal", "resolved", "closed"]:
-        status_counts[s] = db.query(func.count(SupportTicket.id)).filter(
-            and_(SupportTicket.user_id == current_user.id, SupportTicket.status == s)
-        ).scalar()
+    if org_tickets and current_user.is_org_admin:
+        for s in ["open", "in_progress", "waiting_customer", "waiting_internal", "resolved", "closed"]:
+            status_counts[s] = db.query(func.count(SupportTicket.id)).filter(
+                and_(SupportTicket.user_id.in_(org_member_ids), SupportTicket.status == s)
+            ).scalar()
+    else:
+        for s in ["open", "in_progress", "waiting_customer", "waiting_internal", "resolved", "closed"]:
+            status_counts[s] = db.query(func.count(SupportTicket.id)).filter(
+                and_(SupportTicket.user_id == current_user.id, SupportTicket.status == s)
+            ).scalar()
 
     tickets = query.order_by(SupportTicket.created_at.desc()).offset(offset).limit(limit).all()
 
@@ -529,12 +548,23 @@ async def get_my_ticket(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get ticket details (customer view - excludes internal notes)."""
-    ticket = db.query(SupportTicket).filter(
-        and_(SupportTicket.id == ticket_id, SupportTicket.user_id == current_user.id)
-    ).first()
+    """Get ticket details (customer view - excludes internal notes).
+
+    Org admins can view tickets from any org member.
+    """
+    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
 
     if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    # Check access - own ticket or org admin viewing org member's ticket
+    can_access = ticket.user_id == current_user.id
+    if not can_access and current_user.is_org_admin:
+        ticket_owner = db.query(User).filter(User.id == ticket.user_id).first()
+        if ticket_owner and ticket_owner.organization_id == current_user.organization_id:
+            can_access = True
+
+    if not can_access:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
     # Get messages (exclude internal)

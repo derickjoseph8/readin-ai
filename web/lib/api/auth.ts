@@ -24,7 +24,9 @@ export interface User {
   trial_ends_at: string | null
   created_at: string
   account_type?: string
+  // Organization fields
   organization_id?: number | null
+  role_in_org?: 'admin' | 'member' | null
   // Staff/Admin fields
   is_staff: boolean
   staff_role: StaffRole | null
