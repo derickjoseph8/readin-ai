@@ -9,10 +9,18 @@ import {
   TrendingUp,
   Zap,
   ArrowRight,
-  Sparkles
+  Sparkles,
+  Users,
+  DollarSign,
+  Ticket,
+  UserPlus,
+  Activity,
+  AlertTriangle
 } from 'lucide-react'
 import { useAuth } from '@/lib/hooks/useAuth'
+import { usePermissions } from '@/lib/hooks/usePermissions'
 import { useMeetings, useMeetingStats } from '@/lib/hooks/useMeetings'
+import { useAdminStats, useAdminTrends } from '@/lib/hooks/useAdmin'
 
 function StatCard({
   title,
@@ -99,8 +107,182 @@ function RecentMeetingCard({
   )
 }
 
+// Admin Stats Section Component
+function AdminDashboard() {
+  const { stats, isLoading } = useAdminStats()
+  const { trends } = useAdminTrends('daily', 7)
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-32">
+        <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-gold-400"></div>
+      </div>
+    )
+  }
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount)
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          title="Total Users"
+          value={stats?.total_users || 0}
+          icon={Users}
+          color="blue"
+        />
+        <StatCard
+          title="Paying Customers"
+          value={stats?.paying_users || 0}
+          icon={DollarSign}
+          trend={`${stats?.new_users_this_week || 0} this week`}
+          color="emerald"
+        />
+        <StatCard
+          title="Monthly Revenue"
+          value={formatCurrency(stats?.total_revenue_this_month || 0)}
+          icon={TrendingUp}
+          color="gold"
+        />
+        <StatCard
+          title="MRR"
+          value={formatCurrency(stats?.mrr || 0)}
+          icon={Activity}
+          color="purple"
+        />
+      </div>
+
+      {/* Support & Operations */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          title="Open Tickets"
+          value={stats?.open_tickets || 0}
+          icon={Ticket}
+          color="blue"
+        />
+        <StatCard
+          title="Active Chats"
+          value={stats?.active_chats || 0}
+          icon={MessageSquare}
+          trend={`${stats?.waiting_chats || 0} waiting`}
+          color="emerald"
+        />
+        <StatCard
+          title="Online Agents"
+          value={`${stats?.online_agents || 0}/${stats?.total_agents || 0}`}
+          icon={Users}
+          color="gold"
+        />
+        <StatCard
+          title="SLA Breach Rate"
+          value={`${((stats?.sla_breach_rate || 0) * 100).toFixed(1)}%`}
+          icon={AlertTriangle}
+          color={stats?.sla_breach_rate && stats.sla_breach_rate > 0.1 ? 'purple' : 'emerald'}
+        />
+      </div>
+
+      {/* Recent Activity Grid */}
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* New Users */}
+        <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+          <h3 className="font-semibold text-white mb-4 flex items-center">
+            <UserPlus className="h-5 w-5 mr-2 text-emerald-400" />
+            New Users
+          </h3>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-gray-400">Today</span>
+              <span className="text-white font-medium">{stats?.new_users_today || 0}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">This Week</span>
+              <span className="text-white font-medium">{stats?.new_users_this_week || 0}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">This Month</span>
+              <span className="text-white font-medium">{stats?.new_users_this_month || 0}</span>
+            </div>
+          </div>
+          <div className="mt-4 pt-4 border-t border-premium-border">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Trial Users</span>
+              <span className="text-gold-400">{stats?.trial_users || 0}</span>
+            </div>
+            <div className="flex justify-between text-sm mt-2">
+              <span className="text-gray-500">Active Users</span>
+              <span className="text-emerald-400">{stats?.active_users || 0}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Support Overview */}
+        <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+          <h3 className="font-semibold text-white mb-4 flex items-center">
+            <Ticket className="h-5 w-5 mr-2 text-blue-400" />
+            Support Overview
+          </h3>
+          <div className="space-y-3">
+            <div className="flex justify-between">
+              <span className="text-gray-400">Tickets Today</span>
+              <span className="text-white font-medium">{stats?.tickets_today || 0}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Avg Response Time</span>
+              <span className="text-white font-medium">{stats?.avg_response_time_minutes || 0}m</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Teams</span>
+              <span className="text-white font-medium">{stats?.total_teams || 0}</span>
+            </div>
+          </div>
+          <div className="mt-4">
+            <Link
+              href="/dashboard/tickets"
+              className="block w-full py-2 text-center bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm"
+            >
+              View All Tickets
+            </Link>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+          <h3 className="font-semibold text-white mb-4">Quick Actions</h3>
+          <div className="space-y-3">
+            <Link
+              href="/dashboard/users"
+              className="block p-3 bg-premium-surface rounded-lg hover:bg-premium-surface/80 transition-colors"
+            >
+              <span className="text-white text-sm">Manage Users</span>
+              <p className="text-gray-500 text-xs mt-1">View and edit user accounts</p>
+            </Link>
+            <Link
+              href="/dashboard/teams"
+              className="block p-3 bg-premium-surface rounded-lg hover:bg-premium-surface/80 transition-colors"
+            >
+              <span className="text-white text-sm">Manage Teams</span>
+              <p className="text-gray-500 text-xs mt-1">Configure support teams</p>
+            </Link>
+            <Link
+              href="/dashboard/chat"
+              className="block p-3 bg-premium-surface rounded-lg hover:bg-premium-surface/80 transition-colors"
+            >
+              <span className="text-white text-sm">Live Chat Queue</span>
+              <p className="text-gray-500 text-xs mt-1">{stats?.waiting_chats || 0} customers waiting</p>
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const { user, status } = useAuth()
+  const { permissions } = usePermissions()
   const { meetings } = useMeetings(1, 5)
   const { stats } = useMeetingStats()
 
@@ -119,9 +301,21 @@ export default function DashboardPage() {
           {greeting()}, {user?.full_name?.split(' ')[0] || 'there'}
         </h1>
         <p className="text-gray-400 mt-1">
-          Here&apos;s what&apos;s happening with your meetings
+          {permissions.isAdmin
+            ? "Here's your admin overview"
+            : "Here's what's happening with your meetings"}
         </p>
       </div>
+
+      {/* Admin Dashboard for staff */}
+      {permissions.isAdmin && <AdminDashboard />}
+
+      {/* Divider for admins */}
+      {permissions.isAdmin && (
+        <div className="border-t border-premium-border pt-8">
+          <h2 className="text-lg font-semibold text-white mb-4">Your Personal Stats</h2>
+        </div>
+      )}
 
       {/* Subscription Banner */}
       {status?.subscription.status === 'trial' && (

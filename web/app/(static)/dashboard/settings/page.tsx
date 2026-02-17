@@ -18,12 +18,28 @@ export default function SettingsPage() {
     company: '',
   })
 
+  // Map profession names to values
+  const professionNameToValue: Record<string, string> = {
+    'Software Engineer': 'software_engineer',
+    'Product Manager': 'product_manager',
+    'Designer': 'designer',
+    'Sales': 'sales',
+    'Marketing': 'marketing',
+    'Consultant': 'consultant',
+    'Executive': 'executive',
+    'Student': 'student',
+    'Other': 'other',
+  }
+
   useEffect(() => {
     if (user) {
+      const professionValue = user.profession_name
+        ? professionNameToValue[user.profession_name] || user.profession_name.toLowerCase().replace(/\s+/g, '_')
+        : ''
       setFormData({
         full_name: user.full_name || '',
         email: user.email || '',
-        profession: user.profession_name || '',
+        profession: professionValue,
         company: user.company_name || '',
       })
     }
