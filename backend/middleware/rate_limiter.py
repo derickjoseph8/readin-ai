@@ -1,10 +1,11 @@
-"""Rate limiting middleware using SlowAPI."""
+"""Rate limiting middleware using SlowAPI with Redis support."""
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi import Request
 from typing import Optional, Callable
+import logging
 
 from config import (
     RATE_LIMIT_ENABLED,
@@ -12,7 +13,10 @@ from config import (
     RATE_LIMIT_REGISTER,
     RATE_LIMIT_AI,
     RATE_LIMIT_DEFAULT,
+    REDIS_URL,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_user_identifier(request: Request) -> str:
@@ -44,12 +48,31 @@ def get_subscription_aware_limit(request: Request) -> str:
     return RATE_LIMIT_DEFAULT  # Trial/free: default limit
 
 
-# Initialize the limiter
+# Determine storage backend
+def _get_storage_uri() -> str:
+    """
+    Get the storage URI for rate limiting.
+    Uses Redis if available, falls back to in-memory.
+    """
+    if REDIS_URL:
+        try:
+            import redis
+            # Test Redis connection
+            r = redis.from_url(REDIS_URL, socket_timeout=2, socket_connect_timeout=2)
+            r.ping()
+            logger.info("Rate limiter using Redis storage")
+            return REDIS_URL
+        except Exception as e:
+            logger.warning(f"Redis not available for rate limiting, using memory: {e}")
+    return "memory://"
+
+
+# Initialize the limiter with Redis support
 limiter = Limiter(
     key_func=get_user_identifier,
     enabled=RATE_LIMIT_ENABLED,
     default_limits=[RATE_LIMIT_DEFAULT],
-    storage_uri="memory://",  # Use Redis in production: redis://localhost:6379
+    storage_uri=_get_storage_uri(),
     strategy="fixed-window",  # Options: fixed-window, moving-window
 )
 

@@ -8,9 +8,14 @@ import {
   MessageSquare,
   Calendar,
   Zap,
-  Star
+  Star,
+  Download,
+  CheckCircle2,
+  AlertTriangle,
+  Target,
+  Activity
 } from 'lucide-react'
-import { analyticsApi, AnalyticsDashboard, MeetingTrend } from '@/lib/api/analytics'
+import { analyticsApi, AnalyticsDashboard, MeetingTrend, TimeRange, DashboardOverview, ProductivityScore, HeatmapData } from '@/lib/api/analytics'
 import { AnalyticsPageSkeleton } from '@/components/ui/Skeleton'
 
 function StatCard({
@@ -207,24 +212,217 @@ function ResponseQuality({ average, total }: { average: number; total: number })
   )
 }
 
+function ProductivityScoreCard({ score, components }: { score: number; components: { action_completion: number; meeting_efficiency: number; commitment_rate: number } }) {
+  const getScoreColor = (value: number) => {
+    if (value >= 80) return 'text-emerald-400'
+    if (value >= 60) return 'text-gold-400'
+    if (value >= 40) return 'text-yellow-400'
+    return 'text-red-400'
+  }
+
+  const getProgressColor = (value: number) => {
+    if (value >= 80) return 'from-emerald-600 to-emerald-400'
+    if (value >= 60) return 'from-gold-600 to-gold-400'
+    if (value >= 40) return 'from-yellow-600 to-yellow-400'
+    return 'from-red-600 to-red-400'
+  }
+
+  return (
+    <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+      <h3 className="font-semibold text-white mb-4 flex items-center">
+        <Target className="h-5 w-5 text-gold-400 mr-2" />
+        Productivity Score
+      </h3>
+
+      <div className="text-center mb-6">
+        <div className={`text-5xl font-bold ${getScoreColor(score)}`}>
+          {Math.round(score)}
+        </div>
+        <p className="text-gray-500 text-sm mt-1">out of 100</p>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <div className="flex justify-between text-sm mb-1">
+            <span className="text-gray-400 flex items-center">
+              <CheckCircle2 className="h-4 w-4 mr-1" />
+              Action Completion
+            </span>
+            <span className="text-white">{Math.round(components.action_completion)}%</span>
+          </div>
+          <div className="h-2 bg-premium-surface rounded-full overflow-hidden">
+            <div
+              className={`h-full bg-gradient-to-r ${getProgressColor(components.action_completion)} rounded-full`}
+              style={{ width: `${components.action_completion}%` }}
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="flex justify-between text-sm mb-1">
+            <span className="text-gray-400 flex items-center">
+              <Activity className="h-4 w-4 mr-1" />
+              Meeting Efficiency
+            </span>
+            <span className="text-white">{Math.round(components.meeting_efficiency)}%</span>
+          </div>
+          <div className="h-2 bg-premium-surface rounded-full overflow-hidden">
+            <div
+              className={`h-full bg-gradient-to-r ${getProgressColor(components.meeting_efficiency)} rounded-full`}
+              style={{ width: `${components.meeting_efficiency}%` }}
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="flex justify-between text-sm mb-1">
+            <span className="text-gray-400 flex items-center">
+              <AlertTriangle className="h-4 w-4 mr-1" />
+              Commitment Rate
+            </span>
+            <span className="text-white">{Math.round(components.commitment_rate)}%</span>
+          </div>
+          <div className="h-2 bg-premium-surface rounded-full overflow-hidden">
+            <div
+              className={`h-full bg-gradient-to-r ${getProgressColor(components.commitment_rate)} rounded-full`}
+              style={{ width: `${components.commitment_rate}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ActionItemsOverview({ stats }: { stats: { total_created: number; total_completed: number; completion_rate: number; overdue_count: number; by_status: Record<string, number> } }) {
+  return (
+    <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+      <h3 className="font-semibold text-white mb-4 flex items-center">
+        <CheckCircle2 className="h-5 w-5 text-gold-400 mr-2" />
+        Action Items
+      </h3>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="text-center p-3 bg-premium-surface rounded-lg">
+          <p className="text-2xl font-bold text-white">{stats.total_created}</p>
+          <p className="text-xs text-gray-500">Created</p>
+        </div>
+        <div className="text-center p-3 bg-premium-surface rounded-lg">
+          <p className="text-2xl font-bold text-emerald-400">{stats.total_completed}</p>
+          <p className="text-xs text-gray-500">Completed</p>
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <div className="flex justify-between text-sm mb-1">
+          <span className="text-gray-400">Completion Rate</span>
+          <span className="text-white">{stats.completion_rate.toFixed(1)}%</span>
+        </div>
+        <div className="h-3 bg-premium-surface rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full"
+            style={{ width: `${stats.completion_rate}%` }}
+          />
+        </div>
+      </div>
+
+      {stats.overdue_count > 0 && (
+        <div className="flex items-center justify-between p-2 bg-red-500/10 border border-red-500/30 rounded-lg">
+          <span className="text-red-400 text-sm flex items-center">
+            <AlertTriangle className="h-4 w-4 mr-1" />
+            Overdue
+          </span>
+          <span className="text-red-400 font-medium">{stats.overdue_count}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TimeRangeSelector({ value, onChange }: { value: TimeRange; onChange: (v: TimeRange) => void }) {
+  const options: { value: TimeRange; label: string }[] = [
+    { value: 'week', label: 'Week' },
+    { value: 'month', label: 'Month' },
+    { value: 'quarter', label: 'Quarter' },
+    { value: 'year', label: 'Year' },
+  ]
+
+  return (
+    <div className="flex bg-premium-surface rounded-lg p-1">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          onClick={() => onChange(option.value)}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            value === option.value
+              ? 'bg-gold-500 text-premium-bg'
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsDashboard | null>(null)
+  const [overview, setOverview] = useState<DashboardOverview | null>(null)
+  const [productivity, setProductivity] = useState<ProductivityScore | null>(null)
+  const [timeRange, setTimeRange] = useState<TimeRange>('month')
   const [isLoading, setIsLoading] = useState(true)
+  const [isExporting, setIsExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const fetchAnalytics = async () => {
-      try {
-        const dashboard = await analyticsApi.getDashboard()
-        setData(dashboard)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load analytics')
-      } finally {
-        setIsLoading(false)
-      }
-    }
     fetchAnalytics()
-  }, [])
+  }, [timeRange])
+
+  const fetchAnalytics = async () => {
+    setIsLoading(true)
+    try {
+      const [dashboard, overviewData, productivityData] = await Promise.all([
+        analyticsApi.getDashboard(),
+        analyticsApi.getOverview(timeRange).catch(() => null),
+        analyticsApi.getProductivityScore(timeRange).catch(() => null),
+      ])
+      setData(dashboard)
+      setOverview(overviewData)
+      setProductivity(productivityData)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load analytics')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleExport = async (format: 'json' | 'csv') => {
+    setIsExporting(true)
+    try {
+      const result = await analyticsApi.exportAnalytics(timeRange, format)
+      if (format === 'csv' && result instanceof Blob) {
+        const url = window.URL.createObjectURL(result)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `analytics-${timeRange}.csv`
+        a.click()
+        window.URL.revokeObjectURL(url)
+      } else {
+        const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' })
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `analytics-${timeRange}.json`
+        a.click()
+        window.URL.revokeObjectURL(url)
+      }
+    } catch (err) {
+      console.error('Export failed:', err)
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   if (isLoading) {
     return <AnalyticsPageSkeleton />
@@ -243,39 +441,56 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Analytics</h1>
-        <p className="text-gray-400 mt-1">
-          Track your meeting activity and AI usage
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Analytics</h1>
+          <p className="text-gray-400 mt-1">
+            Track your meeting activity and productivity
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+
+          <div className="relative">
+            <button
+              onClick={() => handleExport('csv')}
+              disabled={isExporting}
+              className="px-4 py-2 bg-premium-surface border border-premium-border text-gray-300 rounded-lg hover:bg-premium-card transition-colors flex items-center text-sm"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              {isExporting ? 'Exporting...' : 'Export'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Total AI Responses"
-          value={data?.usage.total_usage || 0}
-          icon={MessageSquare}
+          title="Total Meetings"
+          value={overview?.meetings.total_meetings || 0}
+          icon={Calendar}
           color="gold"
         />
         <StatCard
-          title="This Week"
-          value={data?.usage.weekly_usage || 0}
-          subtitle="AI responses generated"
-          icon={TrendingUp}
+          title="AI Responses"
+          value={overview?.ai_usage.total_responses || data?.usage.total_usage || 0}
+          subtitle={`${overview?.ai_usage.daily_average?.toFixed(1) || 0}/day avg`}
+          icon={MessageSquare}
           color="emerald"
         />
         <StatCard
-          title="This Month"
-          value={data?.usage.monthly_usage || 0}
-          subtitle="AI responses generated"
-          icon={Calendar}
+          title="Action Items"
+          value={overview?.action_items.total_created || 0}
+          subtitle={`${overview?.action_items.completion_rate?.toFixed(0) || 0}% completed`}
+          icon={CheckCircle2}
           color="blue"
         />
         <StatCard
-          title="Time Saved"
-          value={`${data?.time_saved_minutes || 0}m`}
-          subtitle="Estimated from AI assistance"
+          title="Meeting Hours"
+          value={`${Math.round((overview?.meetings.total_duration_minutes || 0) / 60)}h`}
+          subtitle={`${overview?.meetings.avg_duration_minutes?.toFixed(0) || 0}m avg per meeting`}
           icon={Clock}
           color="purple"
         />
@@ -285,6 +500,19 @@ export default function AnalyticsPage() {
       <div className="grid lg:grid-cols-2 gap-6">
         <MeetingTrendsChart trends={data?.meeting_trends || []} />
         <TopicsChart topics={data?.top_topics || []} />
+      </div>
+
+      {/* Productivity & Action Items Row */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        {productivity && (
+          <ProductivityScoreCard
+            score={productivity.score}
+            components={productivity.components}
+          />
+        )}
+        {overview?.action_items && (
+          <ActionItemsOverview stats={overview.action_items} />
+        )}
       </div>
 
       {/* Bottom Row */}
@@ -298,6 +526,32 @@ export default function AnalyticsPage() {
           total={data?.response_quality.total_ratings || 0}
         />
       </div>
+
+      {/* Engagement Score */}
+      {overview && (
+        <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+          <h3 className="font-semibold text-white mb-4 flex items-center">
+            <Activity className="h-5 w-5 text-gold-400 mr-2" />
+            Engagement Score
+          </h3>
+          <div className="flex items-center gap-6">
+            <div className="text-4xl font-bold text-gold-400">
+              {Math.round(overview.engagement_score)}%
+            </div>
+            <div className="flex-1">
+              <div className="h-4 bg-premium-surface rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-gold-600 to-gold-400 rounded-full transition-all"
+                  style={{ width: `${overview.engagement_score}%` }}
+                />
+              </div>
+              <p className="text-gray-500 text-sm mt-2">
+                Based on your activity over the selected time period
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

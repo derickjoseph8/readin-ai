@@ -341,6 +341,173 @@ class EmailService:
             email_type="weekly_digest",
         )
 
+    async def send_security_alert(
+        self,
+        user_id: int,
+        alert_type: str,
+        alert_title: str,
+        alert_description: str,
+        severity: str = "medium",
+        ip_address: Optional[str] = None,
+        device_info: Optional[Dict[str, Any]] = None,
+        location: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Send security alert email using secure template."""
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return {"success": False, "error": "User not found"}
+
+        # Security alerts should always be sent regardless of preferences
+        context = {
+            "user_name": self._sanitize_string(user.full_name) or "there",
+            "alert_type": alert_type,
+            "alert_title": self._sanitize_string(alert_title),
+            "alert_description": self._sanitize_string(alert_description),
+            "severity": severity if severity in ("low", "medium", "high") else "medium",
+            "ip_address": self._sanitize_string(ip_address) if ip_address else None,
+            "device_info": device_info,
+            "location": self._sanitize_string(location) if location else None,
+            "timestamp": datetime.utcnow().strftime("%B %d, %Y at %H:%M UTC"),
+        }
+
+        html = self._render_template("security_alert.html", context)
+
+        return await self.send_email(
+            to_email=user.email,
+            subject=f"Security Alert: {context['alert_title'][:80]}",
+            html_content=html,
+            user_id=user_id,
+            email_type="security_alert",
+        )
+
+    async def send_password_reset(
+        self,
+        email: str,
+        reset_token: str,
+        user_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Send password reset email."""
+        reset_url = f"{APP_URL}/reset-password?token={reset_token}"
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1a1a2e; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .button {{ display: inline-block; background: linear-gradient(135deg, #d4af37 0%, #b8860b 100%); color: #ffffff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>Reset Your Password</h2>
+                <p>Hello {self._sanitize_string(user_name) or 'there'},</p>
+                <p>We received a request to reset your password. Click the button below to create a new password:</p>
+                <p style="text-align: center; margin: 30px 0;">
+                    <a href="{reset_url}" class="button">Reset Password</a>
+                </p>
+                <p>This link will expire in 1 hour.</p>
+                <p>If you didn't request this password reset, you can safely ignore this email.</p>
+                <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e5e5;">
+                <p style="color: #6b7280; font-size: 12px;">ReadIn AI - Your AI Meeting Assistant</p>
+            </div>
+        </body>
+        </html>
+        """
+
+        return await self.send_email(
+            to_email=email,
+            subject="Reset Your ReadIn AI Password",
+            html_content=html,
+            email_type="password_reset",
+        )
+
+    async def send_welcome_email(
+        self,
+        user_id: int,
+    ) -> Dict[str, Any]:
+        """Send welcome email to new users."""
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return {"success": False, "error": "User not found"}
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1a1a2e; background: #f5f5f5; margin: 0; padding: 0; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .card {{ background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}
+                .header {{ background: linear-gradient(135deg, #1a1a2e 0%, #2d2d44 100%); padding: 40px 30px; text-align: center; color: #fff; }}
+                .header h1 {{ margin: 0; font-size: 28px; }}
+                .header .gold {{ color: #d4af37; }}
+                .content {{ padding: 30px; }}
+                .feature {{ display: flex; align-items: flex-start; margin: 20px 0; }}
+                .feature-icon {{ font-size: 24px; margin-right: 15px; }}
+                .button {{ display: inline-block; background: linear-gradient(135deg, #d4af37 0%, #b8860b 100%); color: #ffffff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; }}
+                .footer {{ background: #f9fafb; padding: 20px 30px; text-align: center; color: #6b7280; font-size: 12px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="card">
+                    <div class="header">
+                        <h1>Welcome to <span class="gold">ReadIn AI</span></h1>
+                        <p>Your AI-powered meeting assistant</p>
+                    </div>
+                    <div class="content">
+                        <p>Hello {self._sanitize_string(user.full_name) or 'there'},</p>
+                        <p>Thank you for joining ReadIn AI! We're excited to help you get more out of your meetings.</p>
+
+                        <h3>Here's what you can do:</h3>
+
+                        <div class="feature">
+                            <span class="feature-icon">&#x1F4DD;</span>
+                            <div>
+                                <strong>AI Meeting Summaries</strong>
+                                <p style="margin: 5px 0 0 0; color: #6b7280;">Get intelligent summaries of your meetings with key points and action items.</p>
+                            </div>
+                        </div>
+
+                        <div class="feature">
+                            <span class="feature-icon">&#x2705;</span>
+                            <div>
+                                <strong>Action Item Tracking</strong>
+                                <p style="margin: 5px 0 0 0; color: #6b7280;">Never miss a commitment with automatic action item detection.</p>
+                            </div>
+                        </div>
+
+                        <div class="feature">
+                            <span class="feature-icon">&#x1F4C5;</span>
+                            <div>
+                                <strong>Calendar Integration</strong>
+                                <p style="margin: 5px 0 0 0; color: #6b7280;">Sync with your calendar for smart meeting preparation.</p>
+                            </div>
+                        </div>
+
+                        <p style="text-align: center; margin: 30px 0;">
+                            <a href="{APP_URL}/dashboard" class="button">Go to Dashboard</a>
+                        </p>
+                    </div>
+                    <div class="footer">
+                        <p>&copy; {datetime.now().year} ReadIn AI. All rights reserved.</p>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        return await self.send_email(
+            to_email=user.email,
+            subject="Welcome to ReadIn AI!",
+            html_content=html,
+            user_id=user_id,
+            email_type="welcome",
+        )
+
     async def get_email_history(
         self, user_id: int, limit: int = 50
     ) -> List[EmailNotification]:

@@ -54,6 +54,7 @@ from routes.analytics_dashboard import router as analytics_dashboard_router
 from routes.ai_preferences import router as ai_preferences_router
 from routes.exports import router as exports_router
 from routes.integrations import router as integrations_router
+from routes.payments import router as payments_router
 
 # Import scheduler
 from services.scheduler import start_scheduler, stop_scheduler
@@ -193,6 +194,7 @@ app.include_router(analytics_dashboard_router, prefix=API_V1_PREFIX)
 app.include_router(ai_preferences_router, prefix=API_V1_PREFIX)
 app.include_router(exports_router, prefix=API_V1_PREFIX)
 app.include_router(integrations_router, prefix=API_V1_PREFIX)
+app.include_router(payments_router)  # Already has /api/v1 prefix
 app.include_router(contact_router)
 
 # Admin dashboard routes

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   CreditCard,
   Check,
@@ -9,10 +9,14 @@ import {
   ExternalLink,
   Calendar,
   AlertCircle,
-  Lock
+  Lock,
+  FileText,
+  Download,
+  RefreshCw
 } from 'lucide-react'
 import { useAuth } from '@/lib/hooks/useAuth'
 import { usePermissions } from '@/lib/hooks/usePermissions'
+import { paymentsApi, Invoice, PaymentMethod, SubscriptionStatus } from '@/lib/api/payments'
 
 const plans = [
   {
@@ -66,6 +70,10 @@ export default function BillingPage() {
   const { status } = useAuth()
   const { permissions } = usePermissions()
   const [isLoading, setIsLoading] = useState<string | null>(null)
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
+  const [subscriptionDetails, setSubscriptionDetails] = useState<SubscriptionStatus | null>(null)
+  const [loadingInvoices, setLoadingInvoices] = useState(false)
 
   const currentPlan = status?.subscription.status === 'active' ? 'premium' :
                       status?.subscription.status === 'trial' ? 'trial' : 'free'
@@ -73,19 +81,38 @@ export default function BillingPage() {
   // Check if user can manage billing (org admins or non-org users)
   const canManageBilling = permissions.canManageOrgBilling
 
+  // Fetch billing data on mount
+  useEffect(() => {
+    if (canManageBilling) {
+      fetchBillingData()
+    }
+  }, [canManageBilling])
+
+  const fetchBillingData = async () => {
+    setLoadingInvoices(true)
+    try {
+      const [invoicesData, methodsData, subData] = await Promise.all([
+        paymentsApi.getInvoices(5),
+        paymentsApi.getPaymentMethods(),
+        paymentsApi.getSubscriptionStatus(),
+      ])
+      setInvoices(invoicesData)
+      setPaymentMethods(methodsData)
+      setSubscriptionDetails(subData)
+    } catch (error) {
+      console.error('Failed to fetch billing data:', error)
+    } finally {
+      setLoadingInvoices(false)
+    }
+  }
+
   const handleUpgrade = async (planId: string) => {
     if (!canManageBilling) return
     setIsLoading(planId)
     try {
-      // Redirect to Stripe checkout
-      const response = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan: planId }),
-      })
-      const data = await response.json()
-      if (data.url) {
-        window.location.href = data.url
+      const data = await paymentsApi.createCheckout()
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url
       }
     } catch (error) {
       console.error('Upgrade failed:', error)
@@ -98,16 +125,42 @@ export default function BillingPage() {
     if (!canManageBilling) return
 
     try {
-      const response = await fetch('/api/stripe/portal', {
-        method: 'POST',
-      })
-      const data = await response.json()
-      if (data.url) {
-        window.location.href = data.url
+      const data = await paymentsApi.getBillingPortal()
+      if (data.portal_url) {
+        window.location.href = data.portal_url
       }
     } catch (error) {
       console.error('Portal access failed:', error)
     }
+  }
+
+  const handleCancelSubscription = async () => {
+    if (!confirm('Are you sure you want to cancel your subscription? You will retain access until the end of your billing period.')) {
+      return
+    }
+
+    try {
+      await paymentsApi.cancelSubscription()
+      fetchBillingData()
+    } catch (error) {
+      console.error('Cancel failed:', error)
+    }
+  }
+
+  const handleReactivate = async () => {
+    try {
+      await paymentsApi.reactivateSubscription()
+      fetchBillingData()
+    } catch (error) {
+      console.error('Reactivate failed:', error)
+    }
+  }
+
+  const formatCurrency = (amount: number, currency: string) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency.toUpperCase(),
+    }).format(amount / 100)
   }
 
   // Show restricted access message for org members who can't manage billing
@@ -321,26 +374,123 @@ export default function BillingPage() {
         <div className="bg-premium-card border border-premium-border rounded-xl p-6">
           <h2 className="font-semibold text-white mb-4 flex items-center">
             <CreditCard className="h-5 w-5 text-gold-400 mr-2" />
-            Payment Method
+            Payment Methods
           </h2>
 
-          <div className="flex items-center justify-between p-4 bg-premium-surface rounded-lg">
-            <div className="flex items-center">
-              <div className="w-10 h-7 bg-gradient-to-r from-blue-600 to-blue-400 rounded flex items-center justify-center mr-3">
-                <span className="text-white text-xs font-bold">VISA</span>
-              </div>
-              <div>
-                <p className="text-white text-sm">**** **** **** 4242</p>
-                <p className="text-gray-500 text-xs">Expires 12/25</p>
-              </div>
+          {paymentMethods.length > 0 ? (
+            <div className="space-y-3">
+              {paymentMethods.map((method) => (
+                <div key={method.id} className="flex items-center justify-between p-4 bg-premium-surface rounded-lg">
+                  <div className="flex items-center">
+                    <div className="w-10 h-7 bg-gradient-to-r from-blue-600 to-blue-400 rounded flex items-center justify-center mr-3">
+                      <span className="text-white text-xs font-bold uppercase">
+                        {method.card_brand || 'CARD'}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-white text-sm">
+                        **** **** **** {method.card_last4}
+                        {method.is_default && (
+                          <span className="ml-2 px-2 py-0.5 bg-gold-500/20 text-gold-400 text-xs rounded">
+                            Default
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-gray-500 text-xs">
+                        Expires {method.card_exp_month}/{method.card_exp_year}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleManageSubscription}
+                    className="text-gold-400 text-sm hover:text-gold-300 transition-colors"
+                  >
+                    Update
+                  </button>
+                </div>
+              ))}
             </div>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-gray-400 text-sm">No payment methods on file</p>
+              <button
+                onClick={handleManageSubscription}
+                className="mt-2 text-gold-400 text-sm hover:text-gold-300"
+              >
+                Add Payment Method
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Invoice History */}
+      {status?.subscription.status === 'active' && (
+        <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-white flex items-center">
+              <FileText className="h-5 w-5 text-gold-400 mr-2" />
+              Invoice History
+            </h2>
             <button
-              onClick={handleManageSubscription}
-              className="text-gold-400 text-sm hover:text-gold-300 transition-colors"
+              onClick={fetchBillingData}
+              disabled={loadingInvoices}
+              className="text-gray-400 hover:text-white transition-colors"
             >
-              Update
+              <RefreshCw className={`h-4 w-4 ${loadingInvoices ? 'animate-spin' : ''}`} />
             </button>
           </div>
+
+          {invoices.length > 0 ? (
+            <div className="space-y-2">
+              {invoices.map((invoice) => (
+                <div key={invoice.id} className="flex items-center justify-between p-3 bg-premium-surface rounded-lg">
+                  <div className="flex items-center">
+                    <div className="mr-3">
+                      <p className="text-white text-sm">{invoice.number || 'Invoice'}</p>
+                      <p className="text-gray-500 text-xs">
+                        {new Date(invoice.created).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <p className="text-white text-sm">
+                        {formatCurrency(invoice.amount_paid, invoice.currency)}
+                      </p>
+                      <span className={`text-xs ${
+                        invoice.status === 'paid' ? 'text-emerald-400' :
+                        invoice.status === 'open' ? 'text-gold-400' : 'text-gray-400'
+                      }`}>
+                        {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                      </span>
+                    </div>
+                    {invoice.invoice_pdf && (
+                      <a
+                        href={invoice.invoice_pdf}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-gold-400 hover:text-gold-300 transition-colors"
+                      >
+                        <Download className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-400 text-sm text-center py-4">No invoices yet</p>
+          )}
+
+          {invoices.length > 0 && (
+            <button
+              onClick={handleManageSubscription}
+              className="mt-4 w-full py-2 border border-premium-border text-gray-300 rounded-lg hover:bg-premium-surface transition-colors text-sm"
+            >
+              View All Invoices
+            </button>
+          )}
         </div>
       )}
 

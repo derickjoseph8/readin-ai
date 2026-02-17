@@ -109,9 +109,18 @@ class HealthChecker:
             import redis
             client = redis.from_url(REDIS_URL, socket_timeout=2)
             client.ping()
+
+            # Get Redis info for cache stats
+            info = client.info()
             self.checks["redis"] = {
                 "status": HealthStatus.HEALTHY,
                 "response_time_ms": round((time.perf_counter() - start) * 1000, 2),
+                "stats": {
+                    "connected_clients": info.get("connected_clients", 0),
+                    "used_memory_human": info.get("used_memory_human", "0"),
+                    "total_keys": client.dbsize(),
+                    "uptime_days": info.get("uptime_in_days", 0),
+                },
             }
         except ImportError:
             self.checks["redis"] = {

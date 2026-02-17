@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Alert - ReadIn AI</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #1a1a2e;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            color: #ffffff;
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .header .icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .alert-box {
+            background: #fef2f2;
+            border-left: 4px solid #dc2626;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .alert-box.warning {
+            background: #fffbeb;
+            border-left-color: #f59e0b;
+        }
+        .alert-box.info {
+            background: #eff6ff;
+            border-left-color: #3b82f6;
+        }
+        .detail-row {
+            display: flex;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .detail-label {
+            font-weight: 600;
+            color: #6b7280;
+            width: 120px;
+            flex-shrink: 0;
+        }
+        .detail-value {
+            color: #1a1a2e;
+        }
+        .button {
+            display: inline-block;
+            background: linear-gradient(135deg, #d4af37 0%, #b8860b 100%);
+            color: #ffffff;
+            padding: 14px 28px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            margin: 10px 5px 10px 0;
+        }
+        .button.secondary {
+            background: #6b7280;
+        }
+        .button.danger {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+        }
+        .footer {
+            background: #f9fafb;
+            padding: 20px 30px;
+            text-align: center;
+            color: #6b7280;
+            font-size: 12px;
+        }
+        .footer a {
+            color: #d4af37;
+            text-decoration: none;
+        }
+        .timestamp {
+            color: #9ca3af;
+            font-size: 13px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <div class="icon">&#x1F6A8;</div>
+                <h1>Security Alert</h1>
+            </div>
+
+            <div class="content">
+                <p>Hello {{ user_name }},</p>
+
+                <div class="alert-box {% if severity == 'high' %}{% elif severity == 'medium' %}warning{% else %}info{% endif %}">
+                    <strong>{{ alert_title }}</strong>
+                    <p style="margin: 10px 0 0 0;">{{ alert_description }}</p>
+                </div>
+
+                {% if device_info %}
+                <h3 style="margin-top: 25px; color: #1a1a2e;">Device Information</h3>
+                <div style="background: #f9fafb; border-radius: 8px; padding: 5px 15px;">
+                    {% if device_info.device_type %}
+                    <div class="detail-row">
+                        <span class="detail-label">Device Type</span>
+                        <span class="detail-value">{{ device_info.device_type | title }}</span>
+                    </div>
+                    {% endif %}
+                    {% if device_info.browser %}
+                    <div class="detail-row">
+                        <span class="detail-label">Browser</span>
+                        <span class="detail-value">{{ device_info.browser }}</span>
+                    </div>
+                    {% endif %}
+                    {% if device_info.os %}
+                    <div class="detail-row">
+                        <span class="detail-label">Operating System</span>
+                        <span class="detail-value">{{ device_info.os }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if ip_address %}
+                <div class="detail-row" style="margin-top: 15px;">
+                    <span class="detail-label">IP Address</span>
+                    <span class="detail-value">{{ ip_address }}</span>
+                </div>
+                {% endif %}
+
+                {% if location %}
+                <div class="detail-row">
+                    <span class="detail-label">Location</span>
+                    <span class="detail-value">{{ location }}</span>
+                </div>
+                {% endif %}
+
+                <div style="margin-top: 30px;">
+                    <p><strong>Was this you?</strong></p>
+                    <p>If you recognize this activity, no action is needed. If you don't recognize this activity, we recommend securing your account immediately.</p>
+
+                    <a href="{{ dashboard_url }}/settings/security" class="button">Review Security Settings</a>
+                    <a href="{{ dashboard_url }}/settings/security#sessions" class="button secondary">View Active Sessions</a>
+                </div>
+
+                {% if alert_type == 'failed_attempts' %}
+                <div class="alert-box" style="margin-top: 20px;">
+                    <strong>Protect Your Account</strong>
+                    <p style="margin: 10px 0 0 0;">Consider enabling two-factor authentication for additional security.</p>
+                    <a href="{{ dashboard_url }}/settings/security#2fa" class="button" style="margin-top: 15px;">Enable 2FA</a>
+                </div>
+                {% endif %}
+
+                <p class="timestamp">This activity was detected on {{ timestamp }}</p>
+            </div>
+
+            <div class="footer">
+                <p>This is an automated security notification from <strong>ReadIn AI</strong>.</p>
+                <p>If you have questions, please contact our <a href="mailto:support@getreadin.ai">support team</a>.</p>
+                <p style="margin-top: 15px;">
+                    <a href="{{ preferences_url }}">Email Preferences</a> &bull;
+                    <a href="{{ app_url }}/privacy">Privacy Policy</a>
+                </p>
+                <p>&copy; {{ year }} ReadIn AI. All rights reserved.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

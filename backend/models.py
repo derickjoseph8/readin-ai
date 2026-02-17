@@ -189,6 +189,7 @@ class User(Base):
     participant_memories = relationship("ParticipantMemory", back_populates="user")
     media_appearances = relationship("MediaAppearance", back_populates="user")
     email_notifications = relationship("EmailNotification", back_populates="user")
+    payment_history = relationship("PaymentHistory", back_populates="user")
 
     @property
     def is_trial(self) -> bool:
@@ -704,8 +705,38 @@ class EmailNotification(Base):
 
 
 # =============================================================================
+# PAYMENT HISTORY
+# =============================================================================
+
+
+class PaymentHistory(Base):
+    """Log of all payment transactions."""
+    __tablename__ = "payment_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Stripe details
+    stripe_invoice_id = Column(String, nullable=True, index=True)
+    stripe_payment_intent_id = Column(String, nullable=True)
+
+    # Payment info
+    amount = Column(Integer, nullable=False)  # Amount in cents
+    currency = Column(String(3), default="usd")
+    status = Column(String, nullable=False)  # paid, failed, refunded, pending
+    description = Column(String, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="payment_history")
+
+
+# =============================================================================
 # AUDIT LOG (GDPR COMPLIANCE)
 # =============================================================================
+
 
 class AuditLog(Base):
     """

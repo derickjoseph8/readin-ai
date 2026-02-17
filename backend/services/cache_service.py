@@ -335,3 +335,102 @@ class CacheTTL:
     ANALYTICS = LONG
     SEARCH = SHORT
     HEALTH = VERY_SHORT
+    SESSION = DAY         # 24 hours for sessions
+
+
+# =============================================================================
+# SESSION CACHING
+# =============================================================================
+
+class SessionCache:
+    """
+    Redis-based session caching for improved performance.
+
+    Caches user session data to reduce database lookups.
+    """
+
+    def __init__(self):
+        self.cache = cache
+        self.prefix = "session:"
+
+    def _key(self, session_id: str) -> str:
+        return f"{self.prefix}{session_id}"
+
+    def get_session(self, session_id: str) -> Optional[dict]:
+        """Get cached session data."""
+        return self.cache.get(self._key(session_id))
+
+    def set_session(
+        self,
+        session_id: str,
+        data: dict,
+        ttl_seconds: int = CacheTTL.SESSION,
+    ) -> bool:
+        """Cache session data."""
+        return self.cache.set(self._key(session_id), data, ttl_seconds)
+
+    def delete_session(self, session_id: str) -> bool:
+        """Delete cached session."""
+        return self.cache.delete(self._key(session_id))
+
+    def refresh_session(self, session_id: str, ttl_seconds: int = CacheTTL.SESSION) -> bool:
+        """Refresh session TTL."""
+        if not self.cache.enabled:
+            return False
+
+        try:
+            self.cache.client.expire(self._key(session_id), ttl_seconds)
+            return True
+        except Exception:
+            return False
+
+    def invalidate_user_sessions(self, user_id: int) -> int:
+        """Invalidate all sessions for a user."""
+        return self.cache.delete_pattern(f"{self.prefix}*:user:{user_id}")
+
+
+# Global session cache instance
+session_cache = SessionCache()
+
+
+# =============================================================================
+# API RESPONSE CACHING DECORATOR
+# =============================================================================
+
+def cache_response(
+    key_prefix: str,
+    ttl_seconds: int = CacheTTL.MEDIUM,
+    include_user: bool = True,
+):
+    """
+    FastAPI dependency for caching API responses.
+
+    Usage:
+        @router.get("/data")
+        async def get_data(
+            cached = Depends(cache_response("my_data", ttl_seconds=300)),
+            db: Session = Depends(get_db),
+        ):
+            if cached:
+                return cached
+            # ... fetch data
+            # cache.set(key, data, ttl_seconds)
+            return data
+    """
+    async def dependency(request):
+        if not cache.enabled:
+            return None
+
+        # Build cache key
+        user_id = ""
+        if include_user:
+            user = getattr(request.state, "user", None)
+            if user:
+                user_id = f":user:{user.id}"
+
+        query_hash = hashlib.md5(str(request.query_params).encode()).hexdigest()[:8]
+        cache_key = f"api:{key_prefix}{user_id}:{query_hash}"
+
+        return cache.get(cache_key)
+
+    return dependency
