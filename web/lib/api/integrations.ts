@@ -1,5 +1,11 @@
 /**
- * Integrations API client for Slack and Microsoft Teams.
+ * Integrations API client for Slack, Microsoft Teams, and Video Platforms.
+ *
+ * VIDEO PLATFORM INTEGRATIONS (STEALTH MODE):
+ * - NO bots join meetings (completely invisible to other participants)
+ * - Local audio capture only via desktop app
+ * - Calendar sync for meeting detection
+ * - Per-user OAuth tokens (data isolation)
  */
 
 import { apiClient } from './client'
@@ -16,6 +22,29 @@ export interface IntegrationStatus {
   notifications_enabled: boolean
   meeting_summaries_enabled: boolean
   action_item_reminders_enabled: boolean
+}
+
+export interface VideoPlatformStatus {
+  provider: string
+  display_name: string
+  is_configured: boolean
+  is_connected: boolean
+  email?: string
+  display_name_user?: string
+  connected_at?: string
+  stealth_mode: boolean
+  privacy_note: string
+}
+
+export interface Meeting {
+  id: string
+  topic: string
+  start_time: string
+  duration: number
+  join_url?: string
+  platform: string
+  organizer?: string
+  attendees?: string[]
 }
 
 export interface IntegrationSettings {
@@ -90,4 +119,85 @@ export async function sendTestNotification(
   channelId: string
 ): Promise<{ message: string }> {
   return apiClient.post(`/api/v1/integrations/${provider}/test`, { channel_id: channelId })
+}
+
+// =============================================================================
+// VIDEO PLATFORM INTEGRATIONS (STEALTH MODE)
+// =============================================================================
+
+// Get status of all video platform integrations
+export async function getVideoPlatformsStatus(): Promise<{
+  video_platforms: VideoPlatformStatus[]
+  stealth_mode_explanation: string
+}> {
+  return apiClient.get('/api/v1/integrations/video-platforms/status')
+}
+
+// Zoom
+export async function getZoomAuthUrl(): Promise<{ authorization_url: string }> {
+  return apiClient.get('/api/v1/integrations/zoom/authorize')
+}
+
+export async function disconnectZoom(): Promise<{ message: string }> {
+  return apiClient.delete('/api/v1/integrations/zoom')
+}
+
+export async function getZoomMeetings(): Promise<{ meetings: Meeting[], platform: string }> {
+  return apiClient.get('/api/v1/integrations/zoom/meetings')
+}
+
+// Google Meet
+export async function getGoogleMeetAuthUrl(): Promise<{ authorization_url: string }> {
+  return apiClient.get('/api/v1/integrations/google-meet/authorize')
+}
+
+export async function disconnectGoogleMeet(): Promise<{ message: string }> {
+  return apiClient.delete('/api/v1/integrations/google-meet')
+}
+
+export async function getGoogleMeetMeetings(): Promise<{ meetings: Meeting[], platform: string }> {
+  return apiClient.get('/api/v1/integrations/google-meet/meetings')
+}
+
+// Microsoft Teams Meetings (Calendar sync)
+export async function getTeamsMeetingAuthUrl(): Promise<{ authorization_url: string }> {
+  return apiClient.get('/api/v1/integrations/teams-meeting/authorize')
+}
+
+export async function disconnectTeamsMeeting(): Promise<{ message: string }> {
+  return apiClient.delete('/api/v1/integrations/teams-meeting')
+}
+
+export async function getTeamsMeetings(): Promise<{ meetings: Meeting[], platform: string }> {
+  return apiClient.get('/api/v1/integrations/teams-meeting/meetings')
+}
+
+// Webex
+export async function getWebexAuthUrl(): Promise<{ authorization_url: string }> {
+  return apiClient.get('/api/v1/integrations/webex/authorize')
+}
+
+export async function disconnectWebex(): Promise<{ message: string }> {
+  return apiClient.delete('/api/v1/integrations/webex')
+}
+
+export async function getWebexMeetings(): Promise<{ meetings: Meeting[], platform: string }> {
+  return apiClient.get('/api/v1/integrations/webex/meetings')
+}
+
+// Unified meeting endpoints
+export async function getAllUpcomingMeetings(): Promise<{
+  meetings: Meeting[]
+  stealth_mode: boolean
+  privacy_note: string
+}> {
+  return apiClient.get('/api/v1/integrations/meetings/upcoming')
+}
+
+export async function checkActiveMeeting(): Promise<{
+  active_meeting: Meeting | null
+  is_in_meeting: boolean
+  stealth_mode: boolean
+}> {
+  return apiClient.get('/api/v1/integrations/meetings/active')
 }

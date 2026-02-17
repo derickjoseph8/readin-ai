@@ -14,7 +14,11 @@ import {
   Send,
   ChevronDown,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Shield,
+  Eye,
+  EyeOff,
+  Calendar
 } from 'lucide-react'
 import {
   getIntegrationsStatus,
@@ -29,7 +33,18 @@ import {
   sendTestNotification,
   IntegrationStatus,
   Channel,
-  Team
+  Team,
+  // Video platform integrations
+  getVideoPlatformsStatus,
+  getZoomAuthUrl,
+  disconnectZoom,
+  getGoogleMeetAuthUrl,
+  disconnectGoogleMeet,
+  getTeamsMeetingAuthUrl,
+  disconnectTeamsMeeting,
+  getWebexAuthUrl,
+  disconnectWebex,
+  VideoPlatformStatus
 } from '@/lib/api/integrations'
 
 export default function IntegrationsPage() {
@@ -52,6 +67,11 @@ export default function IntegrationsPage() {
   const [selectedTeam, setSelectedTeam] = useState<string>('')
   const [teamsSelectedChannel, setTeamsSelectedChannel] = useState<string>('')
   const [teamsSettingsOpen, setTeamsSettingsOpen] = useState(false)
+
+  // Video platform state (STEALTH MODE)
+  const [videoPlatforms, setVideoPlatforms] = useState<VideoPlatformStatus[]>([])
+  const [videoPlatformsLoading, setVideoPlatformsLoading] = useState(false)
+  const [stealthModeExplanation, setStealthModeExplanation] = useState<string>('')
 
   // Settings state
   const [settings, setSettings] = useState<{
@@ -89,10 +109,21 @@ export default function IntegrationsPage() {
 
     if (successParam === 'slack_connected') {
       setSuccess('Slack connected successfully!')
-      // Clear the URL params
       window.history.replaceState({}, '', '/dashboard/settings/integrations')
     } else if (successParam === 'teams_connected') {
       setSuccess('Microsoft Teams connected successfully!')
+      window.history.replaceState({}, '', '/dashboard/settings/integrations')
+    } else if (successParam === 'zoom_connected') {
+      setSuccess('Zoom connected successfully! Calendar sync enabled.')
+      window.history.replaceState({}, '', '/dashboard/settings/integrations')
+    } else if (successParam === 'google_connected') {
+      setSuccess('Google Meet connected successfully! Calendar sync enabled.')
+      window.history.replaceState({}, '', '/dashboard/settings/integrations')
+    } else if (successParam === 'teams_meeting_connected') {
+      setSuccess('Teams Meeting calendar connected successfully!')
+      window.history.replaceState({}, '', '/dashboard/settings/integrations')
+    } else if (successParam === 'webex_connected') {
+      setSuccess('Webex connected successfully! Calendar sync enabled.')
       window.history.replaceState({}, '', '/dashboard/settings/integrations')
     } else if (errorParam === 'slack_auth_failed') {
       setError('Failed to connect Slack. Please try again.')
@@ -100,13 +131,39 @@ export default function IntegrationsPage() {
     } else if (errorParam === 'teams_auth_failed') {
       setError('Failed to connect Microsoft Teams. Please try again.')
       window.history.replaceState({}, '', '/dashboard/settings/integrations')
+    } else if (errorParam === 'zoom_auth_failed') {
+      setError('Failed to connect Zoom. Please try again.')
+      window.history.replaceState({}, '', '/dashboard/settings/integrations')
+    } else if (errorParam === 'google_auth_failed') {
+      setError('Failed to connect Google. Please try again.')
+      window.history.replaceState({}, '', '/dashboard/settings/integrations')
+    } else if (errorParam === 'teams_meeting_auth_failed') {
+      setError('Failed to connect Teams Meeting. Please try again.')
+      window.history.replaceState({}, '', '/dashboard/settings/integrations')
+    } else if (errorParam === 'webex_auth_failed') {
+      setError('Failed to connect Webex. Please try again.')
+      window.history.replaceState({}, '', '/dashboard/settings/integrations')
     }
   }, [searchParams])
 
   // Load integrations status
   useEffect(() => {
     loadIntegrations()
+    loadVideoPlatforms()
   }, [])
+
+  async function loadVideoPlatforms() {
+    try {
+      setVideoPlatformsLoading(true)
+      const data = await getVideoPlatformsStatus()
+      setVideoPlatforms(data.video_platforms)
+      setStealthModeExplanation(data.stealth_mode_explanation)
+    } catch (err) {
+      console.error('Failed to load video platforms:', err)
+    } finally {
+      setVideoPlatformsLoading(false)
+    }
+  }
 
   async function loadIntegrations() {
     try {
@@ -286,8 +343,95 @@ export default function IntegrationsPage() {
     }
   }
 
+  // Video platform handlers
+  async function handleConnectZoom() {
+    try {
+      const data = await getZoomAuthUrl()
+      window.location.href = data.authorization_url
+    } catch (err) {
+      setError('Failed to initiate Zoom connection')
+    }
+  }
+
+  async function handleDisconnectZoom() {
+    if (!confirm('Are you sure you want to disconnect Zoom?')) return
+    try {
+      await disconnectZoom()
+      setSuccess('Zoom disconnected')
+      loadVideoPlatforms()
+    } catch (err) {
+      setError('Failed to disconnect Zoom')
+    }
+  }
+
+  async function handleConnectGoogleMeet() {
+    try {
+      const data = await getGoogleMeetAuthUrl()
+      window.location.href = data.authorization_url
+    } catch (err) {
+      setError('Failed to initiate Google Meet connection')
+    }
+  }
+
+  async function handleDisconnectGoogleMeet() {
+    if (!confirm('Are you sure you want to disconnect Google Meet?')) return
+    try {
+      await disconnectGoogleMeet()
+      setSuccess('Google Meet disconnected')
+      loadVideoPlatforms()
+    } catch (err) {
+      setError('Failed to disconnect Google Meet')
+    }
+  }
+
+  async function handleConnectTeamsMeeting() {
+    try {
+      const data = await getTeamsMeetingAuthUrl()
+      window.location.href = data.authorization_url
+    } catch (err) {
+      setError('Failed to initiate Teams Meeting connection')
+    }
+  }
+
+  async function handleDisconnectTeamsMeeting() {
+    if (!confirm('Are you sure you want to disconnect Teams Meeting?')) return
+    try {
+      await disconnectTeamsMeeting()
+      setSuccess('Teams Meeting disconnected')
+      loadVideoPlatforms()
+    } catch (err) {
+      setError('Failed to disconnect Teams Meeting')
+    }
+  }
+
+  async function handleConnectWebex() {
+    try {
+      const data = await getWebexAuthUrl()
+      window.location.href = data.authorization_url
+    } catch (err) {
+      setError('Failed to initiate Webex connection')
+    }
+  }
+
+  async function handleDisconnectWebex() {
+    if (!confirm('Are you sure you want to disconnect Webex?')) return
+    try {
+      await disconnectWebex()
+      setSuccess('Webex disconnected')
+      loadVideoPlatforms()
+    } catch (err) {
+      setError('Failed to disconnect Webex')
+    }
+  }
+
   const slackIntegration = integrations.find(i => i.provider === 'slack')
   const teamsIntegration = integrations.find(i => i.provider === 'teams')
+
+  // Video platforms
+  const zoomPlatform = videoPlatforms.find(p => p.provider === 'zoom')
+  const googleMeetPlatform = videoPlatforms.find(p => p.provider === 'google_meet')
+  const teamsMeetingPlatform = videoPlatforms.find(p => p.provider === 'microsoft_teams')
+  const webexPlatform = videoPlatforms.find(p => p.provider === 'webex')
 
   // Auto-clear messages
   useEffect(() => {
@@ -675,6 +819,228 @@ export default function IntegrationsPage() {
         )}
       </div>
 
+      {/* VIDEO PLATFORM INTEGRATIONS (STEALTH MODE) */}
+      <div className="mt-10">
+        <div className="flex items-center mb-4">
+          <EyeOff className="h-5 w-5 text-gold-400 mr-2" />
+          <h2 className="text-xl font-bold text-white">Video Platform Integrations</h2>
+          <span className="ml-3 px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-xs rounded-full">
+            STEALTH MODE
+          </span>
+        </div>
+
+        {/* Stealth Mode Explanation Banner */}
+        <div className="bg-gradient-to-r from-emerald-500/10 to-blue-500/10 border border-emerald-500/30 rounded-xl p-4 mb-6">
+          <div className="flex items-start">
+            <Shield className="h-6 w-6 text-emerald-400 mr-3 mt-0.5 flex-shrink-0" />
+            <div>
+              <h3 className="text-white font-semibold mb-1">Privacy-First Design</h3>
+              <p className="text-sm text-gray-300">
+                {stealthModeExplanation || 'ReadIn AI operates in STEALTH MODE. Other meeting participants CANNOT see that you are using AI assistance. No bots or AI agents join your meetings. Audio is captured locally by the desktop app and processed securely.'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4">
+          {/* Zoom Integration */}
+          <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center">
+                <div className="w-12 h-12 bg-[#2D8CFF] rounded-lg flex items-center justify-center">
+                  <Video className="h-6 w-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <h3 className="text-lg font-semibold text-white">Zoom</h3>
+                  <p className="text-sm text-gray-400">
+                    {zoomPlatform?.is_connected
+                      ? `Connected as ${zoomPlatform.email || zoomPlatform.display_name_user}`
+                      : 'Sync Zoom meeting schedule'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                {zoomPlatform?.is_connected ? (
+                  <>
+                    <span className="flex items-center text-sm text-emerald-400">
+                      <Check className="h-4 w-4 mr-1" />
+                      Connected
+                    </span>
+                    <button
+                      onClick={handleDisconnectZoom}
+                      className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors"
+                    >
+                      Disconnect
+                    </button>
+                  </>
+                ) : zoomPlatform?.is_configured ? (
+                  <button
+                    onClick={handleConnectZoom}
+                    className="px-4 py-2 bg-[#2D8CFF] text-white rounded-lg hover:bg-[#1a7ae8] transition-colors flex items-center"
+                  >
+                    Connect Zoom
+                    <ExternalLink className="h-4 w-4 ml-2" />
+                  </button>
+                ) : (
+                  <span className="text-sm text-gray-500">Not configured</span>
+                )}
+              </div>
+            </div>
+            <div className="mt-3 flex items-center text-xs text-gray-500">
+              <Calendar className="h-3 w-3 mr-1" />
+              Calendar sync only - No bot joins meetings
+            </div>
+          </div>
+
+          {/* Google Meet Integration */}
+          <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center">
+                <div className="w-12 h-12 bg-gradient-to-br from-[#00897B] to-[#4CAF50] rounded-lg flex items-center justify-center">
+                  <Video className="h-6 w-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <h3 className="text-lg font-semibold text-white">Google Meet</h3>
+                  <p className="text-sm text-gray-400">
+                    {googleMeetPlatform?.is_connected
+                      ? `Connected as ${googleMeetPlatform.email || googleMeetPlatform.display_name_user}`
+                      : 'Sync Google Calendar for Meet detection'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                {googleMeetPlatform?.is_connected ? (
+                  <>
+                    <span className="flex items-center text-sm text-emerald-400">
+                      <Check className="h-4 w-4 mr-1" />
+                      Connected
+                    </span>
+                    <button
+                      onClick={handleDisconnectGoogleMeet}
+                      className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors"
+                    >
+                      Disconnect
+                    </button>
+                  </>
+                ) : googleMeetPlatform?.is_configured ? (
+                  <button
+                    onClick={handleConnectGoogleMeet}
+                    className="px-4 py-2 bg-gradient-to-r from-[#00897B] to-[#4CAF50] text-white rounded-lg hover:opacity-90 transition-colors flex items-center"
+                  >
+                    Connect Google
+                    <ExternalLink className="h-4 w-4 ml-2" />
+                  </button>
+                ) : (
+                  <span className="text-sm text-gray-500">Not configured</span>
+                )}
+              </div>
+            </div>
+            <div className="mt-3 flex items-center text-xs text-gray-500">
+              <Calendar className="h-3 w-3 mr-1" />
+              Calendar sync only - No bot joins meetings
+            </div>
+          </div>
+
+          {/* Microsoft Teams Meeting Integration */}
+          <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center">
+                <div className="w-12 h-12 bg-[#6264A7] rounded-lg flex items-center justify-center">
+                  <Video className="h-6 w-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <h3 className="text-lg font-semibold text-white">Microsoft Teams Meetings</h3>
+                  <p className="text-sm text-gray-400">
+                    {teamsMeetingPlatform?.is_connected
+                      ? `Connected as ${teamsMeetingPlatform.email || teamsMeetingPlatform.display_name_user}`
+                      : 'Sync Teams calendar for meeting detection'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                {teamsMeetingPlatform?.is_connected ? (
+                  <>
+                    <span className="flex items-center text-sm text-emerald-400">
+                      <Check className="h-4 w-4 mr-1" />
+                      Connected
+                    </span>
+                    <button
+                      onClick={handleDisconnectTeamsMeeting}
+                      className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors"
+                    >
+                      Disconnect
+                    </button>
+                  </>
+                ) : teamsMeetingPlatform?.is_configured ? (
+                  <button
+                    onClick={handleConnectTeamsMeeting}
+                    className="px-4 py-2 bg-[#6264A7] text-white rounded-lg hover:bg-[#5254a3] transition-colors flex items-center"
+                  >
+                    Connect Teams
+                    <ExternalLink className="h-4 w-4 ml-2" />
+                  </button>
+                ) : (
+                  <span className="text-sm text-gray-500">Not configured</span>
+                )}
+              </div>
+            </div>
+            <div className="mt-3 flex items-center text-xs text-gray-500">
+              <Calendar className="h-3 w-3 mr-1" />
+              Calendar sync only - No bot joins meetings
+            </div>
+          </div>
+
+          {/* Webex Integration */}
+          <div className="bg-premium-card border border-premium-border rounded-xl p-6">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center">
+                <div className="w-12 h-12 bg-[#00BCF2] rounded-lg flex items-center justify-center">
+                  <Video className="h-6 w-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <h3 className="text-lg font-semibold text-white">Cisco Webex</h3>
+                  <p className="text-sm text-gray-400">
+                    {webexPlatform?.is_connected
+                      ? `Connected as ${webexPlatform.email || webexPlatform.display_name_user}`
+                      : 'Sync Webex meeting schedule'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                {webexPlatform?.is_connected ? (
+                  <>
+                    <span className="flex items-center text-sm text-emerald-400">
+                      <Check className="h-4 w-4 mr-1" />
+                      Connected
+                    </span>
+                    <button
+                      onClick={handleDisconnectWebex}
+                      className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors"
+                    >
+                      Disconnect
+                    </button>
+                  </>
+                ) : webexPlatform?.is_configured ? (
+                  <button
+                    onClick={handleConnectWebex}
+                    className="px-4 py-2 bg-[#00BCF2] text-white rounded-lg hover:bg-[#00a8db] transition-colors flex items-center"
+                  >
+                    Connect Webex
+                    <ExternalLink className="h-4 w-4 ml-2" />
+                  </button>
+                ) : (
+                  <span className="text-sm text-gray-500">Not configured</span>
+                )}
+              </div>
+            </div>
+            <div className="mt-3 flex items-center text-xs text-gray-500">
+              <Calendar className="h-3 w-3 mr-1" />
+              Calendar sync only - No bot joins meetings
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Help Section */}
       <div className="bg-premium-surface border border-premium-border rounded-xl p-6">
         <h3 className="text-lg font-semibold text-white mb-3">How Integrations Work</h3>
@@ -691,6 +1057,12 @@ export default function IntegrationsPage() {
             <Bell className="h-4 w-4 inline mr-2 text-gold-400" />
             <strong className="text-white">Pre-Meeting Briefings:</strong> Receive a briefing before scheduled meetings with participant context and suggested topics.
           </p>
+          <div className="border-t border-premium-border pt-3 mt-3">
+            <p>
+              <EyeOff className="h-4 w-4 inline mr-2 text-emerald-400" />
+              <strong className="text-white">Stealth Mode (Video Platforms):</strong> ReadIn AI never joins your meetings as a participant. Audio is captured locally by the desktop app, making your AI assistance completely invisible to other participants.
+            </p>
+          </div>
         </div>
       </div>
     </div>

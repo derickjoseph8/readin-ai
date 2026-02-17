@@ -1,16 +1,23 @@
 """
-Integration routes for Slack and Microsoft Teams.
+Integration routes for Slack, Microsoft Teams, and Video Platforms.
+
+PRIVACY-FIRST VIDEO INTEGRATIONS (STEALTH MODE):
+- NO bots join meetings (completely invisible to other participants)
+- Local audio capture only via desktop app
+- Calendar sync for meeting detection
+- Per-user OAuth tokens (data isolation)
 
 Provides:
 - OAuth authorization flows
 - Token management
 - Integration settings
 - Notification delivery
+- Meeting schedule sync (Zoom, Google Meet, Teams, Webex)
 """
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
@@ -21,6 +28,10 @@ from models import User, UserIntegration, IntegrationProvider
 from auth import get_current_user
 from services.slack_service import SlackService, is_slack_configured
 from services.teams_service import TeamsService, is_teams_configured
+from services.zoom_service import ZoomService, is_zoom_configured
+from services.google_meet_service import GoogleMeetService, is_google_meet_configured
+from services.teams_meeting_service import TeamsMeetingService, is_teams_meeting_configured
+from services.webex_service import WebexService, is_webex_configured
 from config import APP_URL
 
 logger = logging.getLogger("integrations")
@@ -603,3 +614,750 @@ async def slack_webhook(
     await slack_service.close()
 
     return result
+
+
+# =============================================================================
+# VIDEO PLATFORM INTEGRATIONS (STEALTH MODE)
+# =============================================================================
+# These integrations ONLY sync calendar data for meeting detection.
+# NO bots join meetings - audio capture is done locally by the desktop app.
+# Other meeting participants CANNOT see that ReadIn AI is being used.
+# =============================================================================
+
+
+# =============================================================================
+# ZOOM OAUTH (Calendar sync only - NO bot joining)
+# =============================================================================
+
+@router.get("/zoom/authorize")
+async def zoom_authorize(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get Zoom OAuth authorization URL for calendar sync.
+
+    PRIVACY NOTE: This only grants calendar read access.
+    No bot will join meetings - audio is captured locally.
+    """
+    if not is_zoom_configured():
+        raise HTTPException(status_code=503, detail="Zoom integration not configured")
+
+    zoom_service = ZoomService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/zoom/callback"
+    auth_url = zoom_service.get_oauth_url(current_user.id, redirect_uri)
+
+    return {"authorization_url": auth_url}
+
+
+@router.get("/zoom/callback")
+async def zoom_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Handle Zoom OAuth callback.
+    """
+    if not is_zoom_configured():
+        raise HTTPException(status_code=503, detail="Zoom integration not configured")
+
+    # Parse state to get user_id
+    try:
+        parts = state.split(":")
+        user_id = int(parts[0])
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=400, detail="Invalid state parameter")
+
+    # Verify user exists
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Exchange code for token
+    zoom_service = ZoomService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/zoom/callback"
+    result = await zoom_service.exchange_code(code, redirect_uri)
+    await zoom_service.close()
+
+    if not result.get("success"):
+        logger.error(f"Zoom OAuth failed: {result.get('error')}")
+        return Response(
+            status_code=302,
+            headers={"Location": f"{APP_URL}/dashboard/settings/integrations?error=zoom_auth_failed"}
+        )
+
+    # Check for existing integration
+    existing = db.query(UserIntegration).filter(
+        UserIntegration.user_id == user_id,
+        UserIntegration.provider == IntegrationProvider.ZOOM
+    ).first()
+
+    if existing:
+        existing.access_token = result.get("access_token")
+        existing.refresh_token = result.get("refresh_token")
+        existing.token_expires_at = datetime.utcnow() + timedelta(seconds=result.get("expires_in", 3600))
+        existing.provider_user_id = result.get("user_id")
+        existing.display_name = result.get("display_name")
+        existing.email = result.get("email")
+        existing.is_active = True
+        existing.error_message = None
+        existing.updated_at = datetime.utcnow()
+    else:
+        integration = UserIntegration(
+            user_id=user_id,
+            provider=IntegrationProvider.ZOOM,
+            access_token=result.get("access_token"),
+            refresh_token=result.get("refresh_token"),
+            token_expires_at=datetime.utcnow() + timedelta(seconds=result.get("expires_in", 3600)),
+            provider_user_id=result.get("user_id"),
+            display_name=result.get("display_name"),
+            email=result.get("email"),
+        )
+        db.add(integration)
+
+    db.commit()
+
+    return Response(
+        status_code=302,
+        headers={"Location": f"{APP_URL}/dashboard/settings/integrations?success=zoom_connected"}
+    )
+
+
+@router.get("/zoom/meetings")
+async def get_zoom_meetings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get upcoming Zoom meetings for meeting detection.
+    Used by desktop app to know when to activate.
+    """
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.ZOOM,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="Zoom not connected")
+
+    zoom_service = ZoomService(db)
+
+    # Refresh token if expired
+    if integration.token_expires_at and integration.token_expires_at < datetime.utcnow():
+        refresh_result = await zoom_service.refresh_token(integration.refresh_token)
+        if refresh_result.get("success"):
+            integration.access_token = refresh_result.get("access_token")
+            integration.refresh_token = refresh_result.get("refresh_token")
+            integration.token_expires_at = datetime.utcnow() + timedelta(seconds=refresh_result.get("expires_in", 3600))
+            db.commit()
+        else:
+            await zoom_service.close()
+            raise HTTPException(status_code=401, detail="Token refresh failed")
+
+    meetings = await zoom_service.get_upcoming_meetings(integration.access_token)
+    await zoom_service.close()
+
+    return {"meetings": meetings, "platform": "zoom"}
+
+
+@router.delete("/zoom")
+async def disconnect_zoom(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Disconnect Zoom integration."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.ZOOM
+    ).first()
+
+    if integration:
+        integration.is_active = False
+        integration.updated_at = datetime.utcnow()
+        db.commit()
+
+    return {"message": "Zoom disconnected"}
+
+
+# =============================================================================
+# GOOGLE MEET OAUTH (Calendar sync only - NO bot joining)
+# =============================================================================
+
+@router.get("/google-meet/authorize")
+async def google_meet_authorize(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get Google OAuth authorization URL for calendar sync.
+
+    PRIVACY NOTE: Only requests calendar read access.
+    No bot joins meetings - audio capture is local.
+    """
+    if not is_google_meet_configured():
+        raise HTTPException(status_code=503, detail="Google Meet integration not configured")
+
+    google_service = GoogleMeetService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/google-meet/callback"
+    auth_url = google_service.get_oauth_url(current_user.id, redirect_uri)
+
+    return {"authorization_url": auth_url}
+
+
+@router.get("/google-meet/callback")
+async def google_meet_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """Handle Google OAuth callback."""
+    if not is_google_meet_configured():
+        raise HTTPException(status_code=503, detail="Google Meet integration not configured")
+
+    try:
+        parts = state.split(":")
+        user_id = int(parts[0])
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=400, detail="Invalid state parameter")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    google_service = GoogleMeetService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/google-meet/callback"
+    result = await google_service.exchange_code(code, redirect_uri)
+    await google_service.close()
+
+    if not result.get("success"):
+        logger.error(f"Google OAuth failed: {result.get('error')}")
+        return Response(
+            status_code=302,
+            headers={"Location": f"{APP_URL}/dashboard/settings/integrations?error=google_auth_failed"}
+        )
+
+    existing = db.query(UserIntegration).filter(
+        UserIntegration.user_id == user_id,
+        UserIntegration.provider == IntegrationProvider.GOOGLE_MEET
+    ).first()
+
+    if existing:
+        existing.access_token = result.get("access_token")
+        existing.refresh_token = result.get("refresh_token")
+        existing.token_expires_at = datetime.utcnow() + timedelta(seconds=result.get("expires_in", 3600))
+        existing.provider_user_id = result.get("user_id")
+        existing.display_name = result.get("display_name")
+        existing.email = result.get("email")
+        existing.is_active = True
+        existing.error_message = None
+        existing.updated_at = datetime.utcnow()
+    else:
+        integration = UserIntegration(
+            user_id=user_id,
+            provider=IntegrationProvider.GOOGLE_MEET,
+            access_token=result.get("access_token"),
+            refresh_token=result.get("refresh_token"),
+            token_expires_at=datetime.utcnow() + timedelta(seconds=result.get("expires_in", 3600)),
+            provider_user_id=result.get("user_id"),
+            display_name=result.get("display_name"),
+            email=result.get("email"),
+        )
+        db.add(integration)
+
+    db.commit()
+
+    return Response(
+        status_code=302,
+        headers={"Location": f"{APP_URL}/dashboard/settings/integrations?success=google_connected"}
+    )
+
+
+@router.get("/google-meet/meetings")
+async def get_google_meet_meetings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get upcoming Google Meet meetings from calendar."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.GOOGLE_MEET,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="Google Meet not connected")
+
+    google_service = GoogleMeetService(db)
+
+    if integration.token_expires_at and integration.token_expires_at < datetime.utcnow():
+        refresh_result = await google_service.refresh_token(integration.refresh_token)
+        if refresh_result.get("success"):
+            integration.access_token = refresh_result.get("access_token")
+            if refresh_result.get("refresh_token"):
+                integration.refresh_token = refresh_result.get("refresh_token")
+            integration.token_expires_at = datetime.utcnow() + timedelta(seconds=refresh_result.get("expires_in", 3600))
+            db.commit()
+        else:
+            await google_service.close()
+            raise HTTPException(status_code=401, detail="Token refresh failed")
+
+    meetings = await google_service.get_upcoming_meetings(integration.access_token)
+    await google_service.close()
+
+    return {"meetings": meetings, "platform": "google_meet"}
+
+
+@router.delete("/google-meet")
+async def disconnect_google_meet(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Disconnect Google Meet integration."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.GOOGLE_MEET
+    ).first()
+
+    if integration:
+        integration.is_active = False
+        integration.updated_at = datetime.utcnow()
+        db.commit()
+
+    return {"message": "Google Meet disconnected"}
+
+
+# =============================================================================
+# MICROSOFT TEAMS MEETINGS OAUTH (Calendar sync only - NO bot joining)
+# =============================================================================
+
+@router.get("/teams-meeting/authorize")
+async def teams_meeting_authorize(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get Microsoft OAuth URL for Teams meeting calendar sync.
+
+    PRIVACY NOTE: Only requests calendar read access.
+    No bot joins meetings - completely invisible.
+    """
+    if not is_teams_meeting_configured():
+        raise HTTPException(status_code=503, detail="Teams Meeting integration not configured")
+
+    teams_service = TeamsMeetingService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/teams-meeting/callback"
+    auth_url = teams_service.get_oauth_url(current_user.id, redirect_uri)
+
+    return {"authorization_url": auth_url}
+
+
+@router.get("/teams-meeting/callback")
+async def teams_meeting_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """Handle Microsoft Teams Meeting OAuth callback."""
+    if not is_teams_meeting_configured():
+        raise HTTPException(status_code=503, detail="Teams Meeting integration not configured")
+
+    try:
+        parts = state.split(":")
+        user_id = int(parts[0])
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=400, detail="Invalid state parameter")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    teams_service = TeamsMeetingService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/teams-meeting/callback"
+    result = await teams_service.exchange_code(code, redirect_uri)
+    await teams_service.close()
+
+    if not result.get("success"):
+        logger.error(f"Teams Meeting OAuth failed: {result.get('error')}")
+        return Response(
+            status_code=302,
+            headers={"Location": f"{APP_URL}/dashboard/settings/integrations?error=teams_meeting_auth_failed"}
+        )
+
+    existing = db.query(UserIntegration).filter(
+        UserIntegration.user_id == user_id,
+        UserIntegration.provider == IntegrationProvider.MICROSOFT_TEAMS_MEETING
+    ).first()
+
+    if existing:
+        existing.access_token = result.get("access_token")
+        existing.refresh_token = result.get("refresh_token")
+        existing.token_expires_at = datetime.utcnow() + timedelta(seconds=result.get("expires_in", 3600))
+        existing.provider_user_id = result.get("user_id")
+        existing.display_name = result.get("display_name")
+        existing.email = result.get("email")
+        existing.is_active = True
+        existing.error_message = None
+        existing.updated_at = datetime.utcnow()
+    else:
+        integration = UserIntegration(
+            user_id=user_id,
+            provider=IntegrationProvider.MICROSOFT_TEAMS_MEETING,
+            access_token=result.get("access_token"),
+            refresh_token=result.get("refresh_token"),
+            token_expires_at=datetime.utcnow() + timedelta(seconds=result.get("expires_in", 3600)),
+            provider_user_id=result.get("user_id"),
+            display_name=result.get("display_name"),
+            email=result.get("email"),
+        )
+        db.add(integration)
+
+    db.commit()
+
+    return Response(
+        status_code=302,
+        headers={"Location": f"{APP_URL}/dashboard/settings/integrations?success=teams_meeting_connected"}
+    )
+
+
+@router.get("/teams-meeting/meetings")
+async def get_teams_meetings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get upcoming Teams meetings from calendar."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.MICROSOFT_TEAMS_MEETING,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="Teams Meeting not connected")
+
+    teams_service = TeamsMeetingService(db)
+
+    if integration.token_expires_at and integration.token_expires_at < datetime.utcnow():
+        refresh_result = await teams_service.refresh_token(integration.refresh_token)
+        if refresh_result.get("success"):
+            integration.access_token = refresh_result.get("access_token")
+            integration.refresh_token = refresh_result.get("refresh_token")
+            integration.token_expires_at = datetime.utcnow() + timedelta(seconds=refresh_result.get("expires_in", 3600))
+            db.commit()
+        else:
+            await teams_service.close()
+            raise HTTPException(status_code=401, detail="Token refresh failed")
+
+    meetings = await teams_service.get_upcoming_meetings(integration.access_token)
+    await teams_service.close()
+
+    return {"meetings": meetings, "platform": "microsoft_teams"}
+
+
+@router.delete("/teams-meeting")
+async def disconnect_teams_meeting(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Disconnect Teams Meeting integration."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.MICROSOFT_TEAMS_MEETING
+    ).first()
+
+    if integration:
+        integration.is_active = False
+        integration.updated_at = datetime.utcnow()
+        db.commit()
+
+    return {"message": "Teams Meeting disconnected"}
+
+
+# =============================================================================
+# CISCO WEBEX OAUTH (Calendar sync only - NO bot joining)
+# =============================================================================
+
+@router.get("/webex/authorize")
+async def webex_authorize(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get Webex OAuth authorization URL for meeting sync.
+
+    PRIVACY NOTE: Only requests meeting schedule access.
+    No bot joins meetings - completely invisible.
+    """
+    if not is_webex_configured():
+        raise HTTPException(status_code=503, detail="Webex integration not configured")
+
+    webex_service = WebexService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/webex/callback"
+    auth_url = webex_service.get_oauth_url(current_user.id, redirect_uri)
+
+    return {"authorization_url": auth_url}
+
+
+@router.get("/webex/callback")
+async def webex_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """Handle Webex OAuth callback."""
+    if not is_webex_configured():
+        raise HTTPException(status_code=503, detail="Webex integration not configured")
+
+    try:
+        parts = state.split(":")
+        user_id = int(parts[0])
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=400, detail="Invalid state parameter")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    webex_service = WebexService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/webex/callback"
+    result = await webex_service.exchange_code(code, redirect_uri)
+    await webex_service.close()
+
+    if not result.get("success"):
+        logger.error(f"Webex OAuth failed: {result.get('error')}")
+        return Response(
+            status_code=302,
+            headers={"Location": f"{APP_URL}/dashboard/settings/integrations?error=webex_auth_failed"}
+        )
+
+    existing = db.query(UserIntegration).filter(
+        UserIntegration.user_id == user_id,
+        UserIntegration.provider == IntegrationProvider.WEBEX
+    ).first()
+
+    if existing:
+        existing.access_token = result.get("access_token")
+        existing.refresh_token = result.get("refresh_token")
+        existing.token_expires_at = datetime.utcnow() + timedelta(seconds=result.get("expires_in", 3600))
+        existing.provider_user_id = result.get("user_id")
+        existing.display_name = result.get("display_name")
+        existing.email = result.get("email")
+        existing.is_active = True
+        existing.error_message = None
+        existing.updated_at = datetime.utcnow()
+    else:
+        integration = UserIntegration(
+            user_id=user_id,
+            provider=IntegrationProvider.WEBEX,
+            access_token=result.get("access_token"),
+            refresh_token=result.get("refresh_token"),
+            token_expires_at=datetime.utcnow() + timedelta(seconds=result.get("expires_in", 3600)),
+            provider_user_id=result.get("user_id"),
+            display_name=result.get("display_name"),
+            email=result.get("email"),
+        )
+        db.add(integration)
+
+    db.commit()
+
+    return Response(
+        status_code=302,
+        headers={"Location": f"{APP_URL}/dashboard/settings/integrations?success=webex_connected"}
+    )
+
+
+@router.get("/webex/meetings")
+async def get_webex_meetings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get upcoming Webex meetings."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.WEBEX,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="Webex not connected")
+
+    webex_service = WebexService(db)
+
+    if integration.token_expires_at and integration.token_expires_at < datetime.utcnow():
+        refresh_result = await webex_service.refresh_token(integration.refresh_token)
+        if refresh_result.get("success"):
+            integration.access_token = refresh_result.get("access_token")
+            integration.refresh_token = refresh_result.get("refresh_token")
+            integration.token_expires_at = datetime.utcnow() + timedelta(seconds=refresh_result.get("expires_in", 3600))
+            db.commit()
+        else:
+            await webex_service.close()
+            raise HTTPException(status_code=401, detail="Token refresh failed")
+
+    meetings = await webex_service.get_upcoming_meetings(integration.access_token)
+    await webex_service.close()
+
+    return {"meetings": meetings, "platform": "webex"}
+
+
+@router.delete("/webex")
+async def disconnect_webex(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Disconnect Webex integration."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.WEBEX
+    ).first()
+
+    if integration:
+        integration.is_active = False
+        integration.updated_at = datetime.utcnow()
+        db.commit()
+
+    return {"message": "Webex disconnected"}
+
+
+# =============================================================================
+# UNIFIED MEETING DETECTION (For Desktop App)
+# =============================================================================
+
+@router.get("/meetings/upcoming")
+async def get_all_upcoming_meetings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get all upcoming meetings across all connected video platforms.
+
+    PRIVACY NOTE: This only returns meeting schedule data.
+    No bots will join meetings - all audio capture is local.
+
+    Used by desktop app to show upcoming meetings and detect when to activate.
+    """
+    from services.meeting_detector import MeetingDetector
+
+    detector = MeetingDetector(db)
+    meetings = await detector.get_all_upcoming_meetings(current_user.id)
+
+    return {
+        "meetings": meetings,
+        "stealth_mode": True,
+        "privacy_note": "Audio capture is done locally. No bot joins meetings."
+    }
+
+
+@router.get("/meetings/active")
+async def check_active_meeting(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Check if user is currently in any meeting.
+
+    Used by desktop app to detect meeting state for auto-activation.
+    """
+    from services.meeting_detector import MeetingDetector
+
+    detector = MeetingDetector(db)
+    active = await detector.check_active_meeting(current_user.id)
+
+    return {
+        "active_meeting": active,
+        "is_in_meeting": active is not None,
+        "stealth_mode": True
+    }
+
+
+# =============================================================================
+# VIDEO PLATFORM STATUS
+# =============================================================================
+
+@router.get("/video-platforms/status")
+async def get_video_platforms_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get status of all video platform integrations.
+
+    STEALTH MODE: These integrations sync calendars only.
+    No bots join meetings - completely invisible to other participants.
+    """
+    integrations = []
+
+    user_integrations = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.is_active == True
+    ).all()
+
+    integration_map = {i.provider: i for i in user_integrations}
+
+    # Zoom
+    zoom_int = integration_map.get(IntegrationProvider.ZOOM)
+    integrations.append({
+        "provider": "zoom",
+        "display_name": "Zoom",
+        "is_configured": is_zoom_configured(),
+        "is_connected": zoom_int is not None,
+        "email": zoom_int.email if zoom_int else None,
+        "display_name_user": zoom_int.display_name if zoom_int else None,
+        "connected_at": zoom_int.connected_at if zoom_int else None,
+        "stealth_mode": True,
+        "privacy_note": "Calendar sync only - no bot joins meetings"
+    })
+
+    # Google Meet
+    google_int = integration_map.get(IntegrationProvider.GOOGLE_MEET)
+    integrations.append({
+        "provider": "google_meet",
+        "display_name": "Google Meet",
+        "is_configured": is_google_meet_configured(),
+        "is_connected": google_int is not None,
+        "email": google_int.email if google_int else None,
+        "display_name_user": google_int.display_name if google_int else None,
+        "connected_at": google_int.connected_at if google_int else None,
+        "stealth_mode": True,
+        "privacy_note": "Calendar sync only - no bot joins meetings"
+    })
+
+    # Microsoft Teams Meeting
+    teams_int = integration_map.get(IntegrationProvider.MICROSOFT_TEAMS_MEETING)
+    integrations.append({
+        "provider": "microsoft_teams",
+        "display_name": "Microsoft Teams",
+        "is_configured": is_teams_meeting_configured(),
+        "is_connected": teams_int is not None,
+        "email": teams_int.email if teams_int else None,
+        "display_name_user": teams_int.display_name if teams_int else None,
+        "connected_at": teams_int.connected_at if teams_int else None,
+        "stealth_mode": True,
+        "privacy_note": "Calendar sync only - no bot joins meetings"
+    })
+
+    # Webex
+    webex_int = integration_map.get(IntegrationProvider.WEBEX)
+    integrations.append({
+        "provider": "webex",
+        "display_name": "Cisco Webex",
+        "is_configured": is_webex_configured(),
+        "is_connected": webex_int is not None,
+        "email": webex_int.email if webex_int else None,
+        "display_name_user": webex_int.display_name if webex_int else None,
+        "connected_at": webex_int.connected_at if webex_int else None,
+        "stealth_mode": True,
+        "privacy_note": "Calendar sync only - no bot joins meetings"
+    })
+
+    return {
+        "video_platforms": integrations,
+        "stealth_mode_explanation": (
+            "ReadIn AI operates in STEALTH MODE. "
+            "Other meeting participants CANNOT see that you are using AI assistance. "
+            "No bots or AI agents join your meetings. "
+            "Audio is captured locally by the desktop app and processed securely. "
+            "Calendar sync is used only to detect meeting schedules."
+        )
+    }

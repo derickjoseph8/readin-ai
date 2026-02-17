@@ -129,6 +129,22 @@ TEAMS_CLIENT_SECRET = os.getenv("TEAMS_CLIENT_SECRET", "")
 TEAMS_TENANT_ID = os.getenv("TEAMS_TENANT_ID", "")  # Use "common" for multi-tenant
 
 # =============================================================================
+# VIDEO PLATFORM INTEGRATIONS (STEALTH MODE - Calendar sync only)
+# =============================================================================
+
+# Zoom - OAuth for calendar sync, NOT bot joining
+ZOOM_CLIENT_ID = os.getenv("ZOOM_CLIENT_ID", "")
+ZOOM_CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET", "")
+
+# Google (for Meet detection via Calendar API)
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+
+# Cisco Webex - meeting schedule sync
+WEBEX_CLIENT_ID = os.getenv("WEBEX_CLIENT_ID", "")
+WEBEX_CLIENT_SECRET = os.getenv("WEBEX_CLIENT_SECRET", "")
+
+# =============================================================================
 # APP SETTINGS
 # =============================================================================
 

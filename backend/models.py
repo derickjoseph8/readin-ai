@@ -1970,8 +1970,15 @@ class UserIntegration(Base):
 
 class IntegrationProvider:
     """Integration provider constants."""
+    # Messaging integrations
     SLACK = "slack"
     TEAMS = "teams"
+
+    # Video platform integrations (STEALTH MODE - calendar sync only)
+    ZOOM = "zoom"
+    GOOGLE_MEET = "google_meet"
+    MICROSOFT_TEAMS_MEETING = "microsoft_teams"  # For video/calendar, separate from messaging
+    WEBEX = "webex"
 
 
 class IntegrationNotificationType:
