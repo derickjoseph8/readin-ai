@@ -16,7 +16,7 @@ import {
   X,
   Loader2
 } from 'lucide-react'
-import { authApi, twoFactorApi, TwoFactorStatus, TwoFactorSetupResponse } from '@/lib/api/auth'
+import { authApi, twoFactorApi, sessionsApi, TwoFactorStatus, TwoFactorSetupResponse, UserSession } from '@/lib/api/auth'
 
 export default function SecurityPage() {
   const [currentPassword, setCurrentPassword] = useState('')
@@ -36,7 +36,13 @@ export default function SecurityPage() {
   const [showBackupCodesModal, setShowBackupCodesModal] = useState(false)
   const [backupCodes, setBackupCodes] = useState<string[]>([])
 
-  // Fetch 2FA status on mount
+  // Sessions State
+  const [sessions, setSessions] = useState<UserSession[]>([])
+  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null)
+  const [sessionsLoading, setSessionsLoading] = useState(true)
+  const [revokingSessionId, setRevokingSessionId] = useState<number | null>(null)
+
+  // Fetch 2FA status and sessions on mount
   useEffect(() => {
     const fetch2FAStatus = async () => {
       try {
@@ -48,8 +54,72 @@ export default function SecurityPage() {
         setTwoFactorLoading(false)
       }
     }
+
+    const fetchSessions = async () => {
+      try {
+        const data = await sessionsApi.getSessions()
+        setSessions(data.sessions)
+        setCurrentSessionId(data.current_session_id)
+      } catch (err) {
+        console.error('Failed to fetch sessions:', err)
+      } finally {
+        setSessionsLoading(false)
+      }
+    }
+
     fetch2FAStatus()
+    fetchSessions()
   }, [])
+
+  const handleRevokeSession = async (sessionId: number) => {
+    setRevokingSessionId(sessionId)
+    try {
+      await sessionsApi.revokeSession(sessionId)
+      setSessions(prev => prev.filter(s => s.id !== sessionId))
+    } catch (err) {
+      console.error('Failed to revoke session:', err)
+    } finally {
+      setRevokingSessionId(null)
+    }
+  }
+
+  const handleRevokeAllSessions = async () => {
+    if (!confirm('This will log you out of all other devices. Continue?')) return
+
+    try {
+      const result = await sessionsApi.revokeAllSessions(true)
+      setSessions(prev => prev.filter(s => s.id === currentSessionId))
+      alert(result.message)
+    } catch (err) {
+      console.error('Failed to revoke all sessions:', err)
+    }
+  }
+
+  const formatSessionTime = (dateStr: string) => {
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const minutes = Math.floor(diff / 60000)
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+
+    if (minutes < 1) return 'Just now'
+    if (minutes < 60) return `${minutes}m ago`
+    if (hours < 24) return `${hours}h ago`
+    if (days < 7) return `${days}d ago`
+    return date.toLocaleDateString()
+  }
+
+  const getDeviceIcon = (deviceType: string | null) => {
+    switch (deviceType) {
+      case 'mobile':
+        return <Smartphone className="h-5 w-5 text-blue-400" />
+      case 'tablet':
+        return <Smartphone className="h-5 w-5 text-purple-400" />
+      default:
+        return <Shield className="h-5 w-5 text-emerald-400" />
+    }
+  }
 
   const passwordStrength = () => {
     if (!newPassword) return { score: 0, label: '', color: '' }
@@ -335,43 +405,77 @@ export default function SecurityPage() {
         <h2 className="font-semibold text-white mb-4 flex items-center">
           <History className="h-5 w-5 text-gold-400 mr-2" />
           Active Sessions
+          {!sessionsLoading && (
+            <span className="ml-2 px-2 py-0.5 bg-premium-surface text-gray-400 text-xs rounded">
+              {sessions.length} active
+            </span>
+          )}
         </h2>
 
-        <div className="space-y-3">
-          {/* Current Session */}
-          <div className="flex items-center justify-between p-4 bg-premium-surface rounded-lg">
-            <div className="flex items-center">
-              <div className="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center mr-3">
-                <Shield className="h-5 w-5 text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-white font-medium flex items-center">
-                  Current Session
-                  <span className="ml-2 px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-xs rounded">
-                    Active
-                  </span>
-                </p>
-                <p className="text-gray-500 text-sm mt-0.5">
-                  Windows - Chrome - Started just now
-                </p>
-              </div>
-            </div>
+        {sessionsLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-gold-400" />
           </div>
-        </div>
+        ) : sessions.length > 0 ? (
+          <div className="space-y-3">
+            {sessions.map((session) => (
+              <div
+                key={session.id}
+                className="flex items-center justify-between p-4 bg-premium-surface rounded-lg"
+              >
+                <div className="flex items-center">
+                  <div className={`w-10 h-10 ${session.id === currentSessionId ? 'bg-emerald-500/20' : 'bg-premium-bg'} rounded-lg flex items-center justify-center mr-3`}>
+                    {getDeviceIcon(session.device_type)}
+                  </div>
+                  <div>
+                    <p className="text-white font-medium flex items-center">
+                      {session.os || 'Unknown'} - {session.browser || 'Unknown Browser'}
+                      {session.id === currentSessionId && (
+                        <span className="ml-2 px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-xs rounded">
+                          Current
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-gray-500 text-sm mt-0.5">
+                      {session.ip_address || 'Unknown IP'} • Last active {formatSessionTime(session.last_activity)}
+                    </p>
+                  </div>
+                </div>
+                {session.id !== currentSessionId && (
+                  <button
+                    onClick={() => handleRevokeSession(session.id)}
+                    disabled={revokingSessionId === session.id}
+                    className="text-red-400 hover:text-red-300 transition-colors p-2 rounded-lg hover:bg-red-500/10"
+                    title="Revoke session"
+                  >
+                    {revokingSessionId === session.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <X className="h-4 w-4" />
+                    )}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <Shield className="h-12 w-12 mx-auto mb-3 text-gray-600" />
+            <p>No active sessions found</p>
+          </div>
+        )}
 
-        <div className="mt-4 pt-4 border-t border-premium-border">
-          <button
-            onClick={() => {
-              if (confirm('This will log you out of all other devices. Continue?')) {
-                alert('All other sessions have been terminated.')
-              }
-            }}
-            className="text-red-400 text-sm hover:text-red-300 transition-colors flex items-center"
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Log out all other sessions
-          </button>
-        </div>
+        {sessions.length > 1 && (
+          <div className="mt-4 pt-4 border-t border-premium-border">
+            <button
+              onClick={handleRevokeAllSessions}
+              className="text-red-400 text-sm hover:text-red-300 transition-colors flex items-center"
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Log out all other sessions
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Security Tips */}

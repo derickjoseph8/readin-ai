@@ -177,4 +177,45 @@ export const twoFactorApi = {
   },
 }
 
+// =============================================================================
+// SESSION MANAGEMENT API
+// =============================================================================
+
+export interface UserSession {
+  id: number
+  device_name: string | null
+  device_type: string | null
+  browser: string | null
+  os: string | null
+  ip_address: string | null
+  location: string | null
+  is_current: boolean
+  last_activity: string
+  created_at: string
+}
+
+export interface SessionListResponse {
+  sessions: UserSession[]
+  current_session_id: number | null
+  total_active: number
+}
+
+export const sessionsApi = {
+  async getSessions(): Promise<SessionListResponse> {
+    return apiClient.get('/api/v1/sessions')
+  },
+
+  async revokeSession(sessionId: number): Promise<{ message: string; session_id: number }> {
+    return apiClient.post(`/api/v1/sessions/${sessionId}/revoke`)
+  },
+
+  async revokeAllSessions(keepCurrent: boolean = true): Promise<{ revoked_count: number; message: string }> {
+    return apiClient.post(`/api/v1/sessions/revoke-all?keep_current=${keepCurrent}`)
+  },
+
+  async getCurrentSession(): Promise<UserSession | { message: string; ip_address: string }> {
+    return apiClient.get('/api/v1/sessions/current')
+  },
+}
+
 export default authApi
