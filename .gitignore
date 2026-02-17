@@ -37,3 +37,15 @@ npm-debug.log*
 
 # Claude
 .claude/
+
+# Deployment artifacts
+*.tar
+*.tar.gz
+*.zip
+nul
+
+# Production env files
+.env.production
+
+# Database files
+*.db
