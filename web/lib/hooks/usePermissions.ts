@@ -80,7 +80,7 @@ export function usePermissions() {
         }
       }
       if (categories.length > 0) {
-        allowedTicketCategories = [...new Set(categories)] // Remove duplicates
+        allowedTicketCategories = Array.from(new Set(categories)) // Remove duplicates
       }
     }
 

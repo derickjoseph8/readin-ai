@@ -24,6 +24,6 @@ export const config = {
     // - … static legal/info pages (terms, privacy, cookies, gdpr, docs, changelog, contact)
     // - … admin pages and dashboard support pages (they don't use i18n)
     // - … if they contain a dot (.) - files with extensions
-    '/((?!api|_next|_vercel|static|favicon.ico|robots.txt|terms|privacy|cookies|gdpr|docs|changelog|contact|admin|dashboard|login|.*\\..*).*)'
+    '/((?!api|_next|_vercel|static|favicon.ico|robots.txt|terms|privacy|cookies|gdpr|docs|changelog|contact|admin|dashboard|login|sso|.*\\..*).*)'
   ]
 };
