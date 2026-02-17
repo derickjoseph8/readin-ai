@@ -229,6 +229,14 @@ class OrganizationMember(BaseModel):
 # USER SCHEMAS (UPDATED)
 # =============================================================================
 
+class TeamMembershipInfo(BaseModel):
+    """Team membership information for staff users."""
+    team_id: int
+    team_slug: str
+    team_name: str
+    role: str  # admin, manager, agent
+
+
 class UserResponse(BaseModel):
     id: int
     email: str
@@ -248,6 +256,10 @@ class UserResponse(BaseModel):
     preferred_language: str = "en"
     account_type: str = "individual"
     company_name: Optional[str] = None
+    # Staff/Admin fields
+    is_staff: bool = False
+    staff_role: Optional[str] = None  # super_admin, admin, manager, agent
+    team_memberships: Optional[List[TeamMembershipInfo]] = None
     created_at: datetime
 
     class Config:

@@ -154,6 +154,12 @@ class User(Base):
     consent_ai_training = Column(Boolean, default=False)
     consent_updated_at = Column(DateTime, nullable=True)
 
+    # SSO / Social Login
+    sso_provider = Column(String(50), nullable=True)  # google, microsoft, apple
+    sso_provider_id = Column(String(255), nullable=True)  # Provider's user ID
+    google_refresh_token = Column(String(512), nullable=True)  # For calendar access
+    microsoft_refresh_token = Column(String(512), nullable=True)  # For calendar access
+
     # Account deletion scheduling
     deletion_requested = Column(Boolean, default=False)
     deletion_scheduled = Column(DateTime, nullable=True)

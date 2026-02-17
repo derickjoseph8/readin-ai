@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Shield,
   Key,
@@ -10,9 +10,13 @@ import {
   EyeOff,
   Check,
   AlertCircle,
-  LogOut
+  LogOut,
+  Copy,
+  RefreshCw,
+  X,
+  Loader2
 } from 'lucide-react'
-import { authApi } from '@/lib/api/auth'
+import { authApi, twoFactorApi, TwoFactorStatus, TwoFactorSetupResponse } from '@/lib/api/auth'
 
 export default function SecurityPage() {
   const [currentPassword, setCurrentPassword] = useState('')
@@ -23,6 +27,29 @@ export default function SecurityPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // 2FA State
+  const [twoFactorStatus, setTwoFactorStatus] = useState<TwoFactorStatus | null>(null)
+  const [twoFactorLoading, setTwoFactorLoading] = useState(true)
+  const [showSetupModal, setShowSetupModal] = useState(false)
+  const [showDisableModal, setShowDisableModal] = useState(false)
+  const [showBackupCodesModal, setShowBackupCodesModal] = useState(false)
+  const [backupCodes, setBackupCodes] = useState<string[]>([])
+
+  // Fetch 2FA status on mount
+  useEffect(() => {
+    const fetch2FAStatus = async () => {
+      try {
+        const status = await twoFactorApi.getStatus()
+        setTwoFactorStatus(status)
+      } catch (err) {
+        console.error('Failed to fetch 2FA status:', err)
+      } finally {
+        setTwoFactorLoading(false)
+      }
+    }
+    fetch2FAStatus()
+  }, [])
 
   const passwordStrength = () => {
     if (!newPassword) return { score: 0, label: '', color: '' }
@@ -66,6 +93,29 @@ export default function SecurityPage() {
       setError(err instanceof Error ? err.message : 'Failed to change password')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handle2FAEnabled = (codes: string[]) => {
+    setBackupCodes(codes)
+    setTwoFactorStatus({ enabled: true, backup_codes_remaining: codes.length })
+    setShowSetupModal(false)
+    setShowBackupCodesModal(true)
+  }
+
+  const handle2FADisabled = () => {
+    setTwoFactorStatus({ enabled: false, backup_codes_remaining: 0 })
+    setShowDisableModal(false)
+  }
+
+  const handleRegenerateBackupCodes = async (code: string) => {
+    try {
+      const result = await twoFactorApi.regenerateBackupCodes(code)
+      setBackupCodes(result.codes)
+      setTwoFactorStatus(prev => prev ? { ...prev, backup_codes_remaining: result.codes.length } : null)
+      setShowBackupCodesModal(true)
+    } catch (err) {
+      throw err
     }
   }
 
@@ -218,21 +268,66 @@ export default function SecurityPage() {
           Two-Factor Authentication
         </h2>
 
-        <div className="flex items-center justify-between p-4 bg-premium-surface rounded-lg">
-          <div>
-            <p className="text-white font-medium">Authenticator App</p>
-            <p className="text-gray-500 text-sm mt-0.5">
-              Add an extra layer of security to your account
+        {twoFactorLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-gold-400" />
+          </div>
+        ) : twoFactorStatus?.enabled ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+              <div className="flex items-center">
+                <Check className="h-5 w-5 text-emerald-400 mr-3" />
+                <div>
+                  <p className="text-white font-medium">2FA is enabled</p>
+                  <p className="text-gray-400 text-sm mt-0.5">
+                    {twoFactorStatus.backup_codes_remaining} backup codes remaining
+                  </p>
+                </div>
+              </div>
+              <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 text-sm rounded-lg">
+                Active
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => setShowBackupCodesModal(true)}
+                className="px-4 py-2 bg-premium-surface border border-premium-border rounded-lg text-white hover:bg-premium-surface/80 transition-colors flex items-center"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                View/Regenerate Backup Codes
+              </button>
+              <button
+                onClick={() => setShowDisableModal(true)}
+                className="px-4 py-2 bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg hover:bg-red-500/20 transition-colors flex items-center"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Disable 2FA
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 bg-premium-surface rounded-lg">
+              <div>
+                <p className="text-white font-medium">Authenticator App</p>
+                <p className="text-gray-500 text-sm mt-0.5">
+                  Add an extra layer of security to your account
+                </p>
+              </div>
+              <button
+                onClick={() => setShowSetupModal(true)}
+                className="px-4 py-2 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-medium rounded-lg hover:shadow-gold transition-all"
+              >
+                Enable
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-500">
+              Use an authenticator app like Google Authenticator, Authy, or 1Password to generate verification codes
             </p>
           </div>
-          <span className="px-3 py-1 bg-gray-600/50 text-gray-400 text-sm rounded-lg">
-            Coming Soon
-          </span>
-        </div>
-
-        <p className="text-xs text-gray-500 mt-3">
-          Two-factor authentication will be available in a future update
-        </p>
+        )}
       </div>
 
       {/* Active Sessions */}
@@ -293,7 +388,7 @@ export default function SecurityPage() {
           </li>
           <li className="flex items-start text-sm">
             <Check className="h-4 w-4 text-emerald-400 mr-2 mt-0.5 flex-shrink-0" />
-            <span className="text-gray-300">Enable two-factor authentication when available</span>
+            <span className="text-gray-300">Enable two-factor authentication for extra security</span>
           </li>
           <li className="flex items-start text-sm">
             <Check className="h-4 w-4 text-emerald-400 mr-2 mt-0.5 flex-shrink-0" />
@@ -304,6 +399,393 @@ export default function SecurityPage() {
             <span className="text-gray-300">Never share your password or access tokens</span>
           </li>
         </ul>
+      </div>
+
+      {/* 2FA Setup Modal */}
+      {showSetupModal && (
+        <TwoFactorSetupModal
+          onClose={() => setShowSetupModal(false)}
+          onSuccess={handle2FAEnabled}
+        />
+      )}
+
+      {/* 2FA Disable Modal */}
+      {showDisableModal && (
+        <TwoFactorDisableModal
+          onClose={() => setShowDisableModal(false)}
+          onSuccess={handle2FADisabled}
+        />
+      )}
+
+      {/* Backup Codes Modal */}
+      {showBackupCodesModal && (
+        <BackupCodesModal
+          codes={backupCodes}
+          onClose={() => setShowBackupCodesModal(false)}
+          onRegenerate={handleRegenerateBackupCodes}
+          isEnabled={twoFactorStatus?.enabled || false}
+        />
+      )}
+    </div>
+  )
+}
+
+// 2FA Setup Modal Component
+function TwoFactorSetupModal({
+  onClose,
+  onSuccess
+}: {
+  onClose: () => void
+  onSuccess: (codes: string[]) => void
+}) {
+  const [step, setStep] = useState<'setup' | 'verify'>('setup')
+  const [setupData, setSetupData] = useState<TwoFactorSetupResponse | null>(null)
+  const [verificationCode, setVerificationCode] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const initSetup = async () => {
+      try {
+        const data = await twoFactorApi.setup()
+        setSetupData(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to initialize 2FA setup')
+      }
+    }
+    initSetup()
+  }, [])
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const result = await twoFactorApi.verify(verificationCode)
+      onSuccess(result.backup_codes)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid verification code')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-premium-card border border-premium-border rounded-xl shadow-2xl w-full max-w-md">
+        <div className="p-6 border-b border-premium-border flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-white">
+            {step === 'setup' ? 'Set Up 2FA' : 'Verify Setup'}
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {error && (
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm flex items-center">
+              <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+              {error}
+            </div>
+          )}
+
+          {step === 'setup' && setupData ? (
+            <div className="space-y-4">
+              <p className="text-gray-300 text-sm">
+                Scan this QR code with your authenticator app:
+              </p>
+
+              <div className="flex justify-center p-4 bg-white rounded-lg">
+                <img
+                  src={setupData.qr_code}
+                  alt="2FA QR Code"
+                  className="w-48 h-48"
+                />
+              </div>
+
+              <div className="text-center">
+                <p className="text-xs text-gray-500 mb-2">Or enter this key manually:</p>
+                <code className="px-3 py-1.5 bg-premium-surface rounded text-sm text-gold-400 font-mono">
+                  {setupData.secret}
+                </code>
+              </div>
+
+              <button
+                onClick={() => setStep('verify')}
+                className="w-full py-2.5 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-medium rounded-lg hover:shadow-gold transition-all"
+              >
+                Continue
+              </button>
+            </div>
+          ) : step === 'verify' ? (
+            <form onSubmit={handleVerify} className="space-y-4">
+              <p className="text-gray-300 text-sm">
+                Enter the 6-digit code from your authenticator app:
+              </p>
+
+              <input
+                type="text"
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="w-full px-4 py-3 bg-premium-surface border border-premium-border rounded-lg text-white text-center text-2xl font-mono tracking-widest focus:outline-none focus:border-gold-500"
+                placeholder="000000"
+                maxLength={6}
+                autoFocus
+              />
+
+              <button
+                type="submit"
+                disabled={verificationCode.length !== 6 || isLoading}
+                className="w-full py-2.5 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-medium rounded-lg hover:shadow-gold transition-all disabled:opacity-50 flex items-center justify-center"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  'Verify & Enable'
+                )}
+              </button>
+            </form>
+          ) : (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-gold-400" />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// 2FA Disable Modal Component
+function TwoFactorDisableModal({
+  onClose,
+  onSuccess
+}: {
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [password, setPassword] = useState('')
+  const [code, setCode] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleDisable = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      await twoFactorApi.disable(password, code || undefined)
+      onSuccess()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to disable 2FA')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-premium-card border border-premium-border rounded-xl shadow-2xl w-full max-w-md">
+        <div className="p-6 border-b border-premium-border flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-white">Disable 2FA</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleDisable} className="p-6 space-y-4">
+          {error && (
+            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm flex items-center">
+              <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+              {error}
+            </div>
+          )}
+
+          <p className="text-gray-300 text-sm">
+            To disable two-factor authentication, enter your password and a verification code:
+          </p>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-2.5 bg-premium-surface border border-premium-border rounded-lg text-white focus:outline-none focus:border-gold-500"
+              placeholder="Enter your password"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">
+              Verification Code (optional)
+            </label>
+            <input
+              type="text"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              className="w-full px-4 py-2.5 bg-premium-surface border border-premium-border rounded-lg text-white focus:outline-none focus:border-gold-500"
+              placeholder="6-digit code"
+              maxLength={6}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={!password || isLoading}
+            className="w-full py-2.5 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-all disabled:opacity-50 flex items-center justify-center"
+          >
+            {isLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              'Disable 2FA'
+            )}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// Backup Codes Modal Component
+function BackupCodesModal({
+  codes,
+  onClose,
+  onRegenerate,
+  isEnabled
+}: {
+  codes: string[]
+  onClose: () => void
+  onRegenerate: (code: string) => Promise<void>
+  isEnabled: boolean
+}) {
+  const [showRegenerate, setShowRegenerate] = useState(false)
+  const [regenerateCode, setRegenerateCode] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(codes.join('\n'))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleRegenerate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      await onRegenerate(regenerateCode)
+      setShowRegenerate(false)
+      setRegenerateCode('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to regenerate codes')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-premium-card border border-premium-border rounded-xl shadow-2xl w-full max-w-md">
+        <div className="p-6 border-b border-premium-border flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-white">Backup Codes</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {codes.length > 0 ? (
+            <>
+              <p className="text-gray-300 text-sm">
+                Save these backup codes in a safe place. Each code can only be used once.
+              </p>
+
+              <div className="bg-premium-surface rounded-lg p-4 font-mono text-sm">
+                <div className="grid grid-cols-2 gap-2">
+                  {codes.map((code, i) => (
+                    <div key={i} className="text-white">
+                      {code}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={handleCopy}
+                className="w-full py-2 bg-premium-surface border border-premium-border rounded-lg text-white hover:bg-premium-surface/80 transition-colors flex items-center justify-center"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-4 w-4 mr-2 text-emerald-400" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copy Codes
+                  </>
+                )}
+              </button>
+            </>
+          ) : (
+            <p className="text-gray-400 text-center py-4">
+              No backup codes available. Generate new codes below.
+            </p>
+          )}
+
+          {isEnabled && !showRegenerate && (
+            <button
+              onClick={() => setShowRegenerate(true)}
+              className="w-full py-2 text-gold-400 hover:text-gold-300 transition-colors flex items-center justify-center"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Regenerate Backup Codes
+            </button>
+          )}
+
+          {showRegenerate && (
+            <form onSubmit={handleRegenerate} className="space-y-3 pt-4 border-t border-premium-border">
+              {error && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
+              <p className="text-gray-400 text-sm">
+                Enter a verification code to generate new backup codes. This will invalidate existing codes.
+              </p>
+              <input
+                type="text"
+                value={regenerateCode}
+                onChange={(e) => setRegenerateCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="w-full px-4 py-2.5 bg-premium-surface border border-premium-border rounded-lg text-white focus:outline-none focus:border-gold-500"
+                placeholder="6-digit code"
+                maxLength={6}
+              />
+              <button
+                type="submit"
+                disabled={regenerateCode.length !== 6 || isLoading}
+                className="w-full py-2 bg-gold-500 text-premium-bg font-medium rounded-lg hover:bg-gold-400 transition-all disabled:opacity-50 flex items-center justify-center"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  'Generate New Codes'
+                )}
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   )

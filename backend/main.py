@@ -18,11 +18,11 @@ from config import (
     CORS_ALLOWED_ORIGINS, SENTRY_DSN, ENVIRONMENT
 )
 from database import get_db, init_db, engine
-from models import User, DailyUsage, Profession, UserLearningProfile
+from models import User, DailyUsage, Profession, UserLearningProfile, TeamMember, SupportTeam
 from schemas import (
     UserCreate, UserLogin, Token, UserResponse, UserStatus, UserUpdate,
     UserEmailPreferences, CreateCheckoutSession, CheckoutSessionResponse, UsageResponse,
-    PasswordChangeRequest
+    PasswordChangeRequest, TeamMembershipInfo
 )
 from auth import (
     hash_password, verify_password, create_access_token, get_current_user
@@ -518,9 +518,27 @@ def get_supported_languages():
 
 @app.get("/user/me", response_model=UserResponse)
 def get_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Get current user info with profession and organization details."""
+    """Get current user info with profession, organization, and staff details."""
     profession_name = user.profession.name if user.profession else None
     organization_name = user.organization.name if user.organization else None
+
+    # Get team memberships for staff users
+    team_memberships = None
+    if user.is_staff:
+        members = db.query(TeamMember).join(SupportTeam).filter(
+            TeamMember.user_id == user.id,
+            TeamMember.is_active == True
+        ).all()
+        if members:
+            team_memberships = [
+                TeamMembershipInfo(
+                    team_id=m.team_id,
+                    team_slug=m.team.slug,
+                    team_name=m.team.name,
+                    role=m.role
+                )
+                for m in members
+            ]
 
     return UserResponse(
         id=user.id,
@@ -540,6 +558,9 @@ def get_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)
         email_reminders_enabled=user.email_reminders_enabled,
         preferred_language=user.preferred_language or "en",
         company_name=getattr(user, 'company', None),
+        is_staff=user.is_staff,
+        staff_role=user.staff_role,
+        team_memberships=team_memberships,
         created_at=user.created_at
     )
 
@@ -601,6 +622,24 @@ def update_me(
     profession_name = user.profession.name if user.profession else None
     organization_name = user.organization.name if user.organization else None
 
+    # Get team memberships for staff users
+    team_memberships = None
+    if user.is_staff:
+        members = db.query(TeamMember).join(SupportTeam).filter(
+            TeamMember.user_id == user.id,
+            TeamMember.is_active == True
+        ).all()
+        if members:
+            team_memberships = [
+                TeamMembershipInfo(
+                    team_id=m.team_id,
+                    team_slug=m.team.slug,
+                    team_name=m.team.name,
+                    role=m.role
+                )
+                for m in members
+            ]
+
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -619,6 +658,9 @@ def update_me(
         email_reminders_enabled=user.email_reminders_enabled,
         preferred_language=user.preferred_language or "en",
         company_name=getattr(user, 'company', None),
+        is_staff=user.is_staff,
+        staff_role=user.staff_role,
+        team_memberships=team_memberships,
         created_at=user.created_at
     )
 

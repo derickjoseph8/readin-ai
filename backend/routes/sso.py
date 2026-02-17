@@ -6,13 +6,17 @@ Provides endpoints for:
 - OAuth 2.0 / OpenID Connect (OIDC)
 - Azure AD integration
 - Okta integration
+- Direct social login (Google, Microsoft, Apple)
 """
 
+import os
 import secrets
 import hashlib
+import httpx
 from datetime import datetime, timedelta
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, HttpUrl
 
@@ -23,6 +27,16 @@ from models import (
 )
 from auth import get_current_user, create_access_token
 from config import JWT_ALGORITHM, JWT_SECRET, JWT_EXPIRATION_HOURS
+
+# Social login OAuth configurations (from environment)
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+MICROSOFT_CLIENT_ID = os.getenv("MICROSOFT_CLIENT_ID", "")
+MICROSOFT_CLIENT_SECRET = os.getenv("MICROSOFT_CLIENT_SECRET", "")
+APPLE_CLIENT_ID = os.getenv("APPLE_CLIENT_ID", "")
+APPLE_CLIENT_SECRET = os.getenv("APPLE_CLIENT_SECRET", "")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://www.getreadin.us")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://www.getreadin.us")
 
 router = APIRouter(prefix="/sso", tags=["SSO"])
 
@@ -599,3 +613,444 @@ def get_sso_metadata(
             "logout_url": f"{base_url}/sso/logout",
             "supported_scopes": ["openid", "email", "profile"]
         }
+
+
+# =============================================================================
+# DIRECT SOCIAL LOGIN (Google, Microsoft, Apple)
+# =============================================================================
+
+# In-memory state storage (use Redis in production)
+_sso_states = {}
+
+
+@router.get("/google/initiate")
+def initiate_google_login(
+    redirect_uri: Optional[str] = None,
+    calendar_access: bool = False
+):
+    """
+    Initiate Google OAuth login.
+
+    Args:
+        redirect_uri: Optional custom redirect after login
+        calendar_access: If True, request calendar read access
+    """
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google SSO is not configured"
+        )
+
+    state = secrets.token_urlsafe(32)
+    _sso_states[state] = {
+        "provider": "google",
+        "redirect_uri": redirect_uri,
+        "created_at": datetime.utcnow()
+    }
+
+    callback_url = f"{BACKEND_URL}/api/v1/sso/google/callback"
+    scopes = ["openid", "email", "profile"]
+
+    if calendar_access:
+        scopes.append("https://www.googleapis.com/auth/calendar.readonly")
+        _sso_states[state]["calendar_access"] = True
+
+    auth_url = (
+        f"https://accounts.google.com/o/oauth2/v2/auth"
+        f"?client_id={GOOGLE_CLIENT_ID}"
+        f"&response_type=code"
+        f"&redirect_uri={callback_url}"
+        f"&scope={' '.join(scopes)}"
+        f"&state={state}"
+        f"&access_type=offline"
+        f"&prompt=consent"
+    )
+
+    return RedirectResponse(url=auth_url)
+
+
+@router.get("/google/callback")
+async def google_callback(
+    code: str,
+    state: str,
+    db: Session = Depends(get_db)
+):
+    """Handle Google OAuth callback."""
+    # Validate state
+    state_data = _sso_states.pop(state, None)
+    if not state_data or state_data["provider"] != "google":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired state"
+        )
+
+    callback_url = f"{BACKEND_URL}/api/v1/sso/google/callback"
+
+    # Exchange code for tokens
+    async with httpx.AsyncClient() as client:
+        token_response = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": callback_url
+            }
+        )
+
+        if token_response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to exchange code for tokens"
+            )
+
+        tokens = token_response.json()
+        access_token = tokens.get("access_token")
+        refresh_token = tokens.get("refresh_token")
+
+        # Get user info
+        userinfo_response = await client.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+
+        if userinfo_response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to get user info"
+            )
+
+        userinfo = userinfo_response.json()
+
+    # Find or create user
+    email = userinfo.get("email")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email not provided by Google"
+        )
+
+    user = db.query(User).filter(User.email == email).first()
+
+    if not user:
+        # Create new user
+        user = User(
+            email=email,
+            full_name=userinfo.get("name"),
+            hashed_password="",  # No password for SSO users
+            is_active=True,
+            email_verified=True,
+            sso_provider="google",
+            sso_provider_id=userinfo.get("id")
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        # Update SSO info if not set
+        if not user.sso_provider:
+            user.sso_provider = "google"
+            user.sso_provider_id = userinfo.get("id")
+            db.commit()
+
+    # Store refresh token for calendar access if requested
+    if state_data.get("calendar_access") and refresh_token:
+        user.google_refresh_token = refresh_token
+        db.commit()
+
+    # Create JWT token
+    jwt_token = create_access_token(user.id)
+
+    # Redirect to frontend with token
+    redirect_uri = state_data.get("redirect_uri") or f"{FRONTEND_URL}/sso/callback"
+    return RedirectResponse(url=f"{redirect_uri}?token={jwt_token}")
+
+
+@router.get("/microsoft/initiate")
+def initiate_microsoft_login(
+    redirect_uri: Optional[str] = None,
+    calendar_access: bool = False
+):
+    """
+    Initiate Microsoft OAuth login.
+
+    Args:
+        redirect_uri: Optional custom redirect after login
+        calendar_access: If True, request calendar read access
+    """
+    if not MICROSOFT_CLIENT_ID:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Microsoft SSO is not configured"
+        )
+
+    state = secrets.token_urlsafe(32)
+    _sso_states[state] = {
+        "provider": "microsoft",
+        "redirect_uri": redirect_uri,
+        "created_at": datetime.utcnow()
+    }
+
+    callback_url = f"{BACKEND_URL}/api/v1/sso/microsoft/callback"
+    scopes = ["openid", "email", "profile", "User.Read"]
+
+    if calendar_access:
+        scopes.append("Calendars.Read")
+        _sso_states[state]["calendar_access"] = True
+
+    auth_url = (
+        f"https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+        f"?client_id={MICROSOFT_CLIENT_ID}"
+        f"&response_type=code"
+        f"&redirect_uri={callback_url}"
+        f"&scope={' '.join(scopes)}"
+        f"&state={state}"
+        f"&response_mode=query"
+    )
+
+    return RedirectResponse(url=auth_url)
+
+
+@router.get("/microsoft/callback")
+async def microsoft_callback(
+    code: str,
+    state: str,
+    db: Session = Depends(get_db)
+):
+    """Handle Microsoft OAuth callback."""
+    # Validate state
+    state_data = _sso_states.pop(state, None)
+    if not state_data or state_data["provider"] != "microsoft":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired state"
+        )
+
+    callback_url = f"{BACKEND_URL}/api/v1/sso/microsoft/callback"
+
+    # Exchange code for tokens
+    async with httpx.AsyncClient() as client:
+        token_response = await client.post(
+            "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+            data={
+                "client_id": MICROSOFT_CLIENT_ID,
+                "client_secret": MICROSOFT_CLIENT_SECRET,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": callback_url
+            }
+        )
+
+        if token_response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to exchange code for tokens"
+            )
+
+        tokens = token_response.json()
+        access_token = tokens.get("access_token")
+        refresh_token = tokens.get("refresh_token")
+
+        # Get user info from Microsoft Graph
+        userinfo_response = await client.get(
+            "https://graph.microsoft.com/v1.0/me",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+
+        if userinfo_response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to get user info"
+            )
+
+        userinfo = userinfo_response.json()
+
+    # Find or create user
+    email = userinfo.get("mail") or userinfo.get("userPrincipalName")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email not provided by Microsoft"
+        )
+
+    user = db.query(User).filter(User.email == email).first()
+
+    if not user:
+        # Create new user
+        user = User(
+            email=email,
+            full_name=userinfo.get("displayName"),
+            hashed_password="",
+            is_active=True,
+            email_verified=True,
+            sso_provider="microsoft",
+            sso_provider_id=userinfo.get("id")
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        if not user.sso_provider:
+            user.sso_provider = "microsoft"
+            user.sso_provider_id = userinfo.get("id")
+            db.commit()
+
+    # Store refresh token for calendar access
+    if state_data.get("calendar_access") and refresh_token:
+        user.microsoft_refresh_token = refresh_token
+        db.commit()
+
+    # Create JWT token
+    jwt_token = create_access_token(user.id)
+
+    # Redirect to frontend with token
+    redirect_uri = state_data.get("redirect_uri") or f"{FRONTEND_URL}/sso/callback"
+    return RedirectResponse(url=f"{redirect_uri}?token={jwt_token}")
+
+
+@router.get("/apple/initiate")
+def initiate_apple_login(redirect_uri: Optional[str] = None):
+    """
+    Initiate Apple Sign In.
+
+    Note: Apple Sign In requires additional setup with Apple Developer account.
+    """
+    if not APPLE_CLIENT_ID:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Apple SSO is not configured"
+        )
+
+    state = secrets.token_urlsafe(32)
+    _sso_states[state] = {
+        "provider": "apple",
+        "redirect_uri": redirect_uri,
+        "created_at": datetime.utcnow()
+    }
+
+    callback_url = f"{BACKEND_URL}/api/v1/sso/apple/callback"
+
+    auth_url = (
+        f"https://appleid.apple.com/auth/authorize"
+        f"?client_id={APPLE_CLIENT_ID}"
+        f"&response_type=code"
+        f"&redirect_uri={callback_url}"
+        f"&scope=name email"
+        f"&state={state}"
+        f"&response_mode=form_post"
+    )
+
+    return RedirectResponse(url=auth_url)
+
+
+@router.post("/apple/callback")
+async def apple_callback(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Handle Apple Sign In callback (uses form_post response mode)."""
+    form = await request.form()
+    code = form.get("code")
+    state = form.get("state")
+    id_token = form.get("id_token")
+    user_data = form.get("user")  # Only provided on first sign-in
+
+    if not code or not state:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing code or state"
+        )
+
+    # Validate state
+    state_data = _sso_states.pop(state, None)
+    if not state_data or state_data["provider"] != "apple":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired state"
+        )
+
+    callback_url = f"{BACKEND_URL}/api/v1/sso/apple/callback"
+
+    # Exchange code for tokens
+    async with httpx.AsyncClient() as client:
+        token_response = await client.post(
+            "https://appleid.apple.com/auth/token",
+            data={
+                "client_id": APPLE_CLIENT_ID,
+                "client_secret": APPLE_CLIENT_SECRET,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": callback_url
+            }
+        )
+
+        if token_response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to exchange code for tokens"
+            )
+
+        tokens = token_response.json()
+        apple_id_token = tokens.get("id_token")
+
+    # Decode ID token to get user info (simplified - in production use proper JWT validation)
+    import base64
+    import json
+
+    try:
+        payload_b64 = apple_id_token.split(".")[1]
+        # Add padding if needed
+        payload_b64 += "=" * (4 - len(payload_b64) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+        email = payload.get("email")
+        apple_user_id = payload.get("sub")
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to decode Apple ID token"
+        )
+
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email not provided by Apple"
+        )
+
+    # Find or create user
+    user = db.query(User).filter(User.email == email).first()
+
+    full_name = None
+    if user_data:
+        try:
+            user_info = json.loads(user_data)
+            name = user_info.get("name", {})
+            full_name = f"{name.get('firstName', '')} {name.get('lastName', '')}".strip()
+        except Exception:
+            pass
+
+    if not user:
+        user = User(
+            email=email,
+            full_name=full_name,
+            hashed_password="",
+            is_active=True,
+            email_verified=True,
+            sso_provider="apple",
+            sso_provider_id=apple_user_id
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        if not user.sso_provider:
+            user.sso_provider = "apple"
+            user.sso_provider_id = apple_user_id
+            db.commit()
+
+    # Create JWT token
+    jwt_token = create_access_token(user.id)
+
+    # Redirect to frontend with token
+    redirect_uri = state_data.get("redirect_uri") or f"{FRONTEND_URL}/sso/callback"
+    return RedirectResponse(url=f"{redirect_uri}?token={jwt_token}")
