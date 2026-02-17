@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User, Meeting, Conversation, ActionItem, Topic
 from auth import get_current_user
-from schemas.pagination import PaginationParams, paginate, PaginatedResponse
+from pagination import PaginationParams, paginate, PaginatedResponse
 
 router = APIRouter(prefix="/search", tags=["Search"])
 

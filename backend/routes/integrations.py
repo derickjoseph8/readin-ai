@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User, UserIntegration, IntegrationProvider
-from routes.auth import get_current_user
+from auth import get_current_user
 from services.slack_service import SlackService, is_slack_configured
 from services.teams_service import TeamsService, is_teams_configured
 from config import APP_URL
