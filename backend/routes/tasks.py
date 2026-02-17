@@ -430,6 +430,197 @@ def complete_commitment(
     return {"message": "Commitment completed"}
 
 
+# ============== Auto-Detection ==============
+
+@router.post("/extract-from-meeting/{meeting_id}")
+def extract_action_items_from_meeting(
+    meeting_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Auto-extract action items and commitments from meeting conversations.
+    Uses pattern matching to identify tasks, deadlines, and assignments.
+    Returns extracted items for user review before saving.
+    """
+    from models import Conversation
+    import re
+
+    meeting = db.query(Meeting).filter(
+        Meeting.id == meeting_id,
+        Meeting.user_id == user.id
+    ).first()
+
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Meeting not found"
+        )
+
+    # Get all conversations from the meeting
+    conversations = db.query(Conversation).filter(
+        Conversation.meeting_id == meeting_id
+    ).order_by(Conversation.timestamp).all()
+
+    if not conversations:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No conversations found in meeting"
+        )
+
+    extracted_items = []
+    commitment_indicators = []
+
+    # Patterns that indicate action items
+    action_patterns = [
+        r"(?i)(?:I'll|I will|We'll|We will|let's|let me|going to)\s+(.+?)(?:\.|$)",
+        r"(?i)(?:need to|have to|should|must)\s+(.+?)(?:\.|$)",
+        r"(?i)(?:action item[s]?:?\s*)(.+?)(?:\.|$)",
+        r"(?i)(?:to-do[s]?:?\s*)(.+?)(?:\.|$)",
+        r"(?i)(?:task:?\s*)(.+?)(?:\.|$)",
+        r"(?i)(?:follow up (?:on|with)\s*)(.+?)(?:\.|$)",
+    ]
+
+    # Patterns that indicate commitments (user promises)
+    commitment_patterns = [
+        r"(?i)(?:I promise|I commit|I guarantee|I'll make sure)\s+(.+?)(?:\.|$)",
+        r"(?i)(?:you have my word|count on me to)\s+(.+?)(?:\.|$)",
+    ]
+
+    # Deadline patterns
+    deadline_patterns = [
+        r"(?i)by (?:end of |)(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)",
+        r"(?i)by (?:end of |)(this week|next week|this month|next month)",
+        r"(?i)(?:due|deadline|by) (\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)",
+        r"(?i)in (\d+)\s+(day|week|month|hour)s?",
+    ]
+
+    # Assignee patterns
+    assignee_patterns = [
+        r"(?i)(\w+)\s+(?:will|should|needs to|is going to)",
+        r"(?i)assign(?:ed)? to (\w+)",
+        r"(?i)(\w+)'s\s+(?:responsibility|task|action)",
+    ]
+
+    for conv in conversations:
+        text = conv.transcript or conv.ai_response or ""
+
+        # Find action items
+        for pattern in action_patterns:
+            matches = re.findall(pattern, text)
+            for match in matches:
+                if len(match) > 10 and len(match) < 200:  # Reasonable length
+                    # Try to find deadline
+                    deadline = None
+                    for dp in deadline_patterns:
+                        deadline_match = re.search(dp, text)
+                        if deadline_match:
+                            deadline = deadline_match.group(1)
+                            break
+
+                    # Try to find assignee
+                    assignee = None
+                    for ap in assignee_patterns:
+                        assignee_match = re.search(ap, text)
+                        if assignee_match:
+                            assignee = assignee_match.group(1)
+                            break
+
+                    extracted_items.append({
+                        "type": "action_item",
+                        "description": match.strip(),
+                        "source_text": text[:200],
+                        "suggested_assignee": assignee,
+                        "suggested_deadline": deadline,
+                        "priority": "normal",
+                        "conversation_id": conv.id,
+                        "timestamp": conv.timestamp.isoformat() if conv.timestamp else None
+                    })
+
+        # Find commitments
+        for pattern in commitment_patterns:
+            matches = re.findall(pattern, text)
+            for match in matches:
+                if len(match) > 10 and len(match) < 200:
+                    commitment_indicators.append({
+                        "type": "commitment",
+                        "description": match.strip(),
+                        "source_text": text[:200],
+                        "conversation_id": conv.id,
+                        "timestamp": conv.timestamp.isoformat() if conv.timestamp else None
+                    })
+
+    # Deduplicate similar items
+    unique_items = []
+    seen_descriptions = set()
+    for item in extracted_items:
+        desc_key = item["description"].lower()[:50]
+        if desc_key not in seen_descriptions:
+            seen_descriptions.add(desc_key)
+            unique_items.append(item)
+
+    unique_commitments = []
+    seen_commitments = set()
+    for item in commitment_indicators:
+        desc_key = item["description"].lower()[:50]
+        if desc_key not in seen_commitments:
+            seen_commitments.add(desc_key)
+            unique_commitments.append(item)
+
+    return {
+        "meeting_id": meeting_id,
+        "meeting_title": meeting.title,
+        "total_conversations_analyzed": len(conversations),
+        "extracted_action_items": unique_items[:20],  # Limit to 20
+        "extracted_commitments": unique_commitments[:10],  # Limit to 10
+        "note": "Review these items and save the ones you want to track"
+    }
+
+
+@router.post("/bulk-create")
+def bulk_create_action_items(
+    items: List[ActionItemCreate],
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Create multiple action items at once.
+    Used after reviewing auto-extracted items.
+    """
+    created = []
+    for data in items:
+        # Verify meeting
+        meeting = db.query(Meeting).filter(
+            Meeting.id == data.meeting_id,
+            Meeting.user_id == user.id
+        ).first()
+
+        if not meeting:
+            continue  # Skip invalid meetings
+
+        action_item = ActionItem(
+            meeting_id=data.meeting_id,
+            user_id=user.id,
+            assignee=data.assignee,
+            assignee_role=data.assignee_role,
+            description=data.description,
+            due_date=data.due_date,
+            priority=data.priority
+        )
+        db.add(action_item)
+        created.append(action_item)
+
+    db.commit()
+
+    for item in created:
+        db.refresh(item)
+
+    return {
+        "created_count": len(created),
+        "action_items": [ActionItemResponse.model_validate(a) for a in created]
+    }
+
+
 # ============== Combined Dashboard ==============
 
 @router.get("/dashboard")

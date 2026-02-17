@@ -423,6 +423,203 @@ def generate_summary(
     return MeetingSummaryResponse.model_validate(summary)
 
 
+@router.get("/{meeting_id}/smart-prep")
+def get_smart_prep(
+    meeting_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get AI-powered smart preparation for a meeting.
+    Returns participant insights, suggested talking points, relevant past discussions,
+    and recommended questions to help users prepare effectively.
+    """
+    from models import ParticipantMemory, Topic, Commitment
+
+    meeting = db.query(Meeting).filter(
+        Meeting.id == meeting_id,
+        Meeting.user_id == user.id
+    ).first()
+
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Meeting not found"
+        )
+
+    # Agenda items (from meeting title and notes)
+    agenda_items = []
+    if meeting.title:
+        agenda_items.append({"item": meeting.title, "priority": "high"})
+    if meeting.notes:
+        # Parse notes for bullet points or numbered items
+        lines = meeting.notes.split('\n')
+        for line in lines[:5]:  # First 5 lines
+            if line.strip():
+                agenda_items.append({"item": line.strip(), "priority": "normal"})
+
+    # Get participant insights from memory
+    participant_insights = []
+    # Get participants from recent similar meetings
+    recent_meetings = db.query(Meeting).filter(
+        Meeting.user_id == user.id,
+        Meeting.meeting_type == meeting.meeting_type,
+        Meeting.id != meeting_id
+    ).order_by(desc(Meeting.started_at)).limit(5).all()
+
+    # Get all participant memories
+    participant_memories = db.query(ParticipantMemory).filter(
+        ParticipantMemory.user_id == user.id
+    ).order_by(desc(ParticipantMemory.last_interaction)).limit(10).all()
+
+    for pm in participant_memories:
+        participant_insights.append({
+            "name": pm.participant_name,
+            "role": pm.participant_role,
+            "company": pm.company,
+            "communication_style": pm.communication_style,
+            "key_interests": pm.topics_discussed[:3] if pm.topics_discussed else [],
+            "last_interaction": pm.last_interaction.isoformat() if pm.last_interaction else None,
+            "relationship_notes": pm.relationship_notes
+        })
+
+    # Suggested talking points based on user's expertise and meeting type
+    user_topics = db.query(Topic).filter(
+        Topic.user_id == user.id
+    ).order_by(desc(Topic.frequency)).limit(10).all()
+
+    suggested_talking_points = []
+    meeting_type_prompts = {
+        "interview": [
+            "Share your key accomplishments and their impact",
+            "Explain your problem-solving approach with examples",
+            "Discuss your experience with relevant technologies"
+        ],
+        "sales": [
+            "Lead with the value proposition",
+            "Address common objections proactively",
+            "Share relevant case studies or success stories"
+        ],
+        "tv_appearance": [
+            "Open with a compelling sound bite",
+            "Bridge to your key message within first 30 seconds",
+            "Use concrete examples and data points"
+        ],
+        "team_meeting": [
+            "Start with quick wins and progress updates",
+            "Address blockers and request specific help needed",
+            "Align on next steps with clear owners"
+        ],
+        "one_on_one": [
+            "Ask about their priorities and challenges",
+            "Share updates on mutual commitments",
+            "Discuss growth opportunities and feedback"
+        ]
+    }
+
+    # Add meeting type specific points
+    if meeting.meeting_type in meeting_type_prompts:
+        for point in meeting_type_prompts[meeting.meeting_type]:
+            suggested_talking_points.append({
+                "point": point,
+                "source": "best_practice"
+            })
+
+    # Add user's top topics as talking points
+    for topic in user_topics[:5]:
+        suggested_talking_points.append({
+            "point": f"Discuss your expertise in {topic.name}",
+            "source": "your_expertise"
+        })
+
+    # Get relevant past discussions from similar meetings
+    relevant_past_discussions = []
+    for past_meeting in recent_meetings:
+        conversations = db.query(Conversation).filter(
+            Conversation.meeting_id == past_meeting.id
+        ).order_by(desc(Conversation.timestamp)).limit(3).all()
+
+        if conversations:
+            relevant_past_discussions.append({
+                "meeting_title": past_meeting.title or f"{past_meeting.meeting_type} meeting",
+                "date": past_meeting.started_at.isoformat(),
+                "key_points": [c.ai_response[:150] + "..." if len(c.ai_response) > 150 else c.ai_response for c in conversations]
+            })
+
+    # Get pending commitments and action items
+    pending_commitments = db.query(Commitment).filter(
+        Commitment.user_id == user.id,
+        Commitment.status == "pending"
+    ).order_by(Commitment.due_date.asc().nullslast()).limit(5).all()
+
+    pending_action_items = db.query(ActionItem).filter(
+        ActionItem.user_id == user.id,
+        ActionItem.status.in_(["pending", "in_progress"])
+    ).order_by(ActionItem.due_date.asc().nullslast()).limit(5).all()
+
+    follow_up_items = []
+    for c in pending_commitments:
+        follow_up_items.append({
+            "type": "commitment",
+            "description": c.commitment_text,
+            "due_date": c.due_date.isoformat() if c.due_date else None,
+            "context": c.context
+        })
+    for ai in pending_action_items:
+        follow_up_items.append({
+            "type": "action_item",
+            "description": ai.description,
+            "due_date": ai.due_date.isoformat() if ai.due_date else None,
+            "assignee": ai.assignee
+        })
+
+    # Generate recommended questions based on meeting type
+    recommended_questions = {
+        "interview": [
+            "What does success look like in this role in the first 90 days?",
+            "What are the biggest challenges the team is currently facing?",
+            "How would you describe the company culture?"
+        ],
+        "sales": [
+            "What's driving your evaluation of solutions right now?",
+            "Who else is involved in this decision?",
+            "What would need to be true for this to move forward?"
+        ],
+        "team_meeting": [
+            "What blockers can I help remove for the team?",
+            "Are there any risks or concerns we should discuss?",
+            "What's our top priority for this sprint?"
+        ],
+        "one_on_one": [
+            "What's been on your mind lately?",
+            "How can I better support you?",
+            "What feedback do you have for me?"
+        ],
+        "tv_appearance": [
+            "What angle is the show taking on this topic?",
+            "Who else is being interviewed?",
+            "What questions should I expect?"
+        ]
+    }
+
+    return {
+        "meeting_id": meeting.id,
+        "meeting_type": meeting.meeting_type,
+        "meeting_title": meeting.title,
+        "agenda_items": agenda_items,
+        "participant_insights": participant_insights[:5],  # Top 5
+        "suggested_talking_points": suggested_talking_points[:10],  # Top 10
+        "relevant_past_discussions": relevant_past_discussions[:3],  # Last 3 similar meetings
+        "follow_up_items": follow_up_items[:5],  # Top 5 pending items
+        "recommended_questions": recommended_questions.get(meeting.meeting_type, [
+            "What are your main objectives for this meeting?",
+            "What challenges are you currently facing?",
+            "How can we best move forward together?"
+        ]),
+        "prep_generated_at": datetime.utcnow().isoformat()
+    }
+
+
 @router.get("/analytics/overview")
 def meeting_analytics(
     user: User = Depends(get_current_user),
