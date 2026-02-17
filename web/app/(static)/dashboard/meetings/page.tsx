@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useMeetings } from '@/lib/hooks/useMeetings'
 import { meetingsApi, Meeting } from '@/lib/api/meetings'
+import { MeetingsPageSkeleton } from '@/components/ui/Skeleton'
 
 function MeetingRow({ meeting, onDelete }: { meeting: Meeting; onDelete: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -155,6 +156,11 @@ export default function MeetingsPage() {
       (m.title?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
       m.meeting_type.toLowerCase().includes(search.toLowerCase())
   )
+
+  // Show skeleton loading on initial load
+  if (isLoading && meetings.length === 0) {
+    return <MeetingsPageSkeleton />
+  }
 
   return (
     <div className="space-y-6">

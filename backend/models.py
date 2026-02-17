@@ -121,6 +121,7 @@ class User(Base):
     # Organization (Corporate)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     role_in_org = Column(String, default="member")  # admin, member
+    company = Column(String, nullable=True)  # For individual users not in an organization
 
     # Staff/Team Member status (for internal teams - lifetime access while active)
     is_staff = Column(Boolean, default=False)
@@ -1689,6 +1690,11 @@ class ChatSession(Base):
     # Queue position (for waiting chats)
     queue_position = Column(Integer, nullable=True)
 
+    # AI handling (Novah)
+    is_ai_handled = Column(Boolean, default=True)  # Start with Novah, transfer to agent if needed
+    ai_transferred_at = Column(DateTime, nullable=True)  # When transferred to human agent
+    ai_resolution_status = Column(String(20), nullable=True)  # resolved_by_ai, transferred, abandoned
+
     # Timestamps
     started_at = Column(DateTime, default=datetime.utcnow)
     accepted_at = Column(DateTime, nullable=True)
@@ -1785,6 +1791,76 @@ class AdminActivityLog(Base):
 
     # Relationships
     user = relationship("User")
+
+
+# =============================================================================
+# KNOWLEDGE BASE & QA
+# =============================================================================
+
+class KnowledgeBaseArticle(Base):
+    """Knowledge base articles for Novah AI assistant."""
+    __tablename__ = "knowledge_base_articles"
+    __table_args__ = (
+        Index("ix_kb_category", "category"),
+        Index("ix_kb_is_published", "is_published"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    summary = Column(Text, nullable=True)  # Short summary for search results
+
+    # Categorization
+    category = Column(String(50), nullable=False)  # faq, guide, troubleshooting, feature
+    tags = Column(JSON, default=list)  # ["billing", "subscription", "pricing"]
+
+    # URLs and references
+    url = Column(String(500), nullable=True)  # Link to full documentation
+    related_articles = Column(JSON, default=list)  # IDs of related articles
+
+    # Status
+    is_published = Column(Boolean, default=True)
+    view_count = Column(Integer, default=0)
+    helpful_count = Column(Integer, default=0)
+    not_helpful_count = Column(Integer, default=0)
+
+    # Metadata
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ChatQARecord(Base):
+    """QA review records for completed chat sessions."""
+    __tablename__ = "chat_qa_records"
+    __table_args__ = (
+        Index("ix_qa_session", "session_id"),
+        Index("ix_qa_reviewer", "reviewer_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("chat_sessions.id"), nullable=False)
+    reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Scores (1-5)
+    overall_score = Column(Integer, nullable=False)
+    response_time_score = Column(Integer, nullable=True)
+    resolution_score = Column(Integer, nullable=True)
+    professionalism_score = Column(Integer, nullable=True)
+
+    # Notes
+    notes = Column(Text, nullable=True)
+
+    # Tags
+    tags = Column(JSON, default=list)  # ["escalated", "resolved_first_contact", "novah_handled"]
+
+    # Timestamps
+    reviewed_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    session = relationship("ChatSession")
+    reviewer = relationship("User")
 
 
 # =============================================================================

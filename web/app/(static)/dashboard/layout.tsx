@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   Calendar,
+  CalendarClock,
   BarChart3,
   Settings,
   Users,
@@ -18,7 +19,9 @@ import {
   HelpCircle,
   Ticket,
   MessageSquare,
-  UserCog
+  UserCog,
+  Building2,
+  ClipboardCheck
 } from 'lucide-react'
 import { AuthProvider, useAuth } from '@/lib/hooks/useAuth'
 import { usePermissions } from '@/lib/hooks/usePermissions'
@@ -60,6 +63,9 @@ function DashboardSidebar() {
 
     if (permissions.canViewChatQueue) {
       nav.push({ name: 'Live Chat', href: '/dashboard/chat', icon: MessageSquare })
+      if (permissions.isAdmin) {
+        nav.push({ name: 'Chat QA', href: '/dashboard/chat-qa', icon: ClipboardCheck })
+      }
     }
 
     if (permissions.canManageTeams) {
@@ -68,6 +74,7 @@ function DashboardSidebar() {
 
     if (permissions.canViewAllUsers) {
       nav.push({ name: 'Users', href: '/dashboard/users', icon: UserCog })
+      nav.push({ name: 'Organizations', href: '/dashboard/organizations', icon: Building2 })
     }
 
     // Customer support (for non-staff to create tickets)
@@ -81,6 +88,7 @@ function DashboardSidebar() {
 
   const settingsNav = [
     { name: 'Profile', href: '/dashboard/settings', icon: Settings },
+    { name: 'Calendar', href: '/dashboard/settings/calendar', icon: CalendarClock },
     { name: 'Billing', href: '/dashboard/settings/billing', icon: CreditCard },
     { name: 'Security', href: '/dashboard/settings/security', icon: Shield },
   ]

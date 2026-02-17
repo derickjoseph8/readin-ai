@@ -500,7 +500,7 @@ function TwoFactorSetupModal({
 
               <div className="flex justify-center p-4 bg-white rounded-lg">
                 <img
-                  src={setupData.qr_code}
+                  src={`data:image/png;base64,${setupData.qr_code}`}
                   alt="2FA QR Code"
                   className="w-48 h-48"
                 />

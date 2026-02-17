@@ -20,6 +20,7 @@ from schemas import (
     AgentStatusUpdate, AgentStatusResponse
 )
 from services.ticket_service import ChatService
+from services.novah_service import novah_service
 
 router = APIRouter(prefix="/admin/chat", tags=["Admin - Chat"])
 
@@ -467,7 +468,7 @@ async def start_chat(
     current_user: User = Depends(get_current_user),
     chat_service: ChatService = Depends(get_chat_service)
 ):
-    """Start a new chat session (customer)."""
+    """Start a new chat session (customer). Starts with Novah AI."""
     # Check if user already has an active chat
     existing = db.query(ChatSession).filter(
         and_(
@@ -483,6 +484,23 @@ async def start_chat(
         user_id=current_user.id,
         team_id=chat_data.team_id
     )
+
+    # Start with Novah AI handling
+    session.is_ai_handled = True
+    session.status = "active"  # AI handles immediately
+    db.commit()
+
+    # Send Novah's greeting message
+    greeting = novah_service.get_greeting()
+    greeting_msg = ChatMessage(
+        session_id=session.id,
+        sender_id=None,
+        sender_type="bot",
+        message=greeting,
+        message_type="text"
+    )
+    db.add(greeting_msg)
+    db.commit()
 
     return enrich_session_response(db, session)
 
@@ -558,7 +576,7 @@ async def send_customer_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Send a message in chat (customer)."""
+    """Send a message in chat (customer). If AI-handled, get Novah response."""
     session = db.query(ChatSession).filter(
         and_(
             ChatSession.user_id == current_user.id,
@@ -569,6 +587,7 @@ async def send_customer_message(
     if not session:
         raise HTTPException(status_code=404, detail="No active chat session")
 
+    # Save customer message
     msg = ChatMessage(
         session_id=session.id,
         sender_id=current_user.id,
@@ -580,6 +599,60 @@ async def send_customer_message(
     db.commit()
     db.refresh(msg)
 
+    # If chat is AI-handled, generate Novah response
+    if session.is_ai_handled:
+        # Get conversation history
+        history = db.query(ChatMessage).filter(
+            ChatMessage.session_id == session.id
+        ).order_by(ChatMessage.created_at).all()
+
+        # Generate Novah response
+        response = novah_service.generate_response(
+            message=message_data.message,
+            session=session,
+            db=db,
+            conversation_history=history
+        )
+
+        # Check if should transfer to agent
+        if response["should_transfer"]:
+            # Transfer to human agent
+            session.is_ai_handled = False
+            session.ai_transferred_at = datetime.utcnow()
+            session.ai_resolution_status = "transferred"
+            session.status = "waiting"
+
+            # Calculate queue position
+            queue_count = db.query(func.count(ChatSession.id)).filter(
+                and_(
+                    ChatSession.status == "waiting",
+                    ChatSession.is_ai_handled == False
+                )
+            ).scalar() or 0
+            session.queue_position = queue_count + 1
+
+            # Send transfer message
+            transfer_msg = ChatMessage(
+                session_id=session.id,
+                sender_id=None,
+                sender_type="bot",
+                message=novah_service.create_transfer_message(response["transfer_reason"]),
+                message_type="text"
+            )
+            db.add(transfer_msg)
+        else:
+            # Send Novah's response
+            bot_msg = ChatMessage(
+                session_id=session.id,
+                sender_id=None,
+                sender_type="bot",
+                message=response["response"],
+                message_type="text"
+            )
+            db.add(bot_msg)
+
+        db.commit()
+
     return ChatMessageResponse(
         id=msg.id,
         session_id=msg.session_id,
@@ -590,6 +663,57 @@ async def send_customer_message(
         created_at=msg.created_at,
         sender_name="You"
     )
+
+
+@customer_chat_router.post("/session/transfer-to-agent")
+async def request_human_agent(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Request transfer from Novah AI to human agent."""
+    session = db.query(ChatSession).filter(
+        and_(
+            ChatSession.user_id == current_user.id,
+            ChatSession.status.in_(["waiting", "active"])
+        )
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="No active chat session")
+
+    if not session.is_ai_handled:
+        return {"message": "Already connected to human agent", "status": session.status}
+
+    # Transfer to human agent queue
+    session.is_ai_handled = False
+    session.ai_transferred_at = datetime.utcnow()
+    session.ai_resolution_status = "transferred"
+    session.status = "waiting"
+
+    # Calculate queue position
+    queue_count = db.query(func.count(ChatSession.id)).filter(
+        and_(
+            ChatSession.status == "waiting",
+            ChatSession.is_ai_handled == False
+        )
+    ).scalar() or 0
+    session.queue_position = queue_count + 1
+
+    # Send system message
+    transfer_msg = ChatMessage(
+        session_id=session.id,
+        sender_id=None,
+        sender_type="system",
+        message="You've been added to the queue for a human agent. Please wait while we connect you with the next available team member.",
+        message_type="text"
+    )
+    db.add(transfer_msg)
+    db.commit()
+
+    return {
+        "message": "Transferred to agent queue",
+        "queue_position": session.queue_position
+    }
 
 
 @customer_chat_router.post("/session/end")
@@ -608,6 +732,10 @@ async def end_my_chat(
 
     if not session:
         raise HTTPException(status_code=404, detail="No active chat session")
+
+    # Mark AI resolution status if ended during AI handling
+    if session.is_ai_handled:
+        session.ai_resolution_status = "resolved_by_ai"
 
     chat_service.end_chat(session.id)
 

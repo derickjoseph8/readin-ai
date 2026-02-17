@@ -12,7 +12,7 @@ from database import get_db
 from auth import get_current_user
 from models import (
     User, SupportTeam, TeamMember, SupportTicket, ChatSession,
-    AgentStatus, AdminActivityLog, StaffRole
+    AgentStatus, AdminActivityLog, StaffRole, Organization
 )
 from schemas import (
     AdminDashboardStats, AdminTrends, TicketTrend, SubscriptionTrend,
@@ -507,3 +507,179 @@ async def seed_default_teams(
     db.commit()
 
     return {"message": f"Created {created} teams"}
+
+
+# =============================================================================
+# ORGANIZATIONS
+# =============================================================================
+
+@router.get("/organizations")
+async def list_organizations(
+    search: Optional[str] = None,
+    plan_type: Optional[str] = None,
+    subscription_status: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """List all organizations with member counts."""
+    require_admin(current_user)
+
+    query = db.query(Organization)
+
+    if search:
+        search_filter = or_(
+            Organization.name.ilike(f"%{search}%"),
+            Organization.billing_email.ilike(f"%{search}%")
+        )
+        query = query.filter(search_filter)
+
+    if plan_type:
+        query = query.filter(Organization.plan_type == plan_type)
+
+    if subscription_status:
+        query = query.filter(Organization.subscription_status == subscription_status)
+
+    total = query.count()
+    organizations = query.order_by(Organization.created_at.desc()).offset(offset).limit(limit).all()
+
+    result = []
+    for org in organizations:
+        # Count members
+        member_count = db.query(func.count(User.id)).filter(
+            User.organization_id == org.id
+        ).scalar()
+
+        # Get admin user
+        admin = db.query(User).filter(User.id == org.admin_user_id).first() if org.admin_user_id else None
+
+        result.append({
+            "id": org.id,
+            "name": org.name,
+            "plan_type": org.plan_type,
+            "max_users": org.max_users,
+            "member_count": member_count,
+            "subscription_status": org.subscription_status,
+            "subscription_end_date": org.subscription_end_date,
+            "billing_email": org.billing_email,
+            "admin_email": admin.email if admin else None,
+            "admin_name": admin.full_name if admin else None,
+            "created_at": org.created_at
+        })
+
+    return {
+        "organizations": result,
+        "total": total
+    }
+
+
+@router.get("/organizations/{org_id}")
+async def get_organization_details(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get detailed organization info with all members."""
+    require_admin(current_user)
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    # Get all members
+    members = db.query(User).filter(User.organization_id == org_id).all()
+
+    # Get admin user
+    admin = db.query(User).filter(User.id == org.admin_user_id).first() if org.admin_user_id else None
+
+    # Get ticket counts for each member
+    member_list = []
+    for member in members:
+        ticket_count = db.query(func.count(SupportTicket.id)).filter(
+            SupportTicket.user_id == member.id
+        ).scalar()
+
+        member_list.append({
+            "id": member.id,
+            "email": member.email,
+            "full_name": member.full_name,
+            "role_in_org": member.role_in_org,
+            "subscription_status": member.subscription_status,
+            "ticket_count": ticket_count,
+            "last_login": member.last_login,
+            "created_at": member.created_at
+        })
+
+    return {
+        "id": org.id,
+        "name": org.name,
+        "plan_type": org.plan_type,
+        "max_users": org.max_users,
+        "subscription_status": org.subscription_status,
+        "subscription_id": org.subscription_id,
+        "subscription_end_date": org.subscription_end_date,
+        "billing_email": org.billing_email,
+        "admin_id": org.admin_user_id,
+        "admin_email": admin.email if admin else None,
+        "admin_name": admin.full_name if admin else None,
+        "shared_insights_enabled": org.shared_insights_enabled,
+        "allow_personal_professions": org.allow_personal_professions,
+        "members": member_list,
+        "member_count": len(member_list),
+        "created_at": org.created_at,
+        "updated_at": org.updated_at
+    }
+
+
+@router.get("/organizations/{org_id}/tickets")
+async def get_organization_tickets(
+    org_id: int,
+    status: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all tickets from organization members."""
+    require_admin(current_user)
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    # Get all member IDs
+    member_ids = [m.id for m in db.query(User.id).filter(User.organization_id == org_id).all()]
+
+    if not member_ids:
+        return {"tickets": [], "total": 0}
+
+    # Query tickets
+    query = db.query(SupportTicket).filter(SupportTicket.user_id.in_(member_ids))
+
+    if status:
+        query = query.filter(SupportTicket.status == status)
+
+    total = query.count()
+    tickets = query.order_by(SupportTicket.created_at.desc()).offset(offset).limit(limit).all()
+
+    result = []
+    for ticket in tickets:
+        user = db.query(User).filter(User.id == ticket.user_id).first()
+        result.append({
+            "id": ticket.id,
+            "subject": ticket.subject,
+            "status": ticket.status,
+            "priority": ticket.priority,
+            "category": ticket.category,
+            "user_id": ticket.user_id,
+            "user_email": user.email if user else None,
+            "user_name": user.full_name if user else None,
+            "created_at": ticket.created_at,
+            "updated_at": ticket.updated_at
+        })
+
+    return {
+        "tickets": result,
+        "total": total
+    }

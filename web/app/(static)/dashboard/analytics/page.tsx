@@ -11,6 +11,7 @@ import {
   Star
 } from 'lucide-react'
 import { analyticsApi, AnalyticsDashboard, MeetingTrend } from '@/lib/api/analytics'
+import { AnalyticsPageSkeleton } from '@/components/ui/Skeleton'
 
 function StatCard({
   title,
@@ -226,11 +227,7 @@ export default function AnalyticsPage() {
   }, [])
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gold-400"></div>
-      </div>
-    )
+    return <AnalyticsPageSkeleton />
   }
 
   if (error) {
