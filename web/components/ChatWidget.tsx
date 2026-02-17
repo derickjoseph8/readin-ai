@@ -155,17 +155,18 @@ export default function ChatWidget() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-r from-gold-600 to-gold-500 rounded-full shadow-lg hover:shadow-gold transition-all flex items-center justify-center z-50"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-r from-gold-600 to-gold-500 rounded-full shadow-lg hover:shadow-gold transition-all flex items-center justify-center z-50"
+        aria-label="Open chat"
       >
-        <MessageSquare className="h-6 w-6 text-premium-bg" />
+        <MessageSquare className="h-5 w-5 sm:h-6 sm:w-6 text-premium-bg" />
       </button>
     )
   }
 
   return (
     <div
-      className={`fixed bottom-6 right-6 w-96 bg-premium-card border border-premium-border rounded-2xl shadow-2xl z-50 overflow-hidden transition-all ${
-        isMinimized ? 'h-14' : 'h-[500px]'
+      className={`fixed bottom-0 right-0 sm:bottom-6 sm:right-6 w-full sm:w-96 sm:max-w-[calc(100vw-2rem)] bg-premium-card border border-premium-border sm:rounded-2xl shadow-2xl z-50 overflow-hidden transition-all ${
+        isMinimized ? 'h-14' : 'h-[100dvh] sm:h-[500px]'
       }`}
     >
       {/* Header */}

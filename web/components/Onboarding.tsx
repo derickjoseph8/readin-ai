@@ -265,11 +265,11 @@ export default function Onboarding({ userName, onComplete, onSkip }: OnboardingP
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-premium-border bg-premium-surface/50">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 border-t border-premium-border bg-premium-surface/50">
           <button
             onClick={handlePrevious}
             disabled={isFirstStep}
-            className={`flex items-center px-4 py-2 text-sm rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gold-500 ${
+            className={`flex items-center px-4 py-2 text-sm rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gold-500 order-2 sm:order-1 ${
               isFirstStep
                 ? 'text-gray-600 cursor-not-allowed'
                 : 'text-gray-400 hover:text-white hover:bg-premium-surface'
@@ -280,12 +280,12 @@ export default function Onboarding({ userName, onComplete, onSkip }: OnboardingP
             Back
           </button>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 order-1 sm:order-2 w-full sm:w-auto justify-center sm:justify-end">
             <button
               onClick={onSkip}
               className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-gold-500 rounded-lg"
             >
-              Skip for now
+              Skip
             </button>
             <button
               onClick={handleNext}

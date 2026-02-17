@@ -332,7 +332,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
       <DashboardSidebar />
       <div id="dashboard-main" className="lg:pl-64">
-        <div className="p-6 lg:p-8">{children}</div>
+        <div className="px-4 py-6 pt-16 lg:pt-6 sm:px-6 lg:px-8">{children}</div>
       </div>
       {/* Only show chat widget for non-staff users */}
       {!permissions.isStaff && <ChatWidget />}

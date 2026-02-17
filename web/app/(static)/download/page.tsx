@@ -37,22 +37,23 @@ export default function DownloadPage() {
     <main className="min-h-screen bg-dark-950 text-white">
       {/* Download Notification Toast */}
       {downloadMessage?.show && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
-          <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl shadow-2xl shadow-green-900/30 px-6 py-4 flex items-center gap-4 border border-green-500/30">
-            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+        <div className="fixed top-20 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 animate-fade-in">
+          <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl shadow-2xl shadow-green-900/30 px-4 sm:px-6 py-4 flex items-center gap-3 sm:gap-4 border border-green-500/30">
+            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
               <Download className="h-5 w-5 text-white" />
             </div>
-            <div>
-              <p className="font-semibold text-white">
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-white text-sm sm:text-base">
                 Download started for {downloadMessage.os.charAt(0).toUpperCase() + downloadMessage.os.slice(1)}
               </p>
-              <p className="text-green-100 text-sm">
-                Your download should begin automatically. Check your downloads folder.
+              <p className="text-green-100 text-xs sm:text-sm">
+                Check your downloads folder.
               </p>
             </div>
             <button
               onClick={() => setDownloadMessage(null)}
-              className="ml-2 p-1 hover:bg-white/20 rounded-full transition"
+              className="p-1.5 hover:bg-white/20 rounded-full transition flex-shrink-0"
+              aria-label="Dismiss notification"
             >
               <X className="h-4 w-4 text-white" />
             </button>
