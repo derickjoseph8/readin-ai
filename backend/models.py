@@ -680,7 +680,7 @@ class EmailNotification(Base):
     __tablename__ = "email_notifications"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Nullable for system emails
 
     # Email details
     email_type = Column(String, nullable=False)  # meeting_summary, commitment_reminder, briefing, weekly_digest
