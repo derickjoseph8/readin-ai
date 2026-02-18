@@ -409,14 +409,18 @@ class EmailService:
     async def send_welcome_email(
         self,
         user_id: int,
+        verification_token: str,
     ) -> Dict[str, Any]:
-        """Send welcome email to new users using secure template."""
+        """Send welcome email with verification link to new users."""
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
             return {"success": False, "error": "User not found"}
 
+        verification_url = f"{APP_URL}/verify-email?token={verification_token}"
+
         context = {
             "user_name": self._sanitize_string(user.full_name) or "there",
+            "verification_url": verification_url,
             "help_url": f"{APP_URL}/help",
         }
 
@@ -424,7 +428,7 @@ class EmailService:
 
         return await self.send_email(
             to_email=user.email,
-            subject="Welcome to ReadIn AI!",
+            subject="Verify Your Email - Welcome to ReadIn AI!",
             html_content=html,
             user_id=user_id,
             email_type="welcome",

@@ -359,13 +359,18 @@ def register(request: Request, user_data: UserCreate, db: Session = Depends(get_
     learning_profile = UserLearningProfile(user_id=user.id)
     db.add(learning_profile)
 
+    # Generate email verification token
+    verification_token = secrets.token_urlsafe(48)
+    user.email_verification_token = verification_token
+    user.email_verified = False
+
     db.commit()
     db.refresh(user)
 
-    # Send welcome email (fire and forget)
+    # Send welcome email with verification link
     try:
         email_service = EmailService(db)
-        asyncio.create_task(email_service.send_welcome_email(user.id))
+        asyncio.create_task(email_service.send_welcome_email(user.id, verification_token))
     except Exception:
         pass  # Don't fail registration if email fails
 
@@ -617,6 +622,65 @@ def reset_password(
         pass
 
     return {"message": "Password has been reset successfully. You can now log in with your new password."}
+
+
+@app.get("/api/v1/auth/verify-email")
+def verify_email(token: str, db: Session = Depends(get_db)):
+    """
+    Verify user's email address using token from welcome email.
+    """
+    user = db.query(User).filter(
+        User.email_verification_token == token
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid verification token"
+        )
+
+    if user.email_verified:
+        return {"message": "Email already verified", "already_verified": True}
+
+    # Mark email as verified
+    user.email_verified = True
+    user.email_verification_token = None
+    db.commit()
+
+    return {"message": "Email verified successfully! You can now access all features.", "verified": True}
+
+
+@app.post("/api/v1/auth/resend-verification")
+@limiter.limit("3/hour")
+def resend_verification(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Resend email verification link.
+
+    Rate limited to 3 requests per hour.
+    """
+    if user.email_verified:
+        return {"message": "Email is already verified"}
+
+    # Generate new verification token
+    verification_token = secrets.token_urlsafe(48)
+    user.email_verification_token = verification_token
+    db.commit()
+
+    # Send verification email
+    try:
+        email_service = EmailService(db)
+        asyncio.create_task(email_service.send_welcome_email(user.id, verification_token))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send verification email"
+        )
+
+    return {"message": "Verification email sent. Please check your inbox."}
 
 
 # ============== Language Endpoints ==============

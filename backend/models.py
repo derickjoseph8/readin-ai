@@ -169,6 +169,10 @@ class User(Base):
     password_reset_token = Column(String(64), nullable=True, index=True)
     password_reset_expires = Column(DateTime, nullable=True)
 
+    # Email verification
+    email_verified = Column(Boolean, default=False)
+    email_verification_token = Column(String(64), nullable=True, index=True)
+
     # Additional user tracking
     last_login = Column(DateTime, nullable=True)
     timezone = Column(String, default="UTC")
