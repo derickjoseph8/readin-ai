@@ -1102,6 +1102,43 @@ def root():
     }
 
 
+# ============== Security Endpoints ==============
+
+@app.get("/.well-known/security.txt")
+def security_txt():
+    """Serve security.txt for vulnerability disclosure policy."""
+    from fastapi.responses import PlainTextResponse
+    security_content = """# ReadIn AI Security Policy
+# https://securitytxt.org/
+
+Contact: mailto:security@getreadin.us
+Expires: 2027-02-17T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://www.getreadin.us/.well-known/security.txt
+Policy: https://www.getreadin.us/security-policy
+"""
+    return PlainTextResponse(content=security_content, media_type="text/plain")
+
+
+@app.get("/api/v1/admin/security/threats")
+def get_threat_summary(
+    hours: int = 24,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get security threat summary for admin dashboard.
+
+    Requires admin or staff role.
+    """
+    if not user.is_staff and user.staff_role not in ["super_admin", "admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    from services.anomaly_detection import AnomalyDetector
+    detector = AnomalyDetector(db)
+    return detector.get_threat_summary(hours=hours)
+
+
 # ============== Health Check ==============
 
 @app.get("/health")

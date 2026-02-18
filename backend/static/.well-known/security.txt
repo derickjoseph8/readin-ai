@@ -1,0 +1,14 @@
+# ReadIn AI Security Policy
+# https://securitytxt.org/
+
+Contact: mailto:security@getreadin.us
+Expires: 2027-02-17T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://www.getreadin.us/.well-known/security.txt
+Policy: https://www.getreadin.us/security-policy
+
+# Acknowledgments
+Acknowledgments: https://www.getreadin.us/security-acknowledgments
+
+# Encryption (PGP key for secure communication)
+# Encryption: https://www.getreadin.us/.well-known/pgp-key.txt

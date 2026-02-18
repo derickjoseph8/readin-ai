@@ -1101,8 +1101,13 @@ class APIKey(Base):
     rate_limit_per_minute = Column(Integer, default=60)
     rate_limit_per_day = Column(Integer, default=10000)
 
+    # IP Allowlisting (null = all IPs allowed)
+    allowed_ips = Column(JSON, nullable=True)  # List of allowed IPs/CIDRs
+    allowed_ip_enabled = Column(Boolean, default=False)
+
     # Usage tracking
     last_used_at = Column(DateTime, nullable=True)
+    last_used_ip = Column(String(45), nullable=True)  # Track last IP used
     usage_count = Column(Integer, default=0)
 
     # Status

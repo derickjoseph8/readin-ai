@@ -5,6 +5,7 @@ from middleware.security import SecurityHeadersMiddleware
 from middleware.request_context import RequestContextMiddleware, get_request_id
 from middleware.compression import GZipMiddleware
 from middleware.slow_query_logger import setup_slow_query_logging, slow_query_logger
+from middleware.csrf import CSRFMiddleware, get_csrf_token
 
 __all__ = [
     "limiter",
@@ -15,4 +16,6 @@ __all__ = [
     "GZipMiddleware",
     "setup_slow_query_logging",
     "slow_query_logger",
+    "CSRFMiddleware",
+    "get_csrf_token",
 ]
