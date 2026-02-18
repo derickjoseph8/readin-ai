@@ -17,7 +17,18 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
-from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
+try:
+    from webauthn.helpers.base64url import base64url_to_bytes, bytes_to_base64url
+except ImportError:
+    # Fallback for different py_webauthn versions
+    import base64
+    def base64url_to_bytes(val: str) -> bytes:
+        padding = 4 - len(val) % 4
+        if padding != 4:
+            val += '=' * padding
+        return base64.urlsafe_b64decode(val)
+    def bytes_to_base64url(val: bytes) -> str:
+        return base64.urlsafe_b64encode(val).rstrip(b'=').decode('utf-8')
 
 from database import get_db
 from models import User, WebAuthnCredential

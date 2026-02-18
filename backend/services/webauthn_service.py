@@ -13,26 +13,40 @@ import base64
 from datetime import datetime
 from typing import Optional, Tuple, List, Dict, Any
 
-from webauthn import (
-    generate_registration_options,
-    verify_registration_response,
-    generate_authentication_options,
-    verify_authentication_response,
-    options_to_json,
-)
-from webauthn.helpers import (
-    bytes_to_base64url,
-    base64url_to_bytes,
-)
-from webauthn.helpers.structs import (
-    AuthenticatorSelectionCriteria,
-    UserVerificationRequirement,
-    ResidentKeyRequirement,
-    PublicKeyCredentialDescriptor,
-    AuthenticatorTransport,
-    RegistrationCredential,
-    AuthenticationCredential,
-)
+try:
+    from webauthn import (
+        generate_registration_options,
+        verify_registration_response,
+        generate_authentication_options,
+        verify_authentication_response,
+        options_to_json,
+    )
+    from webauthn.helpers.base64url import (
+        bytes_to_base64url,
+        base64url_to_bytes,
+    )
+    from webauthn.helpers.structs import (
+        AuthenticatorSelectionCriteria,
+        UserVerificationRequirement,
+        ResidentKeyRequirement,
+        PublicKeyCredentialDescriptor,
+        AuthenticatorTransport,
+        RegistrationCredential,
+        AuthenticationCredential,
+    )
+    WEBAUTHN_AVAILABLE = True
+except ImportError:
+    # WebAuthn not available - provide stub
+    WEBAUTHN_AVAILABLE = False
+    def bytes_to_base64url(val: bytes) -> str:
+        import base64
+        return base64.urlsafe_b64encode(val).rstrip(b'=').decode('utf-8')
+    def base64url_to_bytes(val: str) -> bytes:
+        import base64
+        padding = 4 - len(val) % 4
+        if padding != 4:
+            val += '=' * padding
+        return base64.urlsafe_b64decode(val)
 from sqlalchemy.orm import Session
 
 from config import APP_NAME, APP_URL
