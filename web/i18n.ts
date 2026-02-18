@@ -1,11 +1,11 @@
 /**
  * i18n Configuration for ReadIn AI
- * Supports English, Spanish, and Swahili locales
+ * Supports English, Spanish, Swahili, French, German, Portuguese, and Japanese locales
  */
 
 import { getRequestConfig } from 'next-intl/server';
 
-export const locales = ['en', 'es', 'sw'] as const;
+export const locales = ['en', 'es', 'sw', 'fr', 'de', 'pt', 'ja'] as const;
 export const defaultLocale = 'en' as const;
 
 export type Locale = (typeof locales)[number];
@@ -13,13 +13,21 @@ export type Locale = (typeof locales)[number];
 export const localeNames: Record<Locale, string> = {
   en: 'English',
   es: 'Español',
-  sw: 'Kiswahili'
+  sw: 'Kiswahili',
+  fr: 'Français',
+  de: 'Deutsch',
+  pt: 'Português',
+  ja: '日本語'
 };
 
 export const localeFlags: Record<Locale, string> = {
   en: '🇺🇸',
   es: '🇪🇸',
-  sw: '🇰🇪'
+  sw: '🇰🇪',
+  fr: '🇫🇷',
+  de: '🇩🇪',
+  pt: '🇧🇷',
+  ja: '🇯🇵'
 };
 
 export default getRequestConfig(async ({ requestLocale }) => {

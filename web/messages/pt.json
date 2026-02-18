@@ -1,0 +1,337 @@
+{
+  "common": {
+    "loading": "Carregando...",
+    "error": "Ocorreu um erro",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "edit": "Editar",
+    "create": "Criar",
+    "search": "Pesquisar",
+    "filter": "Filtrar",
+    "export": "Exportar",
+    "import": "Importar",
+    "close": "Fechar",
+    "back": "Voltar",
+    "next": "Proximo",
+    "previous": "Anterior",
+    "submit": "Enviar",
+    "confirm": "Confirmar",
+    "yes": "Sim",
+    "no": "Nao",
+    "all": "Todos",
+    "none": "Nenhum",
+    "select": "Selecionar",
+    "view": "Visualizar",
+    "download": "Baixar",
+    "upload": "Enviar",
+    "refresh": "Atualizar",
+    "logout": "Sair",
+    "login": "Entrar",
+    "signUp": "Cadastrar",
+    "settings": "Configuracoes",
+    "profile": "Perfil",
+    "language": "Idioma",
+    "english": "Ingles",
+    "spanish": "Espanhol",
+    "swahili": "Suaili",
+    "french": "Frances",
+    "german": "Alemao",
+    "portuguese": "Portugues",
+    "japanese": "Japones"
+  },
+  "header": {
+    "features": "Recursos",
+    "pricing": "Precos",
+    "docs": "Documentacao",
+    "download": "Baixar",
+    "tryFree": "Testar Gratis",
+    "getStarted": "Comecar"
+  },
+  "hero": {
+    "badge": "CONFIADO POR MAIS DE 10.000 PROFISSIONAIS",
+    "title": "Seu Assistente de IA em Tempo Real para Conversas ao Vivo",
+    "subtitle": "Nunca mais seja pego de surpresa em reunioes. O ReadIn AI ouve as perguntas e mostra instantaneamente pontos de discussao que voce pode consultar e reformular naturalmente.",
+    "tryFree": "Teste Gratis por 7 Dias",
+    "watchDemo": "Assistir Demo",
+    "noCreditCard": "Nao e necessario cartao de credito"
+  },
+  "features": {
+    "title": "Tudo o Que Voce Precisa para se Destacar em Qualquer Conversa",
+    "subtitle": "Recursos poderosos projetados para torna-lo mais confiante e articulado",
+    "realTime": {
+      "title": "Assistencia de IA em Tempo Real",
+      "description": "Obtenha sugestoes instantaneas enquanto as conversas acontecem, com respostas contextuais adaptadas a sua situacao"
+    },
+    "privacy": {
+      "title": "Design com Privacidade em Primeiro Lugar",
+      "description": "Todo o processamento acontece localmente no seu dispositivo. Suas conversas nunca saem do seu computador"
+    },
+    "learning": {
+      "title": "Aprendizado Adaptativo",
+      "description": "A IA aprende seu estilo e preferencias de comunicacao para fornecer assistencia cada vez mais personalizada"
+    },
+    "integration": {
+      "title": "Integracao Universal",
+      "description": "Funciona perfeitamente com Zoom, Teams, Google Meet, Discord e qualquer fonte de audio"
+    },
+    "analytics": {
+      "title": "Analiticos de Reunioes",
+      "description": "Acompanhe seus padroes de fala, obtenha insights sobre engajamento e melhore ao longo do tempo"
+    },
+    "memory": {
+      "title": "Memoria de Participantes",
+      "description": "Lembre-se de detalhes importantes sobre pessoas que voce conheceu para manter melhores relacionamentos profissionais"
+    }
+  },
+  "howItWorks": {
+    "title": "Como Funciona",
+    "subtitle": "Comece em minutos com nosso processo de configuracao simples",
+    "step1": {
+      "title": "Baixar e Instalar",
+      "description": "Instalacao rapida com configuracao automatica para sua plataforma"
+    },
+    "step2": {
+      "title": "Configure Suas Preferencias",
+      "description": "Conte-nos sobre sua profissao e estilo de comunicacao"
+    },
+    "step3": {
+      "title": "Inicie Sua Reuniao",
+      "description": "O ReadIn AI detecta e auxilia automaticamente em suas conversas"
+    }
+  },
+  "pricing": {
+    "title": "Precos Simples e Transparentes",
+    "subtitle": "Escolha o plano que atende as suas necessidades",
+    "monthly": "Mensal",
+    "yearly": "Anual",
+    "save": "Economize 20%",
+    "free": {
+      "name": "Gratis",
+      "price": "R$ 0",
+      "period": "para sempre",
+      "description": "Perfeito para experimentar o ReadIn AI",
+      "features": [
+        "5 reunioes por mes",
+        "Sugestoes basicas de IA",
+        "Transcricao local",
+        "Suporte da comunidade"
+      ],
+      "cta": "Comecar"
+    },
+    "pro": {
+      "name": "Pro",
+      "price": "R$ 99",
+      "period": "por mes",
+      "description": "Para profissionais que querem mais",
+      "features": [
+        "Reunioes ilimitadas",
+        "IA avancada com GPT-4",
+        "Resumos de reunioes",
+        "Extracao de itens de acao",
+        "Suporte prioritario",
+        "Integracao com calendario"
+      ],
+      "cta": "Iniciar Teste Gratis",
+      "popular": "Mais Popular"
+    },
+    "enterprise": {
+      "name": "Empresarial",
+      "price": "Personalizado",
+      "period": "por usuario/mes",
+      "description": "Para equipes e organizacoes",
+      "features": [
+        "Tudo no Pro",
+        "Gerenciamento de equipe",
+        "Integracao SSO",
+        "Treinamento de IA personalizado",
+        "Suporte dedicado",
+        "Opcao local"
+      ],
+      "cta": "Contatar Vendas"
+    }
+  },
+  "faq": {
+    "title": "Perguntas Frequentes",
+    "q1": {
+      "question": "Como o ReadIn AI protege minha privacidade?",
+      "answer": "Todo o processamento de audio acontece localmente no seu dispositivo usando Whisper AI. Suas conversas nunca sao enviadas para servidores externos, a menos que voce habilite explicitamente recursos de nuvem."
+    },
+    "q2": {
+      "question": "Quais plataformas de reuniao sao suportadas?",
+      "answer": "O ReadIn AI funciona com Zoom, Microsoft Teams, Google Meet, Webex, Discord e qualquer aplicativo que use o audio do seu sistema."
+    },
+    "q3": {
+      "question": "Outros na reuniao podem ver minhas sugestoes de IA?",
+      "answer": "Nao, o ReadIn AI funciona como uma sobreposicao discreta na sua tela. Somente voce pode ver as sugestoes, e nao ha indicacao para outros de que voce esta usando."
+    },
+    "q4": {
+      "question": "Qual e a precisao da transcricao?",
+      "answer": "Usamos o modelo Whisper da OpenAI que alcanca precisao proxima a humana. O desempenho pode variar com base na qualidade do audio e ruido de fundo."
+    },
+    "q5": {
+      "question": "Posso cancelar minha assinatura a qualquer momento?",
+      "answer": "Sim, voce pode cancelar sua assinatura a qualquer momento. Voce continuara tendo acesso ate o final do seu periodo de cobranca."
+    }
+  },
+  "cta": {
+    "title": "Pronto para Transformar Suas Reunioes?",
+    "subtitle": "Junte-se a milhares de profissionais que usam o ReadIn AI para se comunicar com confianca",
+    "button": "Comece Seu Teste Gratis",
+    "noCard": "Nao e necessario cartao de credito"
+  },
+  "footer": {
+    "product": "Produto",
+    "company": "Empresa",
+    "legal": "Legal",
+    "support": "Suporte",
+    "features": "Recursos",
+    "pricing": "Precos",
+    "download": "Baixar",
+    "changelog": "Registro de alteracoes",
+    "about": "Sobre",
+    "blog": "Blog",
+    "careers": "Carreiras",
+    "contact": "Contato",
+    "privacy": "Politica de Privacidade",
+    "terms": "Termos de Servico",
+    "cookies": "Politica de Cookies",
+    "gdpr": "LGPD",
+    "docs": "Documentacao",
+    "faq": "FAQ",
+    "status": "Status",
+    "copyright": "Todos os direitos reservados."
+  },
+  "dashboard": {
+    "title": "Painel",
+    "welcome": "Bem-vindo de volta",
+    "overview": "Visao Geral",
+    "recentMeetings": "Reunioes Recentes",
+    "quickStats": "Estatisticas Rapidas",
+    "totalMeetings": "Total de Reunioes",
+    "hoursRecorded": "Horas Gravadas",
+    "actionItems": "Itens de Acao",
+    "avgDuration": "Duracao Media",
+    "viewAll": "Ver Tudo",
+    "noMeetings": "Nenhuma reuniao ainda",
+    "startFirst": "Inicie sua primeira reuniao para ve-la aqui"
+  },
+  "meetings": {
+    "title": "Reunioes",
+    "subtitle": "Visualize e gerencie seu historico de reunioes",
+    "search": "Pesquisar reunioes...",
+    "filter": "Filtrar",
+    "sort": "Ordenar por",
+    "newest": "Mais Recentes",
+    "oldest": "Mais Antigas",
+    "duration": "Duracao",
+    "participants": "Participantes",
+    "topics": "Topicos discutidos",
+    "actionItems": "Itens de acao",
+    "summary": "Resumo",
+    "transcript": "Transcricao",
+    "export": "Exportar",
+    "delete": "Excluir",
+    "noMeetings": "Nenhuma reuniao encontrada",
+    "scheduled": "Agendada",
+    "completed": "Concluida",
+    "inProgress": "Em Andamento"
+  },
+  "analytics": {
+    "title": "Analiticos",
+    "subtitle": "Insights das suas reunioes",
+    "period": "Periodo",
+    "last7Days": "Ultimos 7 Dias",
+    "last30Days": "Ultimos 30 Dias",
+    "last90Days": "Ultimos 90 Dias",
+    "allTime": "Todo o Periodo",
+    "meetingTrends": "Tendencias de Reunioes",
+    "speakingTime": "Tempo de Fala",
+    "topTopics": "Principais Topicos",
+    "productivity": "Pontuacao de Produtividade",
+    "engagement": "Nivel de Engajamento",
+    "improvement": "vs periodo anterior"
+  },
+  "settings": {
+    "title": "Configuracoes",
+    "profile": {
+      "title": "Configuracoes de Perfil",
+      "name": "Nome Completo",
+      "email": "Endereco de Email",
+      "profession": "Profissao",
+      "timezone": "Fuso Horario",
+      "language": "Idioma",
+      "save": "Salvar Alteracoes"
+    },
+    "billing": {
+      "title": "Cobranca e Assinatura",
+      "currentPlan": "Plano Atual",
+      "nextBilling": "Proxima Data de Cobranca",
+      "paymentMethod": "Metodo de Pagamento",
+      "updateCard": "Atualizar Cartao",
+      "viewHistory": "Ver Historico de Cobranca",
+      "cancel": "Cancelar Assinatura",
+      "upgrade": "Atualizar Plano"
+    },
+    "security": {
+      "title": "Seguranca",
+      "password": "Alterar Senha",
+      "currentPassword": "Senha Atual",
+      "newPassword": "Nova Senha",
+      "confirmPassword": "Confirmar Nova Senha",
+      "twoFactor": "Autenticacao de Dois Fatores",
+      "enable2FA": "Ativar 2FA",
+      "sessions": "Sessoes Ativas",
+      "revokeAll": "Revogar Todas as Sessoes"
+    },
+    "notifications": {
+      "title": "Notificacoes",
+      "email": "Notificacoes por Email",
+      "meetingReminders": "Lembretes de Reunioes",
+      "weeklySummary": "Resumo Semanal",
+      "productUpdates": "Atualizacoes do Produto"
+    },
+    "privacy": {
+      "title": "Privacidade",
+      "dataExport": "Exportar Meus Dados",
+      "deleteAccount": "Excluir Conta",
+      "analytics": "Permitir Analiticos",
+      "marketing": "Comunicacoes de Marketing"
+    }
+  },
+  "team": {
+    "title": "Equipe",
+    "subtitle": "Gerencie sua organizacao",
+    "members": "Membros da Equipe",
+    "invite": "Convidar Membro",
+    "role": "Funcao",
+    "admin": "Administrador",
+    "member": "Membro",
+    "viewer": "Visualizador",
+    "pending": "Pendente",
+    "active": "Ativo",
+    "remove": "Remover",
+    "changeRole": "Alterar Funcao"
+  },
+  "login": {
+    "title": "Entrar",
+    "subtitle": "Bem-vindo de volta ao ReadIn AI",
+    "email": "Endereco de Email",
+    "password": "Senha",
+    "remember": "Lembrar de mim",
+    "forgot": "Esqueceu a senha?",
+    "signIn": "Entrar",
+    "noAccount": "Nao tem uma conta?",
+    "signUp": "Cadastre-se",
+    "orContinue": "Ou continue com",
+    "google": "Continuar com Google",
+    "microsoft": "Continuar com Microsoft"
+  },
+  "errors": {
+    "notFound": "Pagina nao encontrada",
+    "unauthorized": "Voce nao tem permissao para acessar esta pagina",
+    "serverError": "Algo deu errado. Por favor, tente novamente mais tarde.",
+    "networkError": "Erro de rede. Por favor, verifique sua conexao.",
+    "sessionExpired": "Sua sessao expirou. Por favor, faca login novamente."
+  }
+}

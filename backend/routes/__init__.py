@@ -16,6 +16,7 @@ from .api_keys import router as api_keys_router
 from .api_keys import webhooks_router
 from .white_label import router as white_label_router
 from .two_factor import router as two_factor_router
+from .webauthn import router as webauthn_router
 
 # Admin routes
 from .admin.dashboard import router as admin_dashboard_router
@@ -42,6 +43,7 @@ __all__ = [
     "webhooks_router",
     "white_label_router",
     "two_factor_router",
+    "webauthn_router",
     # Admin routes
     "admin_dashboard_router",
     "admin_teams_router",

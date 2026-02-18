@@ -1,0 +1,337 @@
+{
+  "common": {
+    "loading": "Wird geladen...",
+    "error": "Ein Fehler ist aufgetreten",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Loschen",
+    "edit": "Bearbeiten",
+    "create": "Erstellen",
+    "search": "Suchen",
+    "filter": "Filtern",
+    "export": "Exportieren",
+    "import": "Importieren",
+    "close": "Schliessen",
+    "back": "Zuruck",
+    "next": "Weiter",
+    "previous": "Zuruck",
+    "submit": "Absenden",
+    "confirm": "Bestatigen",
+    "yes": "Ja",
+    "no": "Nein",
+    "all": "Alle",
+    "none": "Keine",
+    "select": "Auswahlen",
+    "view": "Ansehen",
+    "download": "Herunterladen",
+    "upload": "Hochladen",
+    "refresh": "Aktualisieren",
+    "logout": "Abmelden",
+    "login": "Anmelden",
+    "signUp": "Registrieren",
+    "settings": "Einstellungen",
+    "profile": "Profil",
+    "language": "Sprache",
+    "english": "Englisch",
+    "spanish": "Spanisch",
+    "swahili": "Swahili",
+    "french": "Franzosisch",
+    "german": "Deutsch",
+    "portuguese": "Portugiesisch",
+    "japanese": "Japanisch"
+  },
+  "header": {
+    "features": "Funktionen",
+    "pricing": "Preise",
+    "docs": "Dokumentation",
+    "download": "Herunterladen",
+    "tryFree": "Kostenlos Testen",
+    "getStarted": "Loslegen"
+  },
+  "hero": {
+    "badge": "VERTRAUT VON UBER 10.000 FACHLEUTEN",
+    "title": "Ihr KI-Assistent in Echtzeit fur Live-Gesprache",
+    "subtitle": "Lassen Sie sich in Meetings nie wieder uberraschen. ReadIn AI hort Fragen zu und zeigt sofort Gesprachspunkte an, die Sie einsehen und naturlich umformulieren konnen.",
+    "tryFree": "7 Tage Kostenlos Testen",
+    "watchDemo": "Demo Ansehen",
+    "noCreditCard": "Keine Kreditkarte erforderlich"
+  },
+  "features": {
+    "title": "Alles, Was Sie Brauchen, Um in Jedem Gesprach zu Glanzten",
+    "subtitle": "Leistungsstarke Funktionen, die Sie selbstbewusster und artikulierter machen",
+    "realTime": {
+      "title": "KI-Unterstutzung in Echtzeit",
+      "description": "Erhalten Sie sofortige Vorschlage wahrend Gesprache, mit kontextbezogenen Antworten, die auf Ihre Situation zugeschnitten sind"
+    },
+    "privacy": {
+      "title": "Datenschutz-Erstes Design",
+      "description": "Die gesamte Verarbeitung erfolgt lokal auf Ihrem Gerat. Ihre Gesprache verlassen niemals Ihren Computer"
+    },
+    "learning": {
+      "title": "Adaptives Lernen",
+      "description": "Die KI lernt Ihren Kommunikationsstil und Ihre Praferenzen, um zunehmend personalisierte Unterstutzung zu bieten"
+    },
+    "integration": {
+      "title": "Universelle Integration",
+      "description": "Funktioniert nahtlos mit Zoom, Teams, Google Meet, Discord und jeder Audioquelle"
+    },
+    "analytics": {
+      "title": "Meeting-Analytik",
+      "description": "Verfolgen Sie Ihre Sprechmuster, erhalten Sie Einblicke in das Engagement und verbessern Sie sich mit der Zeit"
+    },
+    "memory": {
+      "title": "Teilnehmer-Gedachtnis",
+      "description": "Merken Sie sich wichtige Details uber Personen, die Sie getroffen haben, um bessere berufliche Beziehungen zu pflegen"
+    }
+  },
+  "howItWorks": {
+    "title": "So Funktioniert Es",
+    "subtitle": "Starten Sie in wenigen Minuten mit unserem einfachen Einrichtungsprozess",
+    "step1": {
+      "title": "Herunterladen und Installieren",
+      "description": "Schnelle Installation mit automatischer Einrichtung fur Ihre Plattform"
+    },
+    "step2": {
+      "title": "Konfigurieren Sie Ihre Praferenzen",
+      "description": "Erzahlen Sie uns von Ihrem Beruf und Ihrem Kommunikationsstil"
+    },
+    "step3": {
+      "title": "Starten Sie Ihr Meeting",
+      "description": "ReadIn AI erkennt und unterstutzt automatisch bei Ihren Gesprachen"
+    }
+  },
+  "pricing": {
+    "title": "Einfache, Transparente Preise",
+    "subtitle": "Wahlen Sie den Plan, der zu Ihren Bedurfnissen passt",
+    "monthly": "Monatlich",
+    "yearly": "Jahrlich",
+    "save": "20% Sparen",
+    "free": {
+      "name": "Kostenlos",
+      "price": "0 $",
+      "period": "fur immer",
+      "description": "Perfekt zum Ausprobieren von ReadIn AI",
+      "features": [
+        "5 Meetings pro Monat",
+        "Grundlegende KI-Vorschlage",
+        "Lokale Transkription",
+        "Community-Support"
+      ],
+      "cta": "Loslegen"
+    },
+    "pro": {
+      "name": "Pro",
+      "price": "19 $",
+      "period": "pro Monat",
+      "description": "Fur Profis, die mehr wollen",
+      "features": [
+        "Unbegrenzte Meetings",
+        "Fortgeschrittene KI mit GPT-4",
+        "Meeting-Zusammenfassungen",
+        "Aktionspunkt-Extraktion",
+        "Prioritats-Support",
+        "Kalender-Integration"
+      ],
+      "cta": "Kostenlose Testversion Starten",
+      "popular": "Am Beliebtesten"
+    },
+    "enterprise": {
+      "name": "Enterprise",
+      "price": "Individuell",
+      "period": "pro Benutzer/Monat",
+      "description": "Fur Teams und Organisationen",
+      "features": [
+        "Alles in Pro",
+        "Team-Verwaltung",
+        "SSO-Integration",
+        "Benutzerdefiniertes KI-Training",
+        "Dedizierter Support",
+        "On-Premise-Option"
+      ],
+      "cta": "Vertrieb Kontaktieren"
+    }
+  },
+  "faq": {
+    "title": "Haufig Gestellte Fragen",
+    "q1": {
+      "question": "Wie schutzt ReadIn AI meine Privatsphare?",
+      "answer": "Die gesamte Audioverarbeitung erfolgt lokal auf Ihrem Gerat mit Whisper AI. Ihre Gesprache werden niemals an externe Server gesendet, es sei denn, Sie aktivieren explizit Cloud-Funktionen."
+    },
+    "q2": {
+      "question": "Welche Meeting-Plattformen werden unterstutzt?",
+      "answer": "ReadIn AI funktioniert mit Zoom, Microsoft Teams, Google Meet, Webex, Discord und jeder Anwendung, die Ihr System-Audio verwendet."
+    },
+    "q3": {
+      "question": "Konnen andere im Meeting meine KI-Vorschlage sehen?",
+      "answer": "Nein, ReadIn AI lauft als diskretes Overlay auf Ihrem Bildschirm. Nur Sie konnen die Vorschlage sehen, und es gibt keinen Hinweis fur andere, dass Sie es verwenden."
+    },
+    "q4": {
+      "question": "Wie genau ist die Transkription?",
+      "answer": "Wir verwenden OpenAIs Whisper-Modell, das nahezu menschliche Genauigkeit erreicht. Die Leistung kann je nach Audioqualitat und Hinterundgerauschen variieren."
+    },
+    "q5": {
+      "question": "Kann ich mein Abonnement jederzeit kundigen?",
+      "answer": "Ja, Sie konnen Ihr Abonnement jederzeit kundigen. Sie haben weiterhin Zugang bis zum Ende Ihres Abrechnungszeitraums."
+    }
+  },
+  "cta": {
+    "title": "Bereit, Ihre Meetings zu Transformieren?",
+    "subtitle": "Schliessen Sie sich Tausenden von Fachleuten an, die ReadIn AI nutzen, um selbstbewusst zu kommunizieren",
+    "button": "Starten Sie Ihre Kostenlose Testversion",
+    "noCard": "Keine Kreditkarte erforderlich"
+  },
+  "footer": {
+    "product": "Produkt",
+    "company": "Unternehmen",
+    "legal": "Rechtliches",
+    "support": "Support",
+    "features": "Funktionen",
+    "pricing": "Preise",
+    "download": "Herunterladen",
+    "changelog": "Anderungsprotokoll",
+    "about": "Uber Uns",
+    "blog": "Blog",
+    "careers": "Karriere",
+    "contact": "Kontakt",
+    "privacy": "Datenschutzrichtlinie",
+    "terms": "Nutzungsbedingungen",
+    "cookies": "Cookie-Richtlinie",
+    "gdpr": "DSGVO",
+    "docs": "Dokumentation",
+    "faq": "FAQ",
+    "status": "Status",
+    "copyright": "Alle Rechte vorbehalten."
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Willkommen zuruck",
+    "overview": "Ubersicht",
+    "recentMeetings": "Letzte Meetings",
+    "quickStats": "Schnelle Statistiken",
+    "totalMeetings": "Gesamte Meetings",
+    "hoursRecorded": "Aufgezeichnete Stunden",
+    "actionItems": "Aktionspunkte",
+    "avgDuration": "Durchschnittliche Dauer",
+    "viewAll": "Alle Anzeigen",
+    "noMeetings": "Noch keine Meetings",
+    "startFirst": "Starten Sie Ihr erstes Meeting, um es hier zu sehen"
+  },
+  "meetings": {
+    "title": "Meetings",
+    "subtitle": "Anzeigen und Verwalten Ihrer Meeting-Historie",
+    "search": "Meetings suchen...",
+    "filter": "Filtern",
+    "sort": "Sortieren nach",
+    "newest": "Neueste Zuerst",
+    "oldest": "Alteste Zuerst",
+    "duration": "Dauer",
+    "participants": "Teilnehmer",
+    "topics": "Besprochene Themen",
+    "actionItems": "Aktionspunkte",
+    "summary": "Zusammenfassung",
+    "transcript": "Transkript",
+    "export": "Exportieren",
+    "delete": "Loschen",
+    "noMeetings": "Keine Meetings gefunden",
+    "scheduled": "Geplant",
+    "completed": "Abgeschlossen",
+    "inProgress": "In Bearbeitung"
+  },
+  "analytics": {
+    "title": "Analytik",
+    "subtitle": "Einblicke aus Ihren Meetings",
+    "period": "Zeitraum",
+    "last7Days": "Letzte 7 Tage",
+    "last30Days": "Letzte 30 Tage",
+    "last90Days": "Letzte 90 Tage",
+    "allTime": "Gesamte Zeit",
+    "meetingTrends": "Meeting-Trends",
+    "speakingTime": "Sprechzeit",
+    "topTopics": "Top-Themen",
+    "productivity": "Produktivitatswert",
+    "engagement": "Engagement-Level",
+    "improvement": "vs vorherige Periode"
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "profile": {
+      "title": "Profil-Einstellungen",
+      "name": "Vollstandiger Name",
+      "email": "E-Mail-Adresse",
+      "profession": "Beruf",
+      "timezone": "Zeitzone",
+      "language": "Sprache",
+      "save": "Anderungen Speichern"
+    },
+    "billing": {
+      "title": "Abrechnung und Abonnement",
+      "currentPlan": "Aktueller Plan",
+      "nextBilling": "Nachstes Rechnungsdatum",
+      "paymentMethod": "Zahlungsmethode",
+      "updateCard": "Karte Aktualisieren",
+      "viewHistory": "Rechnungsverlauf Anzeigen",
+      "cancel": "Abonnement Kundigen",
+      "upgrade": "Plan Upgraden"
+    },
+    "security": {
+      "title": "Sicherheit",
+      "password": "Passwort Andern",
+      "currentPassword": "Aktuelles Passwort",
+      "newPassword": "Neues Passwort",
+      "confirmPassword": "Neues Passwort Bestatigen",
+      "twoFactor": "Zwei-Faktor-Authentifizierung",
+      "enable2FA": "2FA Aktivieren",
+      "sessions": "Aktive Sitzungen",
+      "revokeAll": "Alle Sitzungen Widerrufen"
+    },
+    "notifications": {
+      "title": "Benachrichtigungen",
+      "email": "E-Mail-Benachrichtigungen",
+      "meetingReminders": "Meeting-Erinnerungen",
+      "weeklySummary": "Wochentliche Zusammenfassung",
+      "productUpdates": "Produktupdates"
+    },
+    "privacy": {
+      "title": "Datenschutz",
+      "dataExport": "Meine Daten Exportieren",
+      "deleteAccount": "Konto Loschen",
+      "analytics": "Analytik Erlauben",
+      "marketing": "Marketing-Kommunikation"
+    }
+  },
+  "team": {
+    "title": "Team",
+    "subtitle": "Verwalten Sie Ihre Organisation",
+    "members": "Team-Mitglieder",
+    "invite": "Mitglied Einladen",
+    "role": "Rolle",
+    "admin": "Administrator",
+    "member": "Mitglied",
+    "viewer": "Betrachter",
+    "pending": "Ausstehend",
+    "active": "Aktiv",
+    "remove": "Entfernen",
+    "changeRole": "Rolle Andern"
+  },
+  "login": {
+    "title": "Anmelden",
+    "subtitle": "Willkommen zuruck bei ReadIn AI",
+    "email": "E-Mail-Adresse",
+    "password": "Passwort",
+    "remember": "Angemeldet bleiben",
+    "forgot": "Passwort vergessen?",
+    "signIn": "Anmelden",
+    "noAccount": "Noch kein Konto?",
+    "signUp": "Registrieren",
+    "orContinue": "Oder fortfahren mit",
+    "google": "Mit Google fortfahren",
+    "microsoft": "Mit Microsoft fortfahren"
+  },
+  "errors": {
+    "notFound": "Seite nicht gefunden",
+    "unauthorized": "Sie haben keine Berechtigung, auf diese Seite zuzugreifen",
+    "serverError": "Etwas ist schief gelaufen. Bitte versuchen Sie es spater erneut.",
+    "networkError": "Netzwerkfehler. Bitte uberprufen Sie Ihre Verbindung.",
+    "sessionExpired": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an."
+  }
+}

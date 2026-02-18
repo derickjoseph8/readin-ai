@@ -39,7 +39,7 @@ from routes import (
     conversations_router, tasks_router, briefings_router, interviews_router,
     gdpr_router, metrics_router, analytics_router, calendar_router,
     sso_router, api_keys_router, webhooks_router, white_label_router,
-    two_factor_router,
+    two_factor_router, webauthn_router,
     # Admin routes
     admin_dashboard_router, admin_teams_router, admin_tickets_router,
     customer_tickets_router, admin_chat_router, customer_chat_router
@@ -188,6 +188,7 @@ app.include_router(api_keys_router, prefix=API_V1_PREFIX)
 app.include_router(webhooks_router, prefix=API_V1_PREFIX)
 app.include_router(white_label_router, prefix=API_V1_PREFIX)
 app.include_router(two_factor_router)  # Already has /api/v1 prefix
+app.include_router(webauthn_router)  # Already has /api/v1 prefix
 app.include_router(sessions_router, prefix=API_V1_PREFIX)
 app.include_router(bulk_router, prefix=API_V1_PREFIX)
 app.include_router(search_router, prefix=API_V1_PREFIX)

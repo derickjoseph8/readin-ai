@@ -1,5 +1,5 @@
 """
-Integration routes for Slack, Microsoft Teams, and Video Platforms.
+Integration routes for Slack, Microsoft Teams, Video Platforms, and Calendar Services.
 
 PRIVACY-FIRST VIDEO INTEGRATIONS (STEALTH MODE):
 - NO bots join meetings (completely invisible to other participants)
@@ -12,7 +12,7 @@ Provides:
 - Token management
 - Integration settings
 - Notification delivery
-- Meeting schedule sync (Zoom, Google Meet, Teams, Webex)
+- Meeting schedule sync (Zoom, Google Meet, Teams, Webex, Apple Calendar, Calendly)
 """
 
 import logging
@@ -32,6 +32,8 @@ from services.zoom_service import ZoomService, is_zoom_configured
 from services.google_meet_service import GoogleMeetService, is_google_meet_configured
 from services.teams_meeting_service import TeamsMeetingService, is_teams_meeting_configured
 from services.webex_service import WebexService, is_webex_configured
+from services.apple_calendar_service import AppleCalendarService, is_apple_calendar_configured
+from services.calendly_service import CalendlyService, is_calendly_configured
 from config import APP_URL
 
 logger = logging.getLogger("integrations")
@@ -1221,6 +1223,505 @@ async def disconnect_webex(
 
 
 # =============================================================================
+# APPLE CALENDAR OAUTH (CalDAV-based calendar sync)
+# =============================================================================
+
+@router.get("/apple-calendar/authorize")
+async def apple_calendar_authorize(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get Apple OAuth authorization URL for calendar sync.
+
+    PRIVACY NOTE: Only requests calendar access via CalDAV.
+    No bot joins meetings - completely invisible.
+    """
+    if not is_apple_calendar_configured():
+        raise HTTPException(status_code=503, detail="Apple Calendar integration not configured")
+
+    apple_service = AppleCalendarService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/apple-calendar/callback"
+    auth_url = apple_service.get_oauth_url(current_user.id, redirect_uri)
+
+    return {"authorization_url": auth_url}
+
+
+@router.get("/apple-calendar/callback")
+async def apple_calendar_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """Handle Apple Calendar OAuth callback."""
+    if not is_apple_calendar_configured():
+        raise HTTPException(status_code=503, detail="Apple Calendar integration not configured")
+
+    try:
+        parts = state.split(":")
+        user_id = int(parts[0])
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=400, detail="Invalid state parameter")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    apple_service = AppleCalendarService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/apple-calendar/callback"
+    result = await apple_service.exchange_code(code, redirect_uri)
+    await apple_service.close()
+
+    if not result.get("success"):
+        logger.error(f"Apple Calendar OAuth failed: {result.get('error')}")
+        return Response(
+            status_code=302,
+            headers={"Location": f"{APP_URL}/dashboard/settings/integrations?error=apple_auth_failed"}
+        )
+
+    existing = db.query(UserIntegration).filter(
+        UserIntegration.user_id == user_id,
+        UserIntegration.provider == IntegrationProvider.APPLE_CALENDAR
+    ).first()
+
+    if existing:
+        existing.access_token = result.get("access_token")
+        existing.refresh_token = result.get("refresh_token")
+        existing.token_expires_at = datetime.utcnow() + timedelta(seconds=result.get("expires_in", 3600))
+        existing.provider_user_id = result.get("user_id")
+        existing.display_name = result.get("display_name")
+        existing.email = result.get("email")
+        existing.is_active = True
+        existing.error_message = None
+        existing.updated_at = datetime.utcnow()
+    else:
+        integration = UserIntegration(
+            user_id=user_id,
+            provider=IntegrationProvider.APPLE_CALENDAR,
+            access_token=result.get("access_token"),
+            refresh_token=result.get("refresh_token"),
+            token_expires_at=datetime.utcnow() + timedelta(seconds=result.get("expires_in", 3600)),
+            provider_user_id=result.get("user_id"),
+            display_name=result.get("display_name"),
+            email=result.get("email"),
+        )
+        db.add(integration)
+
+    db.commit()
+
+    return Response(
+        status_code=302,
+        headers={"Location": f"{APP_URL}/dashboard/settings/integrations?success=apple_calendar_connected"}
+    )
+
+
+@router.get("/apple-calendar/events")
+async def get_apple_calendar_events(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get upcoming events from Apple Calendar via CalDAV."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.APPLE_CALENDAR,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="Apple Calendar not connected")
+
+    apple_service = AppleCalendarService(db)
+
+    if integration.token_expires_at and integration.token_expires_at < datetime.utcnow():
+        refresh_result = await apple_service.refresh_token(integration.refresh_token)
+        if refresh_result.get("success"):
+            integration.access_token = refresh_result.get("access_token")
+            if refresh_result.get("refresh_token"):
+                integration.refresh_token = refresh_result.get("refresh_token")
+            integration.token_expires_at = datetime.utcnow() + timedelta(seconds=refresh_result.get("expires_in", 3600))
+            db.commit()
+        else:
+            await apple_service.close()
+            raise HTTPException(status_code=401, detail="Token refresh failed")
+
+    events = await apple_service.get_upcoming_meetings(
+        integration.access_token,
+        integration.provider_user_id
+    )
+    await apple_service.close()
+
+    return {"events": events, "platform": "apple_calendar"}
+
+
+@router.get("/apple-calendar/calendars")
+async def get_apple_calendars(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get list of user's Apple Calendar calendars."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.APPLE_CALENDAR,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="Apple Calendar not connected")
+
+    apple_service = AppleCalendarService(db)
+    calendars = await apple_service.get_calendars(
+        integration.access_token,
+        integration.provider_user_id
+    )
+    await apple_service.close()
+
+    return {"calendars": calendars}
+
+
+class CreateEventRequest(BaseModel):
+    """Request to create a calendar event."""
+    title: str
+    start_time: datetime
+    end_time: datetime
+    description: Optional[str] = None
+    location: Optional[str] = None
+    attendees: Optional[List[str]] = None
+    calendar_id: str = "calendar"
+
+
+@router.post("/apple-calendar/events")
+async def create_apple_calendar_event(
+    request: CreateEventRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a new event in Apple Calendar."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.APPLE_CALENDAR,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="Apple Calendar not connected")
+
+    apple_service = AppleCalendarService(db)
+    event = await apple_service.create_event(
+        access_token=integration.access_token,
+        user_id=integration.provider_user_id,
+        title=request.title,
+        start_time=request.start_time,
+        end_time=request.end_time,
+        description=request.description,
+        location=request.location,
+        attendees=request.attendees,
+        calendar_id=request.calendar_id,
+    )
+    await apple_service.close()
+
+    if not event:
+        raise HTTPException(status_code=500, detail="Failed to create event")
+
+    return {"event": event, "message": "Event created successfully"}
+
+
+@router.delete("/apple-calendar")
+async def disconnect_apple_calendar(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Disconnect Apple Calendar integration."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.APPLE_CALENDAR
+    ).first()
+
+    if integration:
+        integration.is_active = False
+        integration.updated_at = datetime.utcnow()
+        db.commit()
+
+    return {"message": "Apple Calendar disconnected"}
+
+
+# =============================================================================
+# CALENDLY OAUTH (Scheduling integration with webhooks)
+# =============================================================================
+
+@router.get("/calendly/authorize")
+async def calendly_authorize(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get Calendly OAuth authorization URL.
+
+    Integrates with Calendly for scheduled meeting detection
+    and webhook notifications for new bookings.
+    """
+    if not is_calendly_configured():
+        raise HTTPException(status_code=503, detail="Calendly integration not configured")
+
+    calendly_service = CalendlyService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/calendly/callback"
+    auth_url = calendly_service.get_oauth_url(current_user.id, redirect_uri)
+
+    return {"authorization_url": auth_url}
+
+
+@router.get("/calendly/callback")
+async def calendly_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """Handle Calendly OAuth callback."""
+    if not is_calendly_configured():
+        raise HTTPException(status_code=503, detail="Calendly integration not configured")
+
+    try:
+        parts = state.split(":")
+        user_id = int(parts[0])
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=400, detail="Invalid state parameter")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    calendly_service = CalendlyService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/calendly/callback"
+    result = await calendly_service.exchange_code(code, redirect_uri)
+    await calendly_service.close()
+
+    if not result.get("success"):
+        logger.error(f"Calendly OAuth failed: {result.get('error')}")
+        return Response(
+            status_code=302,
+            headers={"Location": f"{APP_URL}/dashboard/settings/integrations?error=calendly_auth_failed"}
+        )
+
+    existing = db.query(UserIntegration).filter(
+        UserIntegration.user_id == user_id,
+        UserIntegration.provider == IntegrationProvider.CALENDLY
+    ).first()
+
+    # Store extra metadata in a JSON field or separate columns
+    extra_data = {
+        "user_uri": result.get("user_uri"),
+        "organization_uri": result.get("organization_uri"),
+    }
+
+    if existing:
+        existing.access_token = result.get("access_token")
+        existing.refresh_token = result.get("refresh_token")
+        existing.token_expires_at = datetime.utcnow() + timedelta(seconds=result.get("expires_in", 7200))
+        existing.provider_user_id = result.get("user_id")
+        existing.display_name = result.get("display_name")
+        existing.email = result.get("email")
+        existing.is_active = True
+        existing.error_message = None
+        existing.updated_at = datetime.utcnow()
+    else:
+        integration = UserIntegration(
+            user_id=user_id,
+            provider=IntegrationProvider.CALENDLY,
+            access_token=result.get("access_token"),
+            refresh_token=result.get("refresh_token"),
+            token_expires_at=datetime.utcnow() + timedelta(seconds=result.get("expires_in", 7200)),
+            provider_user_id=result.get("user_id"),
+            display_name=result.get("display_name"),
+            email=result.get("email"),
+        )
+        db.add(integration)
+
+    db.commit()
+
+    return Response(
+        status_code=302,
+        headers={"Location": f"{APP_URL}/dashboard/settings/integrations?success=calendly_connected"}
+    )
+
+
+@router.get("/calendly/events")
+async def get_calendly_events(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get upcoming Calendly scheduled events."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.CALENDLY,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="Calendly not connected")
+
+    calendly_service = CalendlyService(db)
+
+    if integration.token_expires_at and integration.token_expires_at < datetime.utcnow():
+        refresh_result = await calendly_service.refresh_token(integration.refresh_token)
+        if refresh_result.get("success"):
+            integration.access_token = refresh_result.get("access_token")
+            integration.refresh_token = refresh_result.get("refresh_token")
+            integration.token_expires_at = datetime.utcnow() + timedelta(seconds=refresh_result.get("expires_in", 7200))
+            db.commit()
+        else:
+            await calendly_service.close()
+            raise HTTPException(status_code=401, detail="Token refresh failed")
+
+    events = await calendly_service.get_upcoming_meetings(integration.access_token)
+    await calendly_service.close()
+
+    return {"events": events, "platform": "calendly"}
+
+
+@router.get("/calendly/events/{event_id}")
+async def get_calendly_event_details(
+    event_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get details for a specific Calendly event."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.CALENDLY,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="Calendly not connected")
+
+    calendly_service = CalendlyService(db)
+    event = await calendly_service.get_event_details(integration.access_token, event_id)
+    await calendly_service.close()
+
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    return {"event": event}
+
+
+@router.get("/calendly/events/{event_id}/invitees")
+async def get_calendly_event_invitees(
+    event_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get invitees for a Calendly event."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.CALENDLY,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="Calendly not connected")
+
+    calendly_service = CalendlyService(db)
+    invitees = await calendly_service.get_event_invitees(integration.access_token, event_id)
+    await calendly_service.close()
+
+    return {"invitees": invitees}
+
+
+@router.get("/calendly/event-types")
+async def get_calendly_event_types(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get user's Calendly event types."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.CALENDLY,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="Calendly not connected")
+
+    calendly_service = CalendlyService(db)
+    event_types = await calendly_service.get_event_types(integration.access_token)
+    await calendly_service.close()
+
+    return {"event_types": event_types}
+
+
+@router.post("/calendly/webhook")
+async def calendly_webhook(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Handle incoming Calendly webhook events.
+
+    Processes booking notifications for:
+    - invitee.created (new booking)
+    - invitee.canceled (booking canceled)
+    - invitee_no_show.created (no-show marked)
+    """
+    if not is_calendly_configured():
+        raise HTTPException(status_code=503, detail="Calendly integration not configured")
+
+    # Get headers for verification
+    signature = request.headers.get("Calendly-Webhook-Signature", "")
+    body = await request.body()
+
+    # Verify webhook signature
+    calendly_service = CalendlyService(db)
+
+    # Parse the timestamp from signature header (format: t=timestamp,v1=signature)
+    timestamp = ""
+    sig_value = ""
+    for part in signature.split(","):
+        if part.startswith("t="):
+            timestamp = part[2:]
+        elif part.startswith("v1="):
+            sig_value = part[3:]
+
+    if not calendly_service.verify_webhook_signature(sig_value, timestamp, body):
+        await calendly_service.close()
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+    # Parse webhook payload
+    import json
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        await calendly_service.close()
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    event_type = payload.get("event")
+    result = await calendly_service.handle_webhook_event(event_type, payload)
+    await calendly_service.close()
+
+    # Log the webhook for debugging
+    logger.info(f"Calendly webhook received: {event_type}")
+
+    return {"status": "received", "event_type": event_type, "processed": result}
+
+
+@router.delete("/calendly")
+async def disconnect_calendly(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Disconnect Calendly integration."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.CALENDLY
+    ).first()
+
+    if integration:
+        integration.is_active = False
+        integration.updated_at = datetime.utcnow()
+        db.commit()
+
+    return {"message": "Calendly disconnected"}
+
+
+# =============================================================================
 # UNIFIED MEETING DETECTION (For Desktop App)
 # =============================================================================
 
@@ -1359,5 +1860,791 @@ async def get_video_platforms_status(
             "No bots or AI agents join your meetings. "
             "Audio is captured locally by the desktop app and processed securely. "
             "Calendar sync is used only to detect meeting schedules."
+        )
+    }
+
+
+# =============================================================================
+# CALENDAR INTEGRATIONS STATUS
+# =============================================================================
+
+@router.get("/calendar-platforms/status")
+async def get_calendar_platforms_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get status of all calendar platform integrations.
+
+    Includes both video platform calendars and standalone calendar services.
+    """
+    integrations = []
+
+    user_integrations = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.is_active == True
+    ).all()
+
+    integration_map = {i.provider: i for i in user_integrations}
+
+    # Apple Calendar
+    apple_int = integration_map.get(IntegrationProvider.APPLE_CALENDAR)
+    integrations.append({
+        "provider": "apple_calendar",
+        "display_name": "Apple Calendar",
+        "is_configured": is_apple_calendar_configured(),
+        "is_connected": apple_int is not None,
+        "email": apple_int.email if apple_int else None,
+        "display_name_user": apple_int.display_name if apple_int else None,
+        "connected_at": apple_int.connected_at if apple_int else None,
+        "features": ["event_sync", "event_creation", "caldav"],
+        "stealth_mode": True,
+        "privacy_note": "CalDAV sync only - no bot joins meetings"
+    })
+
+    # Calendly
+    calendly_int = integration_map.get(IntegrationProvider.CALENDLY)
+    integrations.append({
+        "provider": "calendly",
+        "display_name": "Calendly",
+        "is_configured": is_calendly_configured(),
+        "is_connected": calendly_int is not None,
+        "email": calendly_int.email if calendly_int else None,
+        "display_name_user": calendly_int.display_name if calendly_int else None,
+        "connected_at": calendly_int.connected_at if calendly_int else None,
+        "features": ["event_sync", "webhook_notifications", "invitee_info"],
+        "stealth_mode": True,
+        "privacy_note": "Schedule sync only - no bot joins meetings"
+    })
+
+    # Google Calendar (via Google Meet integration)
+    google_int = integration_map.get(IntegrationProvider.GOOGLE_MEET)
+    integrations.append({
+        "provider": "google_calendar",
+        "display_name": "Google Calendar",
+        "is_configured": is_google_meet_configured(),
+        "is_connected": google_int is not None,
+        "email": google_int.email if google_int else None,
+        "display_name_user": google_int.display_name if google_int else None,
+        "connected_at": google_int.connected_at if google_int else None,
+        "features": ["event_sync", "meet_detection"],
+        "stealth_mode": True,
+        "privacy_note": "Calendar sync only - no bot joins meetings"
+    })
+
+    # Microsoft Outlook Calendar (via Teams Meeting integration)
+    teams_int = integration_map.get(IntegrationProvider.MICROSOFT_TEAMS_MEETING)
+    integrations.append({
+        "provider": "outlook_calendar",
+        "display_name": "Microsoft Outlook",
+        "is_configured": is_teams_meeting_configured(),
+        "is_connected": teams_int is not None,
+        "email": teams_int.email if teams_int else None,
+        "display_name_user": teams_int.display_name if teams_int else None,
+        "connected_at": teams_int.connected_at if teams_int else None,
+        "features": ["event_sync", "teams_detection"],
+        "stealth_mode": True,
+        "privacy_note": "Calendar sync only - no bot joins meetings"
+    })
+
+    return {
+        "calendar_platforms": integrations,
+        "total_connected": len([i for i in integrations if i["is_connected"]]),
+        "stealth_mode_explanation": (
+            "ReadIn AI syncs your calendar data to detect meeting schedules. "
+            "No bots or AI agents join your meetings. "
+            "Audio is captured locally by the desktop app."
+        )
+    }
+
+
+# =============================================================================
+# SALESFORCE CRM INTEGRATION
+# =============================================================================
+
+from services.salesforce_service import SalesforceService, is_salesforce_configured
+
+
+class SalesforceSyncSettings(BaseModel):
+    """Settings for Salesforce sync."""
+    auto_sync_contacts: bool = True
+    auto_log_meetings: bool = True
+    auto_sync_notes: bool = False
+    auto_create_tasks: bool = False
+
+
+class SalesforceMeetingSyncRequest(BaseModel):
+    """Request to sync a meeting to Salesforce."""
+    meeting_id: int
+    participants: Optional[List[dict]] = None
+    include_notes: bool = False
+    include_action_items: bool = True
+
+
+@router.get("/salesforce/authorize")
+async def salesforce_authorize(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get Salesforce OAuth authorization URL.
+    """
+    if not is_salesforce_configured():
+        raise HTTPException(status_code=503, detail="Salesforce integration not configured")
+
+    salesforce_service = SalesforceService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/salesforce/callback"
+    auth_url = salesforce_service.get_oauth_url(current_user.id, redirect_uri)
+
+    return {"authorization_url": auth_url}
+
+
+@router.get("/salesforce/callback")
+async def salesforce_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Handle Salesforce OAuth callback.
+    """
+    if not is_salesforce_configured():
+        raise HTTPException(status_code=503, detail="Salesforce integration not configured")
+
+    # Parse state to get user_id
+    try:
+        parts = state.split(":")
+        user_id = int(parts[0])
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=400, detail="Invalid state parameter")
+
+    # Verify user exists
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Exchange code for token
+    salesforce_service = SalesforceService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/salesforce/callback"
+    result = await salesforce_service.exchange_code(code, redirect_uri)
+    await salesforce_service.close()
+
+    if not result.get("success"):
+        logger.error(f"Salesforce OAuth failed: {result.get('error')}")
+        return Response(
+            status_code=302,
+            headers={"Location": f"{APP_URL}/dashboard/settings/integrations?error=salesforce_auth_failed"}
+        )
+
+    # Check for existing integration
+    existing = db.query(UserIntegration).filter(
+        UserIntegration.user_id == user_id,
+        UserIntegration.provider == IntegrationProvider.SALESFORCE
+    ).first()
+
+    if existing:
+        existing.access_token = result.get("access_token")
+        existing.refresh_token = result.get("refresh_token")
+        existing.instance_url = result.get("instance_url")
+        existing.provider_user_id = result.get("user_id")
+        existing.org_id = result.get("org_id")
+        existing.display_name = result.get("display_name")
+        existing.email = result.get("email")
+        existing.is_active = True
+        existing.error_message = None
+        existing.updated_at = datetime.utcnow()
+    else:
+        integration = UserIntegration(
+            user_id=user_id,
+            provider=IntegrationProvider.SALESFORCE,
+            access_token=result.get("access_token"),
+            refresh_token=result.get("refresh_token"),
+            instance_url=result.get("instance_url"),
+            provider_user_id=result.get("user_id"),
+            org_id=result.get("org_id"),
+            display_name=result.get("display_name"),
+            email=result.get("email"),
+        )
+        db.add(integration)
+
+    db.commit()
+
+    return Response(
+        status_code=302,
+        headers={"Location": f"{APP_URL}/dashboard/settings/integrations?success=salesforce_connected"}
+    )
+
+
+@router.get("/salesforce/status")
+async def salesforce_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get Salesforce connection status.
+    """
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.SALESFORCE,
+        UserIntegration.is_active == True
+    ).first()
+
+    return {
+        "provider": "salesforce",
+        "display_name": "Salesforce",
+        "is_configured": is_salesforce_configured(),
+        "is_connected": integration is not None,
+        "instance_url": integration.instance_url if integration else None,
+        "org_id": integration.org_id if integration else None,
+        "user_email": integration.email if integration else None,
+        "display_name_user": integration.display_name if integration else None,
+        "connected_at": integration.connected_at if integration else None,
+        "settings": {
+            "auto_sync_contacts": integration.auto_sync_contacts if integration else True,
+            "auto_log_meetings": integration.auto_log_meetings if integration else True,
+            "auto_sync_notes": integration.auto_sync_notes if integration else False,
+            "auto_create_tasks": integration.auto_create_tasks if integration else False,
+        } if integration else None,
+    }
+
+
+@router.put("/salesforce/settings")
+async def update_salesforce_settings(
+    settings: SalesforceSyncSettings,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update Salesforce sync settings.
+    """
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.SALESFORCE,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="Salesforce not connected")
+
+    integration.auto_sync_contacts = settings.auto_sync_contacts
+    integration.auto_log_meetings = settings.auto_log_meetings
+    integration.auto_sync_notes = settings.auto_sync_notes
+    integration.auto_create_tasks = settings.auto_create_tasks
+    integration.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {"message": "Salesforce settings updated"}
+
+
+@router.post("/salesforce/sync-meeting")
+async def sync_meeting_to_salesforce(
+    request: SalesforceMeetingSyncRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Manually sync a meeting to Salesforce.
+
+    Creates/updates contacts, logs meeting activity, and optionally syncs notes.
+    """
+    from models import Meeting, MeetingSummary, ActionItem
+
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.SALESFORCE,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="Salesforce not connected")
+
+    # Get meeting
+    meeting = db.query(Meeting).filter(
+        Meeting.id == request.meeting_id,
+        Meeting.user_id == current_user.id
+    ).first()
+
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    # Get summary and action items
+    summary = db.query(MeetingSummary).filter(MeetingSummary.meeting_id == meeting.id).first()
+    action_items = db.query(ActionItem).filter(ActionItem.meeting_id == meeting.id).all() if request.include_action_items else []
+
+    # Prepare participants
+    participants = request.participants or []
+
+    salesforce_service = SalesforceService(db)
+
+    # Refresh token if needed (Salesforce tokens don't have standard expiration)
+    if integration.refresh_token:
+        refresh_result = await salesforce_service.refresh_token(
+            integration.refresh_token,
+            integration.instance_url
+        )
+        if refresh_result.get("success"):
+            integration.access_token = refresh_result.get("access_token")
+            db.commit()
+
+    # Sync meeting
+    result = await salesforce_service.sync_meeting(
+        instance_url=integration.instance_url,
+        access_token=integration.access_token,
+        meeting_title=meeting.title or "Meeting",
+        meeting_date=meeting.started_at,
+        duration_minutes=meeting.duration_seconds // 60 if meeting.duration_seconds else 30,
+        participants=participants,
+        summary=summary.summary_text if summary else None,
+        key_points=summary.key_points if summary else None,
+        action_items=[
+            {
+                "description": ai.description,
+                "assignee": ai.assignee,
+                "assignee_email": None,
+                "priority": ai.priority,
+                "due_date": ai.due_date,
+            }
+            for ai in action_items
+        ],
+        notes=meeting.notes if request.include_notes else None,
+    )
+
+    await salesforce_service.close()
+
+    integration.last_used_at = datetime.utcnow()
+    db.commit()
+
+    return result
+
+
+@router.post("/salesforce/find-contact")
+async def find_salesforce_contact(
+    email: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Find a contact in Salesforce by email.
+    """
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.SALESFORCE,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="Salesforce not connected")
+
+    salesforce_service = SalesforceService(db)
+    contact = await salesforce_service.find_contact_by_email(
+        integration.instance_url,
+        integration.access_token,
+        email
+    )
+    await salesforce_service.close()
+
+    if contact:
+        return {"found": True, "contact": contact}
+    return {"found": False, "contact": None}
+
+
+@router.delete("/salesforce")
+async def disconnect_salesforce(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Disconnect Salesforce integration."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.SALESFORCE
+    ).first()
+
+    if integration:
+        integration.is_active = False
+        integration.updated_at = datetime.utcnow()
+        db.commit()
+
+    return {"message": "Salesforce disconnected"}
+
+
+# =============================================================================
+# HUBSPOT CRM INTEGRATION
+# =============================================================================
+
+from services.hubspot_service import HubSpotService, is_hubspot_configured
+
+
+class HubSpotSyncSettings(BaseModel):
+    """Settings for HubSpot sync."""
+    auto_sync_contacts: bool = True
+    auto_log_meetings: bool = True
+    auto_sync_notes: bool = False
+    auto_create_tasks: bool = False
+
+
+class HubSpotMeetingSyncRequest(BaseModel):
+    """Request to sync a meeting to HubSpot."""
+    meeting_id: int
+    participants: Optional[List[dict]] = None
+    include_notes: bool = False
+    include_action_items: bool = True
+
+
+@router.get("/hubspot/authorize")
+async def hubspot_authorize(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get HubSpot OAuth authorization URL.
+    """
+    if not is_hubspot_configured():
+        raise HTTPException(status_code=503, detail="HubSpot integration not configured")
+
+    hubspot_service = HubSpotService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/hubspot/callback"
+    auth_url = hubspot_service.get_oauth_url(current_user.id, redirect_uri)
+
+    return {"authorization_url": auth_url}
+
+
+@router.get("/hubspot/callback")
+async def hubspot_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Handle HubSpot OAuth callback.
+    """
+    if not is_hubspot_configured():
+        raise HTTPException(status_code=503, detail="HubSpot integration not configured")
+
+    # Parse state to get user_id
+    try:
+        parts = state.split(":")
+        user_id = int(parts[0])
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=400, detail="Invalid state parameter")
+
+    # Verify user exists
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Exchange code for token
+    hubspot_service = HubSpotService(db)
+    redirect_uri = f"{APP_URL}/api/integrations/hubspot/callback"
+    result = await hubspot_service.exchange_code(code, redirect_uri)
+    await hubspot_service.close()
+
+    if not result.get("success"):
+        logger.error(f"HubSpot OAuth failed: {result.get('error')}")
+        return Response(
+            status_code=302,
+            headers={"Location": f"{APP_URL}/dashboard/settings/integrations?error=hubspot_auth_failed"}
+        )
+
+    # Check for existing integration
+    existing = db.query(UserIntegration).filter(
+        UserIntegration.user_id == user_id,
+        UserIntegration.provider == IntegrationProvider.HUBSPOT
+    ).first()
+
+    if existing:
+        existing.access_token = result.get("access_token")
+        existing.refresh_token = result.get("refresh_token")
+        existing.token_expires_at = datetime.utcnow() + timedelta(seconds=result.get("expires_in", 21600))
+        existing.provider_user_id = result.get("user_id")
+        existing.org_id = result.get("hub_id")
+        existing.provider_team_name = result.get("hub_domain")
+        existing.display_name = result.get("display_name")
+        existing.is_active = True
+        existing.error_message = None
+        existing.updated_at = datetime.utcnow()
+    else:
+        integration = UserIntegration(
+            user_id=user_id,
+            provider=IntegrationProvider.HUBSPOT,
+            access_token=result.get("access_token"),
+            refresh_token=result.get("refresh_token"),
+            token_expires_at=datetime.utcnow() + timedelta(seconds=result.get("expires_in", 21600)),
+            provider_user_id=result.get("user_id"),
+            org_id=result.get("hub_id"),
+            provider_team_name=result.get("hub_domain"),
+            display_name=result.get("display_name"),
+        )
+        db.add(integration)
+
+    db.commit()
+
+    return Response(
+        status_code=302,
+        headers={"Location": f"{APP_URL}/dashboard/settings/integrations?success=hubspot_connected"}
+    )
+
+
+@router.get("/hubspot/status")
+async def hubspot_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get HubSpot connection status.
+    """
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.HUBSPOT,
+        UserIntegration.is_active == True
+    ).first()
+
+    return {
+        "provider": "hubspot",
+        "display_name": "HubSpot",
+        "is_configured": is_hubspot_configured(),
+        "is_connected": integration is not None,
+        "hub_id": integration.org_id if integration else None,
+        "hub_domain": integration.provider_team_name if integration else None,
+        "display_name_user": integration.display_name if integration else None,
+        "connected_at": integration.connected_at if integration else None,
+        "settings": {
+            "auto_sync_contacts": integration.auto_sync_contacts if integration else True,
+            "auto_log_meetings": integration.auto_log_meetings if integration else True,
+            "auto_sync_notes": integration.auto_sync_notes if integration else False,
+            "auto_create_tasks": integration.auto_create_tasks if integration else False,
+        } if integration else None,
+    }
+
+
+@router.put("/hubspot/settings")
+async def update_hubspot_settings(
+    settings: HubSpotSyncSettings,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update HubSpot sync settings.
+    """
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.HUBSPOT,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="HubSpot not connected")
+
+    integration.auto_sync_contacts = settings.auto_sync_contacts
+    integration.auto_log_meetings = settings.auto_log_meetings
+    integration.auto_sync_notes = settings.auto_sync_notes
+    integration.auto_create_tasks = settings.auto_create_tasks
+    integration.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {"message": "HubSpot settings updated"}
+
+
+@router.post("/hubspot/sync-meeting")
+async def sync_meeting_to_hubspot(
+    request: HubSpotMeetingSyncRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Manually sync a meeting to HubSpot.
+
+    Creates/updates contacts, logs meeting engagement, and optionally syncs notes.
+    """
+    from models import Meeting, MeetingSummary, ActionItem
+
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.HUBSPOT,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="HubSpot not connected")
+
+    # Get meeting
+    meeting = db.query(Meeting).filter(
+        Meeting.id == request.meeting_id,
+        Meeting.user_id == current_user.id
+    ).first()
+
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    # Get summary and action items
+    summary = db.query(MeetingSummary).filter(MeetingSummary.meeting_id == meeting.id).first()
+    action_items = db.query(ActionItem).filter(ActionItem.meeting_id == meeting.id).all() if request.include_action_items else []
+
+    # Prepare participants
+    participants = request.participants or []
+
+    hubspot_service = HubSpotService(db)
+
+    # Refresh token if needed
+    if integration.token_expires_at and integration.token_expires_at < datetime.utcnow():
+        refresh_result = await hubspot_service.refresh_token(integration.refresh_token)
+        if refresh_result.get("success"):
+            integration.access_token = refresh_result.get("access_token")
+            integration.refresh_token = refresh_result.get("refresh_token")
+            integration.token_expires_at = datetime.utcnow() + timedelta(seconds=refresh_result.get("expires_in", 21600))
+            db.commit()
+        else:
+            await hubspot_service.close()
+            raise HTTPException(status_code=401, detail="Token refresh failed")
+
+    # Sync meeting
+    result = await hubspot_service.sync_meeting(
+        access_token=integration.access_token,
+        meeting_title=meeting.title or "Meeting",
+        meeting_date=meeting.started_at,
+        duration_minutes=meeting.duration_seconds // 60 if meeting.duration_seconds else 30,
+        participants=participants,
+        summary=summary.summary_text if summary else None,
+        key_points=summary.key_points if summary else None,
+        action_items=[
+            {
+                "description": ai.description,
+                "assignee": ai.assignee,
+                "assignee_email": None,
+                "priority": ai.priority,
+                "due_date": ai.due_date,
+            }
+            for ai in action_items
+        ],
+        notes=meeting.notes if request.include_notes else None,
+    )
+
+    await hubspot_service.close()
+
+    integration.last_used_at = datetime.utcnow()
+    db.commit()
+
+    return result
+
+
+@router.post("/hubspot/find-contact")
+async def find_hubspot_contact(
+    email: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Find a contact in HubSpot by email.
+    """
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.HUBSPOT,
+        UserIntegration.is_active == True
+    ).first()
+
+    if not integration:
+        raise HTTPException(status_code=404, detail="HubSpot not connected")
+
+    hubspot_service = HubSpotService(db)
+
+    # Refresh token if needed
+    if integration.token_expires_at and integration.token_expires_at < datetime.utcnow():
+        refresh_result = await hubspot_service.refresh_token(integration.refresh_token)
+        if refresh_result.get("success"):
+            integration.access_token = refresh_result.get("access_token")
+            integration.refresh_token = refresh_result.get("refresh_token")
+            integration.token_expires_at = datetime.utcnow() + timedelta(seconds=refresh_result.get("expires_in", 21600))
+            db.commit()
+
+    contact = await hubspot_service.find_contact_by_email(integration.access_token, email)
+    await hubspot_service.close()
+
+    if contact:
+        return {"found": True, "contact": contact}
+    return {"found": False, "contact": None}
+
+
+@router.delete("/hubspot")
+async def disconnect_hubspot(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Disconnect HubSpot integration."""
+    integration = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.provider == IntegrationProvider.HUBSPOT
+    ).first()
+
+    if integration:
+        integration.is_active = False
+        integration.updated_at = datetime.utcnow()
+        db.commit()
+
+    return {"message": "HubSpot disconnected"}
+
+
+# =============================================================================
+# CRM INTEGRATION STATUS
+# =============================================================================
+
+@router.get("/crm/status")
+async def get_crm_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get status of all CRM integrations.
+    """
+    integrations = []
+
+    user_integrations = db.query(UserIntegration).filter(
+        UserIntegration.user_id == current_user.id,
+        UserIntegration.is_active == True
+    ).all()
+
+    integration_map = {i.provider: i for i in user_integrations}
+
+    # Salesforce
+    sf_int = integration_map.get(IntegrationProvider.SALESFORCE)
+    integrations.append({
+        "provider": "salesforce",
+        "display_name": "Salesforce",
+        "is_configured": is_salesforce_configured(),
+        "is_connected": sf_int is not None,
+        "instance_url": sf_int.instance_url if sf_int else None,
+        "email": sf_int.email if sf_int else None,
+        "display_name_user": sf_int.display_name if sf_int else None,
+        "connected_at": sf_int.connected_at if sf_int else None,
+        "settings": {
+            "auto_sync_contacts": sf_int.auto_sync_contacts if sf_int else True,
+            "auto_log_meetings": sf_int.auto_log_meetings if sf_int else True,
+            "auto_sync_notes": sf_int.auto_sync_notes if sf_int else False,
+            "auto_create_tasks": sf_int.auto_create_tasks if sf_int else False,
+        } if sf_int else None,
+    })
+
+    # HubSpot
+    hs_int = integration_map.get(IntegrationProvider.HUBSPOT)
+    integrations.append({
+        "provider": "hubspot",
+        "display_name": "HubSpot",
+        "is_configured": is_hubspot_configured(),
+        "is_connected": hs_int is not None,
+        "hub_id": hs_int.org_id if hs_int else None,
+        "hub_domain": hs_int.provider_team_name if hs_int else None,
+        "display_name_user": hs_int.display_name if hs_int else None,
+        "connected_at": hs_int.connected_at if hs_int else None,
+        "settings": {
+            "auto_sync_contacts": hs_int.auto_sync_contacts if hs_int else True,
+            "auto_log_meetings": hs_int.auto_log_meetings if hs_int else True,
+            "auto_sync_notes": hs_int.auto_sync_notes if hs_int else False,
+            "auto_create_tasks": hs_int.auto_create_tasks if hs_int else False,
+        } if hs_int else None,
+    })
+
+    return {
+        "crm_integrations": integrations,
+        "description": (
+            "CRM integrations allow ReadIn AI to automatically sync meeting participants as contacts, "
+            "log meetings as activities, and create tasks from action items in your CRM."
         )
     }

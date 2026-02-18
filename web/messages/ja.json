@@ -1,0 +1,337 @@
+{
+  "common": {
+    "loading": "読み込み中...",
+    "error": "エラーが発生しました",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "edit": "編集",
+    "create": "作成",
+    "search": "検索",
+    "filter": "フィルター",
+    "export": "エクスポート",
+    "import": "インポート",
+    "close": "閉じる",
+    "back": "戻る",
+    "next": "次へ",
+    "previous": "前へ",
+    "submit": "送信",
+    "confirm": "確認",
+    "yes": "はい",
+    "no": "いいえ",
+    "all": "すべて",
+    "none": "なし",
+    "select": "選択",
+    "view": "表示",
+    "download": "ダウンロード",
+    "upload": "アップロード",
+    "refresh": "更新",
+    "logout": "ログアウト",
+    "login": "ログイン",
+    "signUp": "登録",
+    "settings": "設定",
+    "profile": "プロフィール",
+    "language": "言語",
+    "english": "英語",
+    "spanish": "スペイン語",
+    "swahili": "スワヒリ語",
+    "french": "フランス語",
+    "german": "ドイツ語",
+    "portuguese": "ポルトガル語",
+    "japanese": "日本語"
+  },
+  "header": {
+    "features": "機能",
+    "pricing": "料金",
+    "docs": "ドキュメント",
+    "download": "ダウンロード",
+    "tryFree": "無料で試す",
+    "getStarted": "始める"
+  },
+  "hero": {
+    "badge": "10,000人以上のプロフェッショナルに信頼されています",
+    "title": "ライブ会話のためのリアルタイムAIアシスタント",
+    "subtitle": "もう会議で不意を突かれることはありません。ReadIn AIは質問を聞き取り、自然に言い換えられるトーキングポイントを即座に表示します。",
+    "tryFree": "7日間無料トライアル",
+    "watchDemo": "デモを見る",
+    "noCreditCard": "クレジットカード不要"
+  },
+  "features": {
+    "title": "あらゆる会話で活躍するために必要なすべて",
+    "subtitle": "自信を持って明確に話すための強力な機能",
+    "realTime": {
+      "title": "リアルタイムAIアシスタンス",
+      "description": "会話中に即座に提案を受け取り、状況に応じた文脈に沿った回答を得られます"
+    },
+    "privacy": {
+      "title": "プライバシー重視の設計",
+      "description": "すべての処理はデバイス上でローカルに行われます。会話がコンピューターから外部に送信されることはありません"
+    },
+    "learning": {
+      "title": "適応型学習",
+      "description": "AIがあなたのコミュニケーションスタイルと好みを学習し、よりパーソナライズされたアシスタンスを提供します"
+    },
+    "integration": {
+      "title": "ユニバーサル統合",
+      "description": "Zoom、Teams、Google Meet、Discord、その他あらゆる音声ソースとシームレスに連携"
+    },
+    "analytics": {
+      "title": "会議分析",
+      "description": "発話パターンを追跡し、エンゲージメントに関する洞察を得て、時間とともに改善"
+    },
+    "memory": {
+      "title": "参加者の記憶",
+      "description": "出会った人々の重要な詳細を記憶し、より良いビジネス関係を維持"
+    }
+  },
+  "howItWorks": {
+    "title": "使い方",
+    "subtitle": "シンプルなセットアップで数分で始められます",
+    "step1": {
+      "title": "ダウンロードとインストール",
+      "description": "プラットフォームに合わせた自動セットアップで素早くインストール"
+    },
+    "step2": {
+      "title": "設定をカスタマイズ",
+      "description": "職業とコミュニケーションスタイルについて教えてください"
+    },
+    "step3": {
+      "title": "会議を開始",
+      "description": "ReadIn AIが自動的に会話を検出してアシスト"
+    }
+  },
+  "pricing": {
+    "title": "シンプルで透明な料金",
+    "subtitle": "ニーズに合ったプランをお選びください",
+    "monthly": "月額",
+    "yearly": "年額",
+    "save": "20%お得",
+    "free": {
+      "name": "無料",
+      "price": "¥0",
+      "period": "永久",
+      "description": "ReadIn AIを試すのに最適",
+      "features": [
+        "月5回の会議",
+        "基本的なAI提案",
+        "ローカル文字起こし",
+        "コミュニティサポート"
+      ],
+      "cta": "始める"
+    },
+    "pro": {
+      "name": "Pro",
+      "price": "¥2,900",
+      "period": "月額",
+      "description": "より多くを求めるプロフェッショナル向け",
+      "features": [
+        "無制限の会議",
+        "GPT-4による高度なAI",
+        "会議サマリー",
+        "アクションアイテム抽出",
+        "優先サポート",
+        "カレンダー連携"
+      ],
+      "cta": "無料トライアルを始める",
+      "popular": "最も人気"
+    },
+    "enterprise": {
+      "name": "エンタープライズ",
+      "price": "カスタム",
+      "period": "ユーザー/月",
+      "description": "チームと組織向け",
+      "features": [
+        "Proのすべての機能",
+        "チーム管理",
+        "SSO連携",
+        "カスタムAIトレーニング",
+        "専任サポート",
+        "オンプレミスオプション"
+      ],
+      "cta": "営業に連絡"
+    }
+  },
+  "faq": {
+    "title": "よくある質問",
+    "q1": {
+      "question": "ReadIn AIはプライバシーをどのように保護しますか？",
+      "answer": "すべての音声処理はWhisper AIを使用してデバイス上でローカルに行われます。クラウド機能を明示的に有効にしない限り、会話が外部サーバーに送信されることはありません。"
+    },
+    "q2": {
+      "question": "どの会議プラットフォームに対応していますか？",
+      "answer": "ReadIn AIはZoom、Microsoft Teams、Google Meet、Webex、Discord、およびシステムオーディオを使用するあらゆるアプリケーションで動作します。"
+    },
+    "q3": {
+      "question": "会議の他の参加者はAIの提案を見ることができますか？",
+      "answer": "いいえ、ReadIn AIは画面上の目立たないオーバーレイとして動作します。提案を見ることができるのは自分だけで、使用していることが他の人にわかることはありません。"
+    },
+    "q4": {
+      "question": "文字起こしの精度はどのくらいですか？",
+      "answer": "人間に近い精度を達成するOpenAIのWhisperモデルを使用しています。パフォーマンスは音声品質と背景ノイズによって異なる場合があります。"
+    },
+    "q5": {
+      "question": "いつでもサブスクリプションをキャンセルできますか？",
+      "answer": "はい、いつでもサブスクリプションをキャンセルできます。請求期間の終了まで引き続きアクセスできます。"
+    }
+  },
+  "cta": {
+    "title": "会議を変革する準備はできましたか？",
+    "subtitle": "ReadIn AIを使って自信を持ってコミュニケーションする数千人のプロフェッショナルに参加しましょう",
+    "button": "無料トライアルを始める",
+    "noCard": "クレジットカード不要"
+  },
+  "footer": {
+    "product": "製品",
+    "company": "会社",
+    "legal": "法的情報",
+    "support": "サポート",
+    "features": "機能",
+    "pricing": "料金",
+    "download": "ダウンロード",
+    "changelog": "更新履歴",
+    "about": "会社概要",
+    "blog": "ブログ",
+    "careers": "採用情報",
+    "contact": "お問い合わせ",
+    "privacy": "プライバシーポリシー",
+    "terms": "利用規約",
+    "cookies": "Cookieポリシー",
+    "gdpr": "GDPR",
+    "docs": "ドキュメント",
+    "faq": "FAQ",
+    "status": "ステータス",
+    "copyright": "All rights reserved."
+  },
+  "dashboard": {
+    "title": "ダッシュボード",
+    "welcome": "おかえりなさい",
+    "overview": "概要",
+    "recentMeetings": "最近の会議",
+    "quickStats": "クイック統計",
+    "totalMeetings": "総会議数",
+    "hoursRecorded": "録音時間",
+    "actionItems": "アクションアイテム",
+    "avgDuration": "平均時間",
+    "viewAll": "すべて見る",
+    "noMeetings": "まだ会議がありません",
+    "startFirst": "最初の会議を開始してここに表示"
+  },
+  "meetings": {
+    "title": "会議",
+    "subtitle": "会議履歴の表示と管理",
+    "search": "会議を検索...",
+    "filter": "フィルター",
+    "sort": "並び替え",
+    "newest": "新しい順",
+    "oldest": "古い順",
+    "duration": "時間",
+    "participants": "参加者",
+    "topics": "議論されたトピック",
+    "actionItems": "アクションアイテム",
+    "summary": "サマリー",
+    "transcript": "文字起こし",
+    "export": "エクスポート",
+    "delete": "削除",
+    "noMeetings": "会議が見つかりません",
+    "scheduled": "予定済み",
+    "completed": "完了",
+    "inProgress": "進行中"
+  },
+  "analytics": {
+    "title": "分析",
+    "subtitle": "会議からのインサイト",
+    "period": "期間",
+    "last7Days": "過去7日間",
+    "last30Days": "過去30日間",
+    "last90Days": "過去90日間",
+    "allTime": "全期間",
+    "meetingTrends": "会議のトレンド",
+    "speakingTime": "発話時間",
+    "topTopics": "主要トピック",
+    "productivity": "生産性スコア",
+    "engagement": "エンゲージメントレベル",
+    "improvement": "前期間比"
+  },
+  "settings": {
+    "title": "設定",
+    "profile": {
+      "title": "プロフィール設定",
+      "name": "氏名",
+      "email": "メールアドレス",
+      "profession": "職業",
+      "timezone": "タイムゾーン",
+      "language": "言語",
+      "save": "変更を保存"
+    },
+    "billing": {
+      "title": "請求とサブスクリプション",
+      "currentPlan": "現在のプラン",
+      "nextBilling": "次回請求日",
+      "paymentMethod": "支払い方法",
+      "updateCard": "カードを更新",
+      "viewHistory": "請求履歴を見る",
+      "cancel": "サブスクリプションをキャンセル",
+      "upgrade": "プランをアップグレード"
+    },
+    "security": {
+      "title": "セキュリティ",
+      "password": "パスワードを変更",
+      "currentPassword": "現在のパスワード",
+      "newPassword": "新しいパスワード",
+      "confirmPassword": "新しいパスワードを確認",
+      "twoFactor": "二要素認証",
+      "enable2FA": "2FAを有効化",
+      "sessions": "アクティブなセッション",
+      "revokeAll": "すべてのセッションを取り消し"
+    },
+    "notifications": {
+      "title": "通知",
+      "email": "メール通知",
+      "meetingReminders": "会議リマインダー",
+      "weeklySummary": "週次サマリー",
+      "productUpdates": "製品アップデート"
+    },
+    "privacy": {
+      "title": "プライバシー",
+      "dataExport": "データをエクスポート",
+      "deleteAccount": "アカウントを削除",
+      "analytics": "分析を許可",
+      "marketing": "マーケティング通信"
+    }
+  },
+  "team": {
+    "title": "チーム",
+    "subtitle": "組織を管理",
+    "members": "チームメンバー",
+    "invite": "メンバーを招待",
+    "role": "役割",
+    "admin": "管理者",
+    "member": "メンバー",
+    "viewer": "閲覧者",
+    "pending": "保留中",
+    "active": "アクティブ",
+    "remove": "削除",
+    "changeRole": "役割を変更"
+  },
+  "login": {
+    "title": "ログイン",
+    "subtitle": "ReadIn AIへようこそ",
+    "email": "メールアドレス",
+    "password": "パスワード",
+    "remember": "ログイン状態を保持",
+    "forgot": "パスワードをお忘れですか？",
+    "signIn": "ログイン",
+    "noAccount": "アカウントをお持ちでないですか？",
+    "signUp": "登録",
+    "orContinue": "または以下で続行",
+    "google": "Googleで続行",
+    "microsoft": "Microsoftで続行"
+  },
+  "errors": {
+    "notFound": "ページが見つかりません",
+    "unauthorized": "このページにアクセスする権限がありません",
+    "serverError": "問題が発生しました。後でもう一度お試しください。",
+    "networkError": "ネットワークエラー。接続を確認してください。",
+    "sessionExpired": "セッションが期限切れです。再度ログインしてください。"
+  }
+}

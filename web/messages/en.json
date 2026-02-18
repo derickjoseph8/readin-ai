@@ -34,7 +34,11 @@
     "language": "Language",
     "english": "English",
     "spanish": "Spanish",
-    "swahili": "Swahili"
+    "swahili": "Swahili",
+    "french": "French",
+    "german": "German",
+    "portuguese": "Portuguese",
+    "japanese": "Japanese"
   },
   "header": {
     "features": "Features",

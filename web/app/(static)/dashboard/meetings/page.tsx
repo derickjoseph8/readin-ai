@@ -55,19 +55,19 @@ function UpcomingEventCard({ event }: { event: CalendarEvent }) {
   const { dateStr, timeStr } = formatEventTime(event.start_time, event.end_time)
 
   return (
-    <div className="bg-premium-card border border-premium-border rounded-xl p-5 hover:border-gold-500/30 transition-colors">
-      <div className="flex items-start justify-between">
+    <div className="bg-premium-card border border-premium-border rounded-xl p-4 sm:p-5 hover:border-gold-500/30 transition-colors touch-manipulation active:bg-premium-surface/30">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center space-x-2 mb-2">
-            <span className={`text-xs px-2 py-0.5 rounded ${appStyle.bg} ${appStyle.text}`}>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className={`text-xs px-2 py-1 rounded ${appStyle.bg} ${appStyle.text}`}>
               {meetingApp || 'Meeting'}
             </span>
-            <span className="text-xs px-2 py-0.5 rounded bg-gold-500/20 text-gold-400">
+            <span className="text-xs px-2 py-1 rounded bg-gold-500/20 text-gold-400">
               {dateStr}
             </span>
           </div>
-          <h3 className="font-medium text-white truncate">{event.title}</h3>
-          <div className="flex items-center space-x-4 mt-3 text-sm text-gray-500">
+          <h3 className="font-medium text-white text-sm sm:text-base line-clamp-2 sm:truncate">{event.title}</h3>
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 mt-3 text-xs sm:text-sm text-gray-500">
             <span className="flex items-center">
               <Clock className="h-3.5 w-3.5 mr-1" />
               {timeStr}
@@ -80,17 +80,130 @@ function UpcomingEventCard({ event }: { event: CalendarEvent }) {
             )}
           </div>
         </div>
-        <div className="flex items-center space-x-2 ml-4">
-          {event.meeting_link && (
+        {event.meeting_link && (
+          <div className="flex items-center sm:ml-4">
             <a
               href={event.meeting_link}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center px-3 py-1.5 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg text-sm font-medium rounded-lg hover:shadow-gold transition-all"
+              className="flex items-center justify-center w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg text-sm font-medium rounded-lg hover:shadow-gold transition-all min-h-[44px] touch-manipulation active:scale-98"
             >
               <Video className="h-4 w-4 mr-1.5" />
-              Join
+              Join Meeting
             </a>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Mobile card view for meetings
+function MeetingCardMobile({ meeting, onDelete }: { meeting: Meeting; onDelete: () => void }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr)
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    })
+  }
+
+  const formatDuration = (seconds: number | null) => {
+    if (!seconds) return '—'
+    const mins = Math.floor(seconds / 60)
+    const hrs = Math.floor(mins / 60)
+    if (hrs > 0) return `${hrs}h ${mins % 60}m`
+    return `${mins}m`
+  }
+
+  const handleExport = async (format: 'json' | 'markdown') => {
+    try {
+      const blob = await meetingsApi.exportMeeting(meeting.id, format)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `meeting-${meeting.id}.${format === 'markdown' ? 'md' : 'json'}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Export failed:', error)
+    }
+    setMenuOpen(false)
+  }
+
+  const handleDelete = async () => {
+    if (confirm('Are you sure you want to delete this meeting?')) {
+      try {
+        await meetingsApi.delete(meeting.id)
+        onDelete()
+      } catch (error) {
+        console.error('Delete failed:', error)
+      }
+    }
+    setMenuOpen(false)
+  }
+
+  return (
+    <div className="p-4 touch-manipulation active:bg-premium-surface/30">
+      <div className="flex items-start justify-between gap-3">
+        <Link href={`/dashboard/meetings/${meeting.id}`} className="flex-1 min-w-0">
+          <p className="font-medium text-white text-sm line-clamp-2">
+            {meeting.title || `${meeting.meeting_type} Meeting`}
+          </p>
+          <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-gray-500">
+            <span className="flex items-center">
+              <Calendar className="h-3.5 w-3.5 mr-1" />
+              {formatDate(meeting.started_at)}
+            </span>
+            <span className="flex items-center">
+              <Clock className="h-3.5 w-3.5 mr-1" />
+              {formatDuration(meeting.duration_seconds)}
+            </span>
+            <span className="flex items-center">
+              <MessageSquare className="h-3.5 w-3.5 mr-1" />
+              {meeting.conversation_count}
+            </span>
+          </div>
+        </Link>
+        <div className="relative">
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="p-2.5 text-gray-500 hover:text-white hover:bg-premium-surface rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="Meeting options"
+          >
+            <MoreVertical className="h-5 w-5" />
+          </button>
+
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 mt-1 w-52 bg-premium-card border border-premium-border rounded-xl shadow-xl z-20 py-2">
+                <button
+                  onClick={() => handleExport('markdown')}
+                  className="w-full px-4 py-3 text-left text-sm text-gray-300 hover:bg-premium-surface flex items-center min-h-[44px]"
+                >
+                  <FileText className="h-4 w-4 mr-3" />
+                  Export as Markdown
+                </button>
+                <button
+                  onClick={() => handleExport('json')}
+                  className="w-full px-4 py-3 text-left text-sm text-gray-300 hover:bg-premium-surface flex items-center min-h-[44px]"
+                >
+                  <Download className="h-4 w-4 mr-3" />
+                  Export as JSON
+                </button>
+                <hr className="my-2 border-premium-border" />
+                <button
+                  onClick={handleDelete}
+                  className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center min-h-[44px]"
+                >
+                  <Trash2 className="h-4 w-4 mr-3" />
+                  Delete
+                </button>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -170,13 +283,13 @@ function MeetingRow({ meeting, onDelete }: { meeting: Meeting; onDelete: () => v
         </div>
         <p className="text-sm text-gray-500 mt-0.5">{formatTime(meeting.started_at)}</p>
       </td>
-      <td className="px-4 py-4 text-gray-400">
+      <td className="px-4 py-4 text-gray-400 hidden md:table-cell">
         <div className="flex items-center">
           <Clock className="h-4 w-4 mr-2 text-gray-500" />
           {formatDuration(meeting.duration_seconds)}
         </div>
       </td>
-      <td className="px-4 py-4">
+      <td className="px-4 py-4 hidden lg:table-cell">
         <div className="flex items-center text-gray-400">
           <MessageSquare className="h-4 w-4 mr-2 text-gray-500" />
           {meeting.conversation_count}
@@ -186,7 +299,8 @@ function MeetingRow({ meeting, onDelete }: { meeting: Meeting; onDelete: () => v
         <div className="relative">
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="p-1.5 text-gray-500 hover:text-white hover:bg-premium-surface rounded transition-colors"
+            className="p-2 text-gray-500 hover:text-white hover:bg-premium-surface rounded transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center"
+            aria-label="Meeting options"
           >
             <MoreVertical className="h-4 w-4" />
           </button>
@@ -197,14 +311,14 @@ function MeetingRow({ meeting, onDelete }: { meeting: Meeting; onDelete: () => v
               <div className="absolute right-0 mt-1 w-48 bg-premium-card border border-premium-border rounded-lg shadow-xl z-20 py-1">
                 <button
                   onClick={() => handleExport('markdown')}
-                  className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-premium-surface flex items-center"
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-premium-surface flex items-center"
                 >
                   <FileText className="h-4 w-4 mr-2" />
                   Export as Markdown
                 </button>
                 <button
                   onClick={() => handleExport('json')}
-                  className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-premium-surface flex items-center"
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-premium-surface flex items-center"
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Export as JSON
@@ -212,7 +326,7 @@ function MeetingRow({ meeting, onDelete }: { meeting: Meeting; onDelete: () => v
                 <hr className="my-1 border-premium-border" />
                 <button
                   onClick={handleDelete}
-                  className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center"
+                  className="w-full px-4 py-2.5 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Delete
@@ -280,29 +394,29 @@ export default function MeetingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between px-1">
         <div>
-          <h1 className="text-2xl font-bold text-white">Meetings</h1>
-          <p className="text-gray-400 mt-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-white">Meetings</h1>
+          <p className="text-gray-400 mt-1 text-sm sm:text-base">
             View upcoming meetings and past sessions
           </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex space-x-1 bg-premium-surface p-1 rounded-lg w-fit">
+      <div className="flex w-full sm:w-fit bg-premium-surface p-1 rounded-lg overflow-x-auto">
         <button
           onClick={() => setActiveTab('upcoming')}
-          className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`flex items-center justify-center flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-md text-sm font-medium transition-colors min-h-[44px] touch-manipulation ${
             activeTab === 'upcoming'
               ? 'bg-premium-card text-white'
               : 'text-gray-400 hover:text-white'
           }`}
         >
-          <CalendarDays className="h-4 w-4 mr-2" />
-          Upcoming
+          <CalendarDays className="h-4 w-4 mr-2 flex-shrink-0" />
+          <span className="whitespace-nowrap">Upcoming</span>
           {upcomingEvents.length > 0 && (
             <span className="ml-2 px-1.5 py-0.5 text-xs bg-gold-500/20 text-gold-400 rounded">
               {upcomingEvents.length}
@@ -311,27 +425,27 @@ export default function MeetingsPage() {
         </button>
         <button
           onClick={() => setActiveTab('past')}
-          className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`flex items-center justify-center flex-1 sm:flex-none px-3 sm:px-4 py-2.5 sm:py-2 rounded-md text-sm font-medium transition-colors min-h-[44px] touch-manipulation ${
             activeTab === 'past'
               ? 'bg-premium-card text-white'
               : 'text-gray-400 hover:text-white'
           }`}
         >
-          <History className="h-4 w-4 mr-2" />
-          Past Sessions
+          <History className="h-4 w-4 mr-2 flex-shrink-0" />
+          <span className="whitespace-nowrap">Past Sessions</span>
         </button>
       </div>
 
       {/* Search & Filters */}
       <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-md">
+        <div className="relative flex-1 sm:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
           <input
             type="text"
             placeholder={activeTab === 'upcoming' ? 'Search events...' : 'Search meetings...'}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-premium-surface border border-premium-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-gold-500/50"
+            className="w-full pl-10 pr-4 py-2.5 sm:py-2 bg-premium-surface border border-premium-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-gold-500/50 text-base sm:text-sm min-h-[44px]"
           />
         </div>
       </div>
@@ -339,17 +453,17 @@ export default function MeetingsPage() {
       {/* Content */}
       {activeTab === 'upcoming' ? (
         /* Upcoming Events */
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {!hasCalendarConnected ? (
-            <div className="bg-premium-card border border-premium-border rounded-xl p-8 text-center">
-              <Calendar className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-              <p className="text-white font-medium mb-2">Connect Your Calendar</p>
-              <p className="text-gray-500 text-sm mb-4">
+            <div className="bg-premium-card border border-premium-border rounded-xl p-6 sm:p-8 text-center">
+              <Calendar className="h-10 w-10 sm:h-12 sm:w-12 text-gray-600 mx-auto mb-3" />
+              <p className="text-white font-medium mb-2 text-sm sm:text-base">Connect Your Calendar</p>
+              <p className="text-gray-500 text-xs sm:text-sm mb-4 max-w-xs mx-auto">
                 Connect Google Calendar or Outlook to see your upcoming meetings
               </p>
               <Link
                 href="/dashboard/settings/calendar"
-                className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-medium rounded-lg hover:shadow-gold transition-all"
+                className="inline-flex items-center px-5 py-3 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-medium rounded-lg hover:shadow-gold transition-all min-h-[48px] touch-manipulation"
               >
                 <Calendar className="h-4 w-4 mr-2" />
                 Connect Calendar
@@ -360,52 +474,61 @@ export default function MeetingsPage() {
               <UpcomingEventCard key={event.id} event={event} />
             ))
           ) : (
-            <div className="bg-premium-card border border-premium-border rounded-xl p-8 text-center">
-              <CalendarDays className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-400">No upcoming meetings</p>
-              <p className="text-gray-500 text-sm mt-1">
+            <div className="bg-premium-card border border-premium-border rounded-xl p-6 sm:p-8 text-center">
+              <CalendarDays className="h-10 w-10 sm:h-12 sm:w-12 text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-400 text-sm sm:text-base">No upcoming meetings</p>
+              <p className="text-gray-500 text-xs sm:text-sm mt-1">
                 {search ? 'Try a different search term' : 'Your upcoming calendar events will appear here'}
               </p>
             </div>
           )}
         </div>
       ) : (
-        /* Past Meetings Table */
+        /* Past Meetings - Mobile Card View & Desktop Table */
         <div className="bg-premium-card border border-premium-border rounded-xl overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gold-400"></div>
             </div>
           ) : filteredMeetings.length > 0 ? (
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-premium-border bg-premium-surface/50">
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">
-                    Meeting
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">
-                    Date
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">
-                    Duration
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">
-                    Responses
-                  </th>
-                  <th className="px-4 py-3 w-12"></th>
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              {/* Mobile Card View */}
+              <div className="block sm:hidden divide-y divide-premium-border">
                 {filteredMeetings.map((meeting) => (
-                  <MeetingRow key={meeting.id} meeting={meeting} onDelete={refresh} />
+                  <MeetingCardMobile key={meeting.id} meeting={meeting} onDelete={refresh} />
                 ))}
-              </tbody>
-            </table>
+              </div>
+              {/* Desktop Table View */}
+              <table className="w-full hidden sm:table">
+                <thead>
+                  <tr className="border-b border-premium-border bg-premium-surface/50">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">
+                      Meeting
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-400">
+                      Date
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-400 hidden md:table-cell">
+                      Duration
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-400 hidden lg:table-cell">
+                      Responses
+                    </th>
+                    <th className="px-4 py-3 w-12"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredMeetings.map((meeting) => (
+                    <MeetingRow key={meeting.id} meeting={meeting} onDelete={refresh} />
+                  ))}
+                </tbody>
+              </table>
+            </>
           ) : (
-            <div className="text-center py-12">
-              <Calendar className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-400">No meetings found</p>
-              <p className="text-gray-500 text-sm mt-1">
+            <div className="text-center py-10 sm:py-12">
+              <Calendar className="h-10 w-10 sm:h-12 sm:w-12 text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-400 text-sm sm:text-base">No meetings found</p>
+              <p className="text-gray-500 text-xs sm:text-sm mt-1">
                 {search ? 'Try a different search term' : 'Start using ReadIn AI in your meetings'}
               </p>
             </div>
@@ -413,27 +536,29 @@ export default function MeetingsPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-premium-border">
-              <p className="text-sm text-gray-500">
+            <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 border-t border-premium-border gap-3">
+              <p className="text-xs sm:text-sm text-gray-500 order-2 sm:order-1">
                 Showing {(page - 1) * 10 + 1} to {Math.min(page * 10, total)} of {total}
               </p>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3 order-1 sm:order-2">
                 <button
                   onClick={() => setPage(page - 1)}
                   disabled={page === 1}
-                  className="p-2 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-3 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed min-w-[44px] min-h-[44px] flex items-center justify-center touch-manipulation rounded-lg hover:bg-premium-surface"
+                  aria-label="Previous page"
                 >
-                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-5 w-5" />
                 </button>
-                <span className="text-sm text-gray-400">
+                <span className="text-sm text-gray-400 min-w-[80px] text-center">
                   Page {page} of {totalPages}
                 </span>
                 <button
                   onClick={() => setPage(page + 1)}
                   disabled={page === totalPages}
-                  className="p-2 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-3 text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed min-w-[44px] min-h-[44px] flex items-center justify-center touch-manipulation rounded-lg hover:bg-premium-surface"
+                  aria-label="Next page"
                 >
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-5 w-5" />
                 </button>
               </div>
             </div>

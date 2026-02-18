@@ -34,7 +34,11 @@
     "language": "Idioma",
     "english": "Ingles",
     "spanish": "Espanol",
-    "swahili": "Suajili"
+    "swahili": "Suajili",
+    "french": "Frances",
+    "german": "Aleman",
+    "portuguese": "Portugues",
+    "japanese": "Japones"
   },
   "header": {
     "features": "Funciones",

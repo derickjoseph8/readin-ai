@@ -20,6 +20,8 @@ SUPPORTED PLATFORMS:
 - Google Meet
 - Microsoft Teams (video calls)
 - Cisco Webex
+- Apple Calendar (CalDAV)
+- Calendly
 - Generic (calendar-based detection)
 """
 
@@ -41,6 +43,8 @@ class MeetingPlatform(str, Enum):
     GOOGLE_MEET = "google_meet"
     MICROSOFT_TEAMS = "microsoft_teams"
     WEBEX = "webex"
+    APPLE_CALENDAR = "apple_calendar"
+    CALENDLY = "calendly"
     GENERIC = "generic"  # For calendar-detected meetings without specific platform
 
 
@@ -82,7 +86,8 @@ class MeetingDetector:
             UserIntegration.user_id == user_id,
             UserIntegration.is_active == True,
             UserIntegration.provider.in_([
-                "zoom", "google_meet", "microsoft_teams", "webex"
+                "zoom", "google_meet", "microsoft_teams", "webex",
+                "apple_calendar", "calendly"
             ])
         ).all()
 
@@ -145,6 +150,26 @@ class MeetingDetector:
             await service.close()
             return meetings
 
+        elif provider == "apple_calendar":
+            from services.apple_calendar_service import AppleCalendarService
+            service = AppleCalendarService(self.db)
+            meetings = await service.get_upcoming_meetings(
+                integration.access_token,
+                integration.provider_user_id,
+                from_date, to_date
+            )
+            await service.close()
+            return meetings
+
+        elif provider == "calendly":
+            from services.calendly_service import CalendlyService
+            service = CalendlyService(self.db)
+            meetings = await service.get_upcoming_meetings(
+                integration.access_token, None, from_date, to_date
+            )
+            await service.close()
+            return meetings
+
         return []
 
     async def check_active_meeting(
@@ -160,7 +185,8 @@ class MeetingDetector:
             UserIntegration.user_id == user_id,
             UserIntegration.is_active == True,
             UserIntegration.provider.in_([
-                "zoom", "google_meet", "microsoft_teams", "webex"
+                "zoom", "google_meet", "microsoft_teams", "webex",
+                "apple_calendar", "calendly"
             ])
         ).all()
 
@@ -208,6 +234,10 @@ class MeetingDetector:
             return MeetingPlatform.MICROSOFT_TEAMS
         elif "webex.com" in url_lower:
             return MeetingPlatform.WEBEX
+        elif "calendly.com" in url_lower:
+            return MeetingPlatform.CALENDLY
+        elif "facetime.apple.com" in url_lower:
+            return MeetingPlatform.APPLE_CALENDAR
         else:
             return MeetingPlatform.GENERIC
 

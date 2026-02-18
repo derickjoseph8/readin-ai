@@ -2111,6 +2111,16 @@ class UserIntegration(Base):
     refresh_token = Column(Text, nullable=True)
     token_expires_at = Column(DateTime, nullable=True)
 
+    # CRM-specific fields
+    instance_url = Column(String(500), nullable=True)  # Salesforce instance URL
+    org_id = Column(String(255), nullable=True)  # Salesforce org ID or HubSpot hub ID
+
+    # CRM sync settings
+    auto_sync_contacts = Column(Boolean, default=True)  # Auto sync meeting participants to CRM
+    auto_log_meetings = Column(Boolean, default=True)  # Auto log meetings as activities
+    auto_sync_notes = Column(Boolean, default=False)  # Auto sync meeting notes
+    auto_create_tasks = Column(Boolean, default=False)  # Auto create tasks from action items
+
     # User info from provider
     display_name = Column(String(255), nullable=True)
     email = Column(String(255), nullable=True)
@@ -2148,6 +2158,14 @@ class IntegrationProvider:
     MICROSOFT_TEAMS_MEETING = "microsoft_teams"  # For video/calendar, separate from messaging
     WEBEX = "webex"
 
+    # Calendar integrations
+    APPLE_CALENDAR = "apple_calendar"
+    CALENDLY = "calendly"
+
+    # CRM integrations
+    SALESFORCE = "salesforce"
+    HUBSPOT = "hubspot"
+
 
 class IntegrationNotificationType:
     """Types of notifications that can be sent via integrations."""
@@ -2155,3 +2173,54 @@ class IntegrationNotificationType:
     ACTION_ITEM_REMINDER = "action_item_reminder"
     BRIEFING = "briefing"
     COMMITMENT_REMINDER = "commitment_reminder"
+
+
+# =============================================================================
+# WEBAUTHN/FIDO2 CREDENTIALS
+# =============================================================================
+
+class WebAuthnCredential(Base):
+    """
+    WebAuthn/FIDO2 credential storage for hardware key authentication.
+
+    Stores the public key and metadata for registered security keys,
+    including YubiKeys, Windows Hello, Touch ID, and other FIDO2
+    compliant authenticators.
+    """
+    __tablename__ = "webauthn_credentials"
+    __table_args__ = (
+        Index("ix_webauthn_user_id", "user_id"),
+        Index("ix_webauthn_credential_id", "credential_id"),
+        UniqueConstraint("credential_id", name="uq_webauthn_credential_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Credential identification - stored as base64url encoded strings
+    credential_id = Column(String(512), unique=True, nullable=False)
+    public_key = Column(Text, nullable=False)  # Base64url encoded COSE public key
+
+    # Counter for replay attack prevention
+    sign_count = Column(Integer, default=0, nullable=False)
+
+    # Device metadata
+    device_name = Column(String(100), default="Security Key")
+    device_type = Column(String(50), nullable=True)  # usb, nfc, ble, internal
+
+    # Attestation data (optional, for enterprise deployments)
+    attestation_type = Column(String(50), nullable=True)  # none, self, basic, attca
+    aaguid = Column(String(36), nullable=True)  # Authenticator AAGUID
+
+    # Status
+    is_active = Column(Boolean, default=True)
+
+    # Activity tracking
+    last_used_at = Column(DateTime, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", backref="webauthn_credentials")

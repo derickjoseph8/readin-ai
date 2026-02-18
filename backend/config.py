@@ -144,6 +144,29 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 WEBEX_CLIENT_ID = os.getenv("WEBEX_CLIENT_ID", "")
 WEBEX_CLIENT_SECRET = os.getenv("WEBEX_CLIENT_SECRET", "")
 
+# Apple Calendar - CalDAV-based integration
+APPLE_CLIENT_ID = os.getenv("APPLE_CLIENT_ID", "")  # Sign in with Apple Service ID
+APPLE_CLIENT_SECRET = os.getenv("APPLE_CLIENT_SECRET", "")  # Private key contents
+APPLE_TEAM_ID = os.getenv("APPLE_TEAM_ID", "")
+APPLE_KEY_ID = os.getenv("APPLE_KEY_ID", "")
+
+# Calendly - scheduling integration
+CALENDLY_CLIENT_ID = os.getenv("CALENDLY_CLIENT_ID", "")
+CALENDLY_CLIENT_SECRET = os.getenv("CALENDLY_CLIENT_SECRET", "")
+CALENDLY_WEBHOOK_SECRET = os.getenv("CALENDLY_WEBHOOK_SECRET", "")
+
+# =============================================================================
+# CRM INTEGRATIONS
+# =============================================================================
+
+# Salesforce CRM
+SALESFORCE_CLIENT_ID = os.getenv("SALESFORCE_CLIENT_ID", "")
+SALESFORCE_CLIENT_SECRET = os.getenv("SALESFORCE_CLIENT_SECRET", "")
+
+# HubSpot CRM
+HUBSPOT_CLIENT_ID = os.getenv("HUBSPOT_CLIENT_ID", "")
+HUBSPOT_CLIENT_SECRET = os.getenv("HUBSPOT_CLIENT_SECRET", "")
+
 # =============================================================================
 # APP SETTINGS
 # =============================================================================

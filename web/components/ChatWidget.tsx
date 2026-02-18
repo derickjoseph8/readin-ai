@@ -155,36 +155,36 @@ export default function ChatWidget() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-r from-gold-600 to-gold-500 rounded-full shadow-lg hover:shadow-gold transition-all flex items-center justify-center z-50"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-r from-gold-600 to-gold-500 rounded-full shadow-lg hover:shadow-gold transition-all flex items-center justify-center z-50 touch-manipulation active:scale-95"
         aria-label="Open chat"
       >
-        <MessageSquare className="h-5 w-5 sm:h-6 sm:w-6 text-premium-bg" />
+        <MessageSquare className="h-6 w-6 sm:h-7 sm:w-7 text-premium-bg" />
       </button>
     )
   }
 
   return (
     <div
-      className={`fixed bottom-0 right-0 sm:bottom-6 sm:right-6 w-full sm:w-96 sm:max-w-[calc(100vw-2rem)] bg-premium-card border border-premium-border sm:rounded-2xl shadow-2xl z-50 overflow-hidden transition-all ${
-        isMinimized ? 'h-14' : 'h-[100dvh] sm:h-[500px]'
+      className={`fixed inset-0 sm:inset-auto sm:bottom-6 sm:right-6 w-full sm:w-96 sm:max-w-[calc(100vw-2rem)] bg-premium-card border-0 sm:border border-premium-border sm:rounded-2xl shadow-2xl z-50 overflow-hidden transition-all ${
+        isMinimized ? 'h-14 bottom-0 top-auto inset-x-0' : 'h-full sm:h-[min(600px,80vh)]'
       }`}
     >
       {/* Header */}
-      <div className="h-14 px-4 bg-gradient-to-r from-gold-600 to-gold-500 flex items-center justify-between">
+      <div className="h-14 sm:h-16 px-4 bg-gradient-to-r from-gold-600 to-gold-500 flex items-center justify-between safe-area-top">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 bg-white/20 rounded-full flex items-center justify-center">
             {isAiHandled ? (
-              <Bot className="h-4 w-4 text-premium-bg" />
+              <Bot className="h-5 w-5 sm:h-6 sm:w-6 text-premium-bg" />
             ) : (
-              <UserCircle className="h-4 w-4 text-premium-bg" />
+              <UserCircle className="h-5 w-5 sm:h-6 sm:w-6 text-premium-bg" />
             )}
           </div>
           <div>
-            <p className="font-medium text-premium-bg">
+            <p className="font-medium text-premium-bg text-base sm:text-lg">
               {isAiHandled ? 'Novah AI' : 'Support Chat'}
             </p>
             {chatStatus === 'active' && (
-              <p className="text-xs text-premium-bg/80">
+              <p className="text-xs sm:text-sm text-premium-bg/80">
                 {isAiHandled ? 'AI Assistant' : 'Connected to Agent'}
               </p>
             )}
@@ -193,15 +193,17 @@ export default function ChatWidget() {
         <div className="flex items-center space-x-1">
           <button
             onClick={() => setIsMinimized(!isMinimized)}
-            className="p-2 text-premium-bg/80 hover:text-premium-bg transition-colors"
+            className="p-3 text-premium-bg/80 hover:text-premium-bg transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label={isMinimized ? 'Expand chat' : 'Minimize chat'}
           >
-            <Minimize2 className="h-4 w-4" />
+            <Minimize2 className="h-5 w-5" />
           </button>
           <button
             onClick={() => setIsOpen(false)}
-            className="p-2 text-premium-bg/80 hover:text-premium-bg transition-colors"
+            className="p-3 text-premium-bg/80 hover:text-premium-bg transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="Close chat"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </button>
         </div>
       </div>
@@ -209,25 +211,25 @@ export default function ChatWidget() {
       {!isMinimized && (
         <>
           {/* Chat Content */}
-          <div className="h-[calc(100%-3.5rem)] flex flex-col">
+          <div className="h-[calc(100%-3.5rem)] sm:h-[calc(100%-4rem)] flex flex-col">
             {chatStatus === 'idle' && (
-              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-                <div className="w-16 h-16 bg-gold-500/20 rounded-full flex items-center justify-center mb-4">
-                  <Bot className="h-8 w-8 text-gold-400" />
+              <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 text-center">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gold-500/20 rounded-full flex items-center justify-center mb-4 sm:mb-6">
+                  <Bot className="h-10 w-10 sm:h-12 sm:w-12 text-gold-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-white mb-2">Chat with Novah</h3>
-                <p className="text-gray-400 text-sm mb-6">
+                <h3 className="text-xl sm:text-2xl font-semibold text-white mb-2 sm:mb-3">Chat with Novah</h3>
+                <p className="text-gray-400 text-sm sm:text-base mb-6 sm:mb-8 max-w-xs">
                   Our AI assistant will help you instantly. Need a human? Just ask!
                 </p>
                 {error && (
-                  <div className="mb-4 text-sm text-red-400 flex items-center">
-                    <AlertCircle className="h-4 w-4 mr-2" />
+                  <div className="mb-4 text-sm text-red-400 flex items-center px-4 py-2 bg-red-500/10 rounded-lg">
+                    <AlertCircle className="h-4 w-4 mr-2 flex-shrink-0" />
                     {error}
                   </div>
                 )}
                 <button
                   onClick={handleStartChat}
-                  className="px-6 py-2.5 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-medium rounded-lg hover:shadow-gold transition-all"
+                  className="px-8 py-3 sm:py-4 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-medium rounded-lg hover:shadow-gold transition-all text-base sm:text-lg min-h-[48px] touch-manipulation active:scale-98"
                 >
                   Start Chat
                 </button>
@@ -235,16 +237,16 @@ export default function ChatWidget() {
             )}
 
             {chatStatus === 'waiting' && (
-              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-                <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mb-4">
-                  <Clock className="h-8 w-8 text-blue-400 animate-pulse" />
+              <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 text-center">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 bg-blue-500/20 rounded-full flex items-center justify-center mb-4 sm:mb-6">
+                  <Clock className="h-10 w-10 sm:h-12 sm:w-12 text-blue-400 animate-pulse" />
                 </div>
-                <h3 className="text-lg font-semibold text-white mb-2">Waiting for Agent</h3>
-                <p className="text-gray-400 text-sm mb-2">
+                <h3 className="text-xl sm:text-2xl font-semibold text-white mb-2 sm:mb-3">Waiting for Agent</h3>
+                <p className="text-gray-400 text-sm sm:text-base mb-2">
                   You're in the queue. An agent will be with you shortly.
                 </p>
                 {queuePosition && (
-                  <p className="text-yellow-400 text-sm">
+                  <p className="text-yellow-400 text-sm sm:text-base font-medium">
                     Queue position: #{queuePosition}
                   </p>
                 )}
@@ -254,10 +256,10 @@ export default function ChatWidget() {
             {(chatStatus === 'active' || chatStatus === 'ended') && (
               <>
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 overscroll-contain">
                   {messages.length === 0 && chatStatus === 'active' && (
-                    <div className="text-center text-gray-500 py-4">
-                      <p>Connected! Start the conversation.</p>
+                    <div className="text-center text-gray-500 py-6 sm:py-8">
+                      <p className="text-sm sm:text-base">Connected! Start the conversation.</p>
                     </div>
                   )}
                   {messages.map((msg) => (
@@ -266,26 +268,26 @@ export default function ChatWidget() {
                       className={`flex ${msg.sender_type === 'customer' ? 'justify-end' : 'justify-start'}`}
                     >
                       <div
-                        className={`max-w-[80%] rounded-lg p-3 ${
+                        className={`max-w-[85%] sm:max-w-[80%] rounded-xl sm:rounded-lg p-3 sm:p-4 ${
                           msg.sender_type === 'customer'
                             ? 'bg-gold-500/20 text-white'
                             : 'bg-premium-surface text-white'
                         }`}
                       >
                         {msg.sender_type === 'bot' && (
-                          <p className="text-xs text-purple-400 mb-1 flex items-center">
+                          <p className="text-xs text-purple-400 mb-1.5 flex items-center">
                             <Bot className="h-3 w-3 mr-1" />
                             Novah (AI)
                           </p>
                         )}
                         {msg.sender_type === 'agent' && (
-                          <p className="text-xs text-blue-400 mb-1 flex items-center">
+                          <p className="text-xs text-blue-400 mb-1.5 flex items-center">
                             <Shield className="h-3 w-3 mr-1" />
                             {msg.sender_name || 'Support Agent'}
                           </p>
                         )}
-                        <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
-                        <p className="text-xs text-gray-500 mt-1 text-right">
+                        <p className="text-sm sm:text-base whitespace-pre-wrap leading-relaxed">{msg.message}</p>
+                        <p className="text-xs text-gray-500 mt-1.5 text-right">
                           {formatTime(msg.created_at)}
                         </p>
                       </div>
@@ -296,42 +298,43 @@ export default function ChatWidget() {
 
                 {/* Input or Ended State */}
                 {chatStatus === 'active' ? (
-                  <div className="p-3 border-t border-premium-border">
+                  <div className="p-3 sm:p-4 border-t border-premium-border safe-area-bottom bg-premium-card">
                     {error && (
-                      <div className="mb-2 text-xs text-red-400">{error}</div>
+                      <div className="mb-2 text-xs text-red-400 px-2 py-1 bg-red-500/10 rounded">{error}</div>
                     )}
-                    <div className="flex space-x-2">
+                    <div className="flex space-x-2 sm:space-x-3">
                       <input
                         type="text"
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
                         onKeyPress={handleKeyPress}
                         placeholder="Type a message..."
-                        className="flex-1 px-3 py-2 bg-premium-surface border border-premium-border rounded-lg text-white text-sm focus:outline-none focus:border-gold-500"
+                        className="flex-1 px-4 py-3 bg-premium-surface border border-premium-border rounded-xl sm:rounded-lg text-white text-base sm:text-sm focus:outline-none focus:border-gold-500 min-h-[48px]"
                       />
                       <button
                         onClick={handleSendMessage}
                         disabled={!newMessage.trim() || isSending}
-                        className="px-3 py-2 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg rounded-lg hover:shadow-gold transition-all disabled:opacity-50"
+                        className="px-4 py-3 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg rounded-xl sm:rounded-lg hover:shadow-gold transition-all disabled:opacity-50 min-w-[48px] min-h-[48px] flex items-center justify-center touch-manipulation active:scale-95"
+                        aria-label="Send message"
                       >
-                        <Send className="h-4 w-4" />
+                        <Send className="h-5 w-5" />
                       </button>
                     </div>
-                    <div className="flex justify-between items-center mt-2">
-                      <p className="text-xs text-gray-500">Press Enter to send</p>
-                      <div className="flex items-center gap-3">
+                    <div className="flex justify-between items-center mt-3 px-1">
+                      <p className="text-xs text-gray-500 hidden sm:block">Press Enter to send</p>
+                      <div className="flex items-center gap-4 sm:gap-3 w-full sm:w-auto justify-between sm:justify-end">
                         {isAiHandled && (
                           <button
                             onClick={handleRequestHuman}
                             disabled={isRequestingHuman}
-                            className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50"
+                            className="text-sm sm:text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50 min-h-[44px] touch-manipulation px-2"
                           >
                             {isRequestingHuman ? 'Connecting...' : 'Talk to Human'}
                           </button>
                         )}
                         <button
                           onClick={handleEndChat}
-                          className="text-xs text-red-400 hover:text-red-300"
+                          className="text-sm sm:text-xs text-red-400 hover:text-red-300 min-h-[44px] touch-manipulation px-2"
                         >
                           End Chat
                         </button>
@@ -339,11 +342,11 @@ export default function ChatWidget() {
                     </div>
                   </div>
                 ) : (
-                  <div className="p-4 border-t border-premium-border text-center">
-                    <p className="text-gray-400 text-sm mb-3">Chat ended</p>
+                  <div className="p-4 sm:p-6 border-t border-premium-border text-center safe-area-bottom">
+                    <p className="text-gray-400 text-base sm:text-sm mb-4 sm:mb-3">Chat ended</p>
                     <button
                       onClick={handleNewChat}
-                      className="px-4 py-2 bg-premium-surface text-white text-sm rounded-lg hover:bg-premium-surface/80 transition-colors"
+                      className="px-6 py-3 bg-premium-surface text-white text-base sm:text-sm rounded-xl sm:rounded-lg hover:bg-premium-surface/80 transition-colors min-h-[48px] touch-manipulation"
                     >
                       Start New Chat
                     </button>
