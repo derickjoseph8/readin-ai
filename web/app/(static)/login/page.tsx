@@ -1,13 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Mail, Lock, Loader2, Smartphone } from 'lucide-react'
 import { twoFactorApi } from '@/lib/api/auth'
 
 export default function LoginPage() {
+  const router = useRouter()
   const [isLogin, setIsLogin] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [checkingAuth, setCheckingAuth] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
@@ -19,6 +22,29 @@ export default function LoginPage() {
   const [twoFactorCode, setTwoFactorCode] = useState('')
   const [isBackupCode, setIsBackupCode] = useState(false)
   const [pendingUserId, setPendingUserId] = useState<number | null>(null)
+
+  // Check if user is already logged in
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = localStorage.getItem('readin_token')
+      if (token) {
+        try {
+          const res = await fetch('https://www.getreadin.us/user/me', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+          if (res.ok) {
+            // User is authenticated, redirect to dashboard
+            router.replace('/dashboard')
+            return
+          }
+        } catch (err) {
+          // Token invalid, continue to login page
+        }
+      }
+      setCheckingAuth(false)
+    }
+    checkAuth()
+  }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -133,6 +159,15 @@ export default function LoginPage() {
     setTwoFactorCode('')
     setIsBackupCode(false)
     setMessage('')
+  }
+
+  // Show loading while checking auth
+  if (checkingAuth) {
+    return (
+      <main className="min-h-screen bg-premium-bg text-white flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-gold-500" />
+      </main>
+    )
   }
 
   // 2FA Verification Screen
@@ -256,7 +291,14 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-300">Password</label>
+                {isLogin && (
+                  <Link href="/forgot-password" className="text-sm text-gold-400 hover:text-gold-300">
+                    Forgot password?
+                  </Link>
+                )}
+              </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
                 <input
