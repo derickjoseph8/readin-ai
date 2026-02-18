@@ -136,14 +136,15 @@
             color: #92400e;
         }
         .footer {
-            background: #1a1a1a;
-            color: #999;
+            background: #f9fafb;
+            color: #6b7280;
             padding: 25px;
             text-align: center;
             font-size: 12px;
+            border-top: 1px solid #e5e7eb;
         }
         .footer a {
-            color: #fbbf24;
+            color: #b8860b;
             text-decoration: none;
         }
         .btn {
@@ -166,6 +167,9 @@
         </div>
 
         <div class="content">
+            <p style="font-size: 16px; margin-bottom: 20px;">Hello <strong>{{ user_name }}</strong>,</p>
+            <p style="color: #666; margin-bottom: 25px;">Here's the summary from your recent meeting:</p>
+
             <div class="meeting-info">
                 <p><strong>Date:</strong> {{ meeting_date }}</p>
                 <p><strong>Duration:</strong> {{ meeting_duration }}</p>

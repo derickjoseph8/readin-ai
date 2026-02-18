@@ -1,7 +1,7 @@
 """ReadIn AI Backend API - Authentication, Subscriptions, Usage Tracking, ML Intelligence."""
 
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 import stripe
@@ -61,6 +61,9 @@ from services.scheduler import start_scheduler, stop_scheduler
 
 # Import services for initialization
 from services.template_service import TemplateService
+from services.email_service import EmailService
+import asyncio
+import secrets
 
 # Import middleware
 from middleware.rate_limiter import limiter, rate_limit_login, rate_limit_register
@@ -359,6 +362,13 @@ def register(request: Request, user_data: UserCreate, db: Session = Depends(get_
     db.commit()
     db.refresh(user)
 
+    # Send welcome email (fire and forget)
+    try:
+        email_service = EmailService(db)
+        asyncio.create_task(email_service.send_welcome_email(user.id))
+    except Exception:
+        pass  # Don't fail registration if email fails
+
     # Return token
     token = create_access_token(user.id)
     return Token(access_token=token)
@@ -496,6 +506,117 @@ def change_password(
     db.commit()
 
     return {"message": "Password changed successfully"}
+
+
+class ForgotPasswordRequest(PydanticBaseModel):
+    """Schema for forgot password request."""
+    email: str
+
+
+@app.post("/api/v1/auth/forgot-password")
+@limiter.limit("3/minute")
+def forgot_password(
+    request: Request,
+    data: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Request a password reset email.
+
+    Rate limited to 3 requests per minute.
+    Always returns success to prevent email enumeration.
+    """
+    user = db.query(User).filter(User.email == data.email).first()
+
+    if user:
+        # Generate a secure reset token
+        reset_token = secrets.token_urlsafe(48)
+        user.password_reset_token = reset_token
+        user.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
+        db.commit()
+
+        # Send password reset email
+        try:
+            email_service = EmailService(db)
+            asyncio.create_task(
+                email_service.send_password_reset(
+                    email=user.email,
+                    reset_token=reset_token,
+                    user_name=user.full_name
+                )
+            )
+        except Exception:
+            pass  # Don't expose email sending failures
+
+    # Always return success to prevent email enumeration
+    return {
+        "message": "If an account with that email exists, a password reset link has been sent."
+    }
+
+
+class ResetPasswordRequest(PydanticBaseModel):
+    """Schema for reset password request."""
+    token: str
+    new_password: str
+
+
+@app.post("/api/v1/auth/reset-password")
+@limiter.limit("5/minute")
+def reset_password(
+    request: Request,
+    data: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Reset password using token from email.
+
+    Rate limited to 5 requests per minute.
+    """
+    user = db.query(User).filter(
+        User.password_reset_token == data.token
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token"
+        )
+
+    if user.password_reset_expires and user.password_reset_expires < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset token has expired. Please request a new one."
+        )
+
+    # Validate password length
+    if len(data.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters"
+        )
+
+    # Update password and clear reset token
+    user.hashed_password = hash_password(data.new_password)
+    user.password_reset_token = None
+    user.password_reset_expires = None
+    db.commit()
+
+    # Send security alert about password change
+    try:
+        email_service = EmailService(db)
+        asyncio.create_task(
+            email_service.send_security_alert(
+                user_id=user.id,
+                alert_type="password_changed",
+                alert_title="Password Changed",
+                alert_description="Your password was successfully reset. If you did not make this change, please contact support immediately.",
+                severity="medium"
+            )
+        )
+    except Exception:
+        pass
+
+    return {"message": "Password has been reset successfully. You can now log in with your new password."}
 
 
 # ============== Language Endpoints ==============

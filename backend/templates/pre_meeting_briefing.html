@@ -191,14 +191,15 @@
             font-weight: 600;
         }
         .footer {
-            background: #1a1a1a;
-            color: #999;
+            background: #f9fafb;
+            color: #6b7280;
             padding: 25px;
             text-align: center;
             font-size: 12px;
+            border-top: 1px solid #e5e7eb;
         }
         .footer a {
-            color: #60a5fa;
+            color: #1d4ed8;
             text-decoration: none;
         }
     </style>
@@ -212,6 +213,9 @@
         </div>
 
         <div class="content">
+            <p style="font-size: 16px; margin-bottom: 20px;">Hi <strong>{{ user_name }}</strong>,</p>
+            <p style="color: #666; margin-bottom: 25px;">Here's your briefing for the upcoming meeting:</p>
+
             <div class="summary">
                 <strong>Quick Summary:</strong>
                 <p style="margin-bottom: 0;">{{ summary }}</p>

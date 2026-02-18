@@ -165,6 +165,10 @@ class User(Base):
     deletion_requested = Column(Boolean, default=False)
     deletion_scheduled = Column(DateTime, nullable=True)
 
+    # Password reset
+    password_reset_token = Column(String(64), nullable=True, index=True)
+    password_reset_expires = Column(DateTime, nullable=True)
+
     # Additional user tracking
     last_login = Column(DateTime, nullable=True)
     timezone = Column(String, default="UTC")
