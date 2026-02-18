@@ -1,24 +1,23 @@
 """
 Enhanced Cross-Platform Audio Capture for ReadIn AI.
 
-IMPROVEMENTS OVER ORIGINAL:
-- WASAPI loopback mode for Windows (captures all system audio reliably)
-- Automatic virtual audio device setup guidance
-- Audio preprocessing (noise gate, normalization, DC offset removal)
-- Better sample rate handling with high-quality resampling
-- Integration with calendar-based meeting detection
-- Reduced latency capture mode
+HIGH-QUALITY AUDIO CAPTURE WITH TRUE STEALTH MODE:
+- Windows: WASAPI Loopback (captures all system audio without Stereo Mix)
+- macOS: BlackHole/Soundflower support
+- Linux: PulseAudio monitor devices
 
 STEALTH MODE COMPATIBLE:
 - Captures system audio output (what you hear)
 - No microphone access needed for meeting audio
 - Invisible to other meeting participants
+- No "Recording" indicator shown to others
 """
 
 import threading
 import queue
 import time
-from typing import Callable, Optional, List, Dict, Any
+import struct
+from typing import Callable, Optional, List, Dict, Any, Tuple
 from dataclasses import dataclass
 from enum import Enum
 
@@ -42,8 +41,11 @@ class AudioDevice:
     channels: int
     sample_rate: int
     is_loopback: bool
+    is_input: bool
+    is_output: bool
     is_default: bool
     host_api: str = ""
+    host_api_index: int = 0
     latency: float = 0.0
 
 
@@ -52,16 +54,16 @@ class AudioPreprocessor:
 
     def __init__(
         self,
-        noise_gate_threshold: float = 0.01,
+        noise_gate_threshold: float = 0.008,
         normalize: bool = True,
         remove_dc_offset: bool = True,
-        high_pass_cutoff: float = 80.0,  # Hz - remove rumble
+        high_pass_cutoff: float = 80.0,
     ):
         self.noise_gate_threshold = noise_gate_threshold
         self.normalize = normalize
         self.remove_dc_offset = remove_dc_offset
         self.high_pass_cutoff = high_pass_cutoff
-        self._prev_sample = 0.0  # For high-pass filter
+        self._prev_sample = 0.0
 
     def process(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
         """Apply preprocessing to audio chunk."""
@@ -74,34 +76,41 @@ class AudioPreprocessor:
 
         # Simple high-pass filter (remove low frequency rumble)
         if self.high_pass_cutoff > 0:
-            alpha = 1.0 / (1.0 + (2.0 * np.pi * self.high_pass_cutoff / sample_rate))
+            rc = 1.0 / (2.0 * np.pi * self.high_pass_cutoff)
+            dt = 1.0 / sample_rate
+            alpha = rc / (rc + dt)
+
             filtered = np.zeros_like(audio)
-            prev = self._prev_sample
-            for i, sample in enumerate(audio):
-                filtered[i] = alpha * (prev + sample - (audio[i-1] if i > 0 else 0))
-                prev = filtered[i]
-            self._prev_sample = prev
+            prev_in = 0.0
+            prev_out = self._prev_sample
+
+            for i in range(len(audio)):
+                filtered[i] = alpha * (prev_out + audio[i] - prev_in)
+                prev_in = audio[i]
+                prev_out = filtered[i]
+
+            self._prev_sample = prev_out
             audio = filtered
 
-        # Noise gate - silence very quiet sections
+        # Noise gate - reduce very quiet sections
         if self.noise_gate_threshold > 0:
             rms = np.sqrt(np.mean(audio ** 2))
             if rms < self.noise_gate_threshold:
-                audio = audio * 0.1  # Reduce but don't eliminate
+                audio = audio * 0.1
 
-        # Normalize to prevent clipping while maintaining dynamics
+        # Normalize to prevent clipping
         if self.normalize:
             max_val = np.abs(audio).max()
-            if max_val > 0.01:  # Only normalize if there's actual audio
-                target_level = 0.7
+            if max_val > 0.01:
+                target_level = 0.75
                 audio = audio * (target_level / max_val)
 
-        return audio.astype(np.float32)
+        return np.clip(audio, -1.0, 1.0).astype(np.float32)
 
 
 class EnhancedAudioCapture:
     """
-    Enhanced audio capture with better quality and stealth mode support.
+    High-quality audio capture with true WASAPI loopback support.
 
     STEALTH MODE: Captures system audio (what you hear) without accessing
     the microphone. Other meeting participants cannot detect this capture.
@@ -144,6 +153,9 @@ class EnhancedAudioCapture:
         # Platform-specific
         self._pa = None
         self._stream = None
+        self._wasapi_loopback = False
+        self._capture_thread: Optional[threading.Thread] = None
+        self._stream_lock = threading.Lock()
 
         # Preprocessing
         self._preprocessor = AudioPreprocessor() if enable_preprocessing else None
@@ -153,91 +165,137 @@ class EnhancedAudioCapture:
         self._start_time = 0.0
 
     @staticmethod
-    def get_available_devices(capture_mode: CaptureMode = CaptureMode.SYSTEM_LOOPBACK) -> List[AudioDevice]:
+    def _check_wasapi_loopback_support() -> bool:
+        """Check if WASAPI loopback is available and working (pyaudiowpatch).
+
+        NOTE: pyaudiowpatch has compatibility issues with Python 3.13+
+        that cause segmentation faults. Disabled until fixed upstream.
         """
-        Get available audio devices filtered by capture mode.
+        # Temporarily disabled due to Python 3.13 segfault issues
+        # TODO: Re-enable once pyaudiowpatch is compatible with Python 3.13
+        import sys
+        if sys.version_info >= (3, 13):
+            return False
 
-        For STEALTH MODE (SYSTEM_LOOPBACK): Returns loopback/monitor devices
-        that capture system audio without accessing microphone.
-        """
-        devices = []
-
-        if IS_WINDOWS:
-            devices = EnhancedAudioCapture._get_windows_devices()
-        else:
-            devices = EnhancedAudioCapture._get_unix_devices()
-
-        # Filter by capture mode
-        if capture_mode == CaptureMode.SYSTEM_LOOPBACK:
-            # Prioritize loopback devices for stealth mode
-            loopback_devices = [d for d in devices if d.is_loopback]
-            if loopback_devices:
-                return loopback_devices
-            # If no loopback found, return all with warning
-            print("WARNING: No loopback device found. System audio capture may not work.")
-            print("  Windows: Enable 'Stereo Mix' in Sound settings")
-            print("  macOS: Install BlackHole (brew install blackhole-2ch)")
-            print("  Linux: Use PulseAudio monitor device")
-
-        return devices
+        try:
+            import pyaudiowpatch as pa_wpatch
+            # Test that it actually works
+            test_pa = pa_wpatch.PyAudio()
+            test_pa.terminate()
+            return True
+        except ImportError:
+            return False
+        except Exception:
+            return False
 
     @staticmethod
-    def _get_windows_devices() -> List[AudioDevice]:
-        """Get Windows audio devices with WASAPI info."""
+    def get_available_devices(capture_mode: CaptureMode = CaptureMode.SYSTEM_LOOPBACK) -> List[AudioDevice]:
+        """Get available audio devices filtered by capture mode."""
+        if IS_WINDOWS:
+            return EnhancedAudioCapture._get_windows_devices(capture_mode)
+        else:
+            return EnhancedAudioCapture._get_unix_devices(capture_mode)
+
+    @staticmethod
+    def _get_windows_devices(capture_mode: CaptureMode) -> List[AudioDevice]:
+        """Get Windows audio devices with proper WASAPI loopback detection."""
         devices = []
+
+        # First try pyaudiowpatch for true WASAPI loopback
+        has_wpatch = EnhancedAudioCapture._check_wasapi_loopback_support()
+
         try:
-            import pyaudio
+            if has_wpatch:
+                import pyaudiowpatch as pyaudio
+            else:
+                import pyaudio
+
             pa = pyaudio.PyAudio()
 
-            default_input = None
+            # Get default devices
+            default_input_idx = -1
+            default_output_idx = -1
             try:
-                default_input = pa.get_default_input_device_info()
+                default_input_idx = pa.get_default_input_device_info()['index']
             except:
                 pass
-            default_index = default_input['index'] if default_input else -1
+            try:
+                default_output_idx = pa.get_default_output_device_info()['index']
+            except:
+                pass
 
             for i in range(pa.get_device_count()):
                 try:
                     info = pa.get_device_info_by_index(i)
-                    if info['maxInputChannels'] > 0:
-                        name = info['name']
-                        name_lower = name.lower()
+                    name = info.get('name', f'Device {i}')
+                    name_lower = name.lower()
 
-                        # Detect loopback devices
-                        is_loopback = any(kw in name_lower for kw in [
-                            'loopback', 'stereo mix', 'what u hear',
-                            'wave out', 'wasapi', 'output'
-                        ])
+                    max_input = int(info.get('maxInputChannels', 0))
+                    max_output = int(info.get('maxOutputChannels', 0))
 
-                        # Get host API name
-                        host_api = ""
-                        try:
-                            host_info = pa.get_host_api_info_by_index(info['hostApi'])
-                            host_api = host_info.get('name', '')
-                        except:
-                            pass
+                    # Get host API info
+                    host_api = ""
+                    host_api_idx = int(info.get('hostApi', 0))
+                    try:
+                        host_info = pa.get_host_api_info_by_index(host_api_idx)
+                        host_api = host_info.get('name', '')
+                    except:
+                        pass
 
+                    # Determine device type
+                    is_input = max_input > 0
+                    is_output = max_output > 0
+
+                    # Detect true loopback devices
+                    is_loopback = False
+
+                    # With pyaudiowpatch, output devices can be used as loopback
+                    if has_wpatch and is_output and 'wasapi' in host_api.lower():
+                        is_loopback = True
+
+                    # Traditional loopback detection
+                    if is_input:
+                        loopback_keywords = ['stereo mix', 'what u hear', 'loopback',
+                                           'wave out mix', 'mono mix', 'rec. playback']
+                        if any(kw in name_lower for kw in loopback_keywords):
+                            is_loopback = True
+
+                    # Determine if this device should be included
+                    include = False
+                    if capture_mode == CaptureMode.SYSTEM_LOOPBACK:
+                        include = is_loopback or (has_wpatch and is_output)
+                    elif capture_mode == CaptureMode.MICROPHONE:
+                        include = is_input and not is_loopback
+                    else:  # MIXED
+                        include = is_input
+
+                    if include:
+                        channels = max_input if is_input else max_output
                         devices.append(AudioDevice(
                             index=i,
                             name=name,
-                            channels=int(info['maxInputChannels']),
+                            channels=max(1, min(channels, 2)),
                             sample_rate=int(info.get('defaultSampleRate', AUDIO_SAMPLE_RATE)),
                             is_loopback=is_loopback,
-                            is_default=(i == default_index),
+                            is_input=is_input,
+                            is_output=is_output,
+                            is_default=(i == default_input_idx or i == default_output_idx),
                             host_api=host_api,
-                            latency=info.get('defaultLowInputLatency', 0.0),
+                            host_api_index=host_api_idx,
+                            latency=float(info.get('defaultLowInputLatency', 0.0)),
                         ))
-                except Exception as e:
+                except Exception:
                     continue
 
             pa.terminate()
+
         except Exception as e:
             print(f"Error listing Windows devices: {e}")
 
         return devices
 
     @staticmethod
-    def _get_unix_devices() -> List[AudioDevice]:
+    def _get_unix_devices(capture_mode: CaptureMode) -> List[AudioDevice]:
         """Get macOS/Linux audio devices."""
         devices = []
         try:
@@ -246,25 +304,46 @@ class EnhancedAudioCapture:
             default_input = sd.default.device[0]
 
             for i, dev in enumerate(sd.query_devices()):
-                if dev['max_input_channels'] > 0:
-                    name = dev['name']
-                    name_lower = name.lower()
+                name = dev.get('name', f'Device {i}')
+                name_lower = name.lower()
 
-                    is_loopback = any(kw in name_lower for kw in [
-                        'monitor', 'blackhole', 'loopback', 'soundflower',
-                        'virtual', 'vb-audio', 'output'
-                    ])
+                max_input = int(dev.get('max_input_channels', 0))
+                max_output = int(dev.get('max_output_channels', 0))
 
+                is_input = max_input > 0
+                is_output = max_output > 0
+
+                # Detect loopback devices
+                is_loopback = False
+                if is_input:
+                    loopback_keywords = ['monitor', 'blackhole', 'loopback',
+                                        'soundflower', 'vb-audio', 'virtual']
+                    if any(kw in name_lower for kw in loopback_keywords):
+                        is_loopback = True
+
+                # Filter by capture mode
+                include = False
+                if capture_mode == CaptureMode.SYSTEM_LOOPBACK:
+                    include = is_loopback
+                elif capture_mode == CaptureMode.MICROPHONE:
+                    include = is_input and not is_loopback
+                else:
+                    include = is_input
+
+                if include:
                     devices.append(AudioDevice(
                         index=i,
                         name=name,
-                        channels=int(dev['max_input_channels']),
+                        channels=min(max_input, 2),
                         sample_rate=int(dev.get('default_samplerate', AUDIO_SAMPLE_RATE)),
                         is_loopback=is_loopback,
+                        is_input=is_input,
+                        is_output=is_output,
                         is_default=(i == default_input),
-                        host_api=dev.get('hostapi', ''),
-                        latency=dev.get('default_low_input_latency', 0.0),
+                        host_api=str(dev.get('hostapi', '')),
+                        latency=float(dev.get('default_low_input_latency', 0.0)),
                     ))
+
         except Exception as e:
             print(f"Error listing audio devices: {e}")
 
@@ -272,101 +351,103 @@ class EnhancedAudioCapture:
 
     @staticmethod
     def get_recommended_device(capture_mode: CaptureMode = CaptureMode.SYSTEM_LOOPBACK) -> Optional[AudioDevice]:
-        """
-        Get the best device for the capture mode.
-
-        For STEALTH MODE: Returns the best loopback device.
-        """
+        """Get the best device for the capture mode."""
         devices = EnhancedAudioCapture.get_available_devices(capture_mode)
 
         if not devices:
             return None
 
-        # For loopback mode, prefer WASAPI loopback on Windows
         if capture_mode == CaptureMode.SYSTEM_LOOPBACK:
-            # Priority: WASAPI loopback > Stereo Mix > BlackHole > Monitor
-            priority_keywords = ['wasapi', 'loopback', 'stereo mix', 'blackhole', 'monitor']
+            # Priority for loopback: WASAPI output > Stereo Mix > BlackHole > Monitor
+            # First check for WASAPI loopback (output devices that can be captured)
+            for dev in devices:
+                if dev.is_output and 'wasapi' in dev.host_api.lower():
+                    if dev.is_default:
+                        return dev
 
-            for keyword in priority_keywords:
-                for device in devices:
-                    if keyword in device.name.lower() or keyword in device.host_api.lower():
-                        return device
+            for dev in devices:
+                if dev.is_output and 'wasapi' in dev.host_api.lower():
+                    return dev
 
-        # Return first loopback device, or first device
-        for device in devices:
-            if device.is_loopback:
-                return device
+            # Then check for Stereo Mix type devices
+            for dev in devices:
+                if dev.is_loopback and dev.is_input:
+                    return dev
+
+        elif capture_mode == CaptureMode.MICROPHONE:
+            # Priority: Default mic > First available mic
+            for dev in devices:
+                if dev.is_default:
+                    return dev
+
+            for dev in devices:
+                if dev.is_input:
+                    return dev
 
         return devices[0] if devices else None
 
     @staticmethod
     def get_setup_instructions() -> Dict[str, str]:
-        """Get platform-specific setup instructions for system audio capture."""
+        """Get platform-specific setup instructions."""
         return {
             "windows": """
-WINDOWS SETUP FOR SYSTEM AUDIO CAPTURE:
+WINDOWS SYSTEM AUDIO CAPTURE SETUP:
 
-Option 1: Enable Stereo Mix (Recommended)
-1. Right-click speaker icon in system tray
-2. Select "Sound settings" or "Sounds"
-3. Go to Recording tab
-4. Right-click empty area, check "Show Disabled Devices"
-5. Right-click "Stereo Mix" and enable it
+RECOMMENDED: Install pyaudiowpatch for best quality:
+  pip install pyaudiowpatch
+  (Enables true WASAPI loopback - no configuration needed!)
 
-Option 2: WASAPI Loopback (Advanced)
-- Automatically available if your audio driver supports it
-- Look for devices with "WASAPI" or "Loopback" in the name
+ALTERNATIVE: Enable Stereo Mix
+1. Right-click speaker icon > Sound settings
+2. Click "More sound settings" (or Sound Control Panel)
+3. Recording tab > Right-click > Show Disabled Devices
+4. Right-click "Stereo Mix" > Enable
+5. Right-click "Stereo Mix" > Set as Default Device
 
-Option 3: Virtual Audio Cable
-- Install VB-Audio Virtual Cable (free)
-- Set it as default playback device
-- Use it as capture input in ReadIn AI
-            """,
+FALLBACK: VB-Audio Virtual Cable (free)
+  https://vb-audio.com/Cable/
+""",
             "macos": """
-macOS SETUP FOR SYSTEM AUDIO CAPTURE:
+macOS SYSTEM AUDIO CAPTURE SETUP:
 
-Option 1: BlackHole (Recommended - Free)
-1. Install: brew install blackhole-2ch
+RECOMMENDED: BlackHole (Free)
+1. brew install blackhole-2ch
 2. Open Audio MIDI Setup (in Utilities)
-3. Click "+" and create Multi-Output Device
-4. Check both your speakers AND BlackHole 2ch
+3. Click + > Create Multi-Output Device
+4. Check your speakers AND BlackHole 2ch
 5. Set Multi-Output as system output
 6. Select "BlackHole 2ch" in ReadIn AI
 
-Option 2: Loopback by Rogue Amoeba (Paid)
-- More user-friendly
-- Download from rogueamoeba.com/loopback
-            """,
+ALTERNATIVE: Loopback by Rogue Amoeba
+  https://rogueamoeba.com/loopback/
+""",
             "linux": """
-LINUX SETUP FOR SYSTEM AUDIO CAPTURE:
+LINUX SYSTEM AUDIO CAPTURE SETUP:
 
-PulseAudio (Most distros):
-1. Install pavucontrol: sudo apt install pavucontrol
-2. Open PulseAudio Volume Control
-3. Go to Recording tab
-4. While ReadIn AI is capturing, change input to
-   "Monitor of [your output device]"
+PulseAudio:
+1. sudo apt install pavucontrol
+2. Open pavucontrol > Recording tab
+3. Select "Monitor of [output device]"
 
-PipeWire (Fedora, newer Ubuntu):
-- Monitor devices should appear automatically
-- Look for devices with "Monitor" in the name
-            """,
+PipeWire (newer distros):
+  Monitor devices should auto-appear
+  Look for "Monitor of Built-in Audio"
+""",
         }
 
     def _high_quality_resample(self, audio: np.ndarray, source_rate: int, target_rate: int) -> np.ndarray:
-        """High-quality resampling using scipy if available, otherwise linear."""
+        """High-quality resampling."""
         if source_rate == target_rate:
             return audio
 
         try:
             from scipy import signal
-            # Use polyphase resampling for better quality
             gcd = np.gcd(source_rate, target_rate)
             up = target_rate // gcd
             down = source_rate // gcd
             return signal.resample_poly(audio, up, down).astype(np.float32)
         except ImportError:
-            # Fallback to linear interpolation
+            # Linear interpolation fallback
             duration = len(audio) / source_rate
             target_samples = int(duration * target_rate)
             if target_samples <= 0:
@@ -376,22 +457,27 @@ PipeWire (Fedora, newer Ubuntu):
 
     def _convert_to_mono(self, audio: np.ndarray, channels: int) -> np.ndarray:
         """Convert multi-channel audio to mono."""
-        if channels <= 1 or len(audio.shape) == 1:
+        if channels <= 1:
             return audio.flatten()
 
+        # Reshape if needed
         if len(audio.shape) == 1 and channels > 1:
-            audio = audio.reshape(-1, channels)
+            try:
+                audio = audio.reshape(-1, channels)
+            except:
+                return audio.flatten()
 
-        return audio.mean(axis=1).astype(np.float32)
+        if len(audio.shape) > 1:
+            return audio.mean(axis=1).astype(np.float32)
+
+        return audio.flatten()
 
     def _calculate_audio_level(self, audio: np.ndarray) -> float:
         """Calculate RMS audio level (0.0 to 1.0)."""
         if len(audio) == 0:
             return 0.0
         rms = np.sqrt(np.mean(audio ** 2))
-        # Map to 0-1 range with some headroom
-        level = min(1.0, rms * 3.0)
-        return float(level)
+        return float(min(1.0, rms * 3.0))
 
     def _process_audio(self):
         """Process buffered audio and emit chunks."""
@@ -399,12 +485,12 @@ PipeWire (Fedora, newer Ubuntu):
             try:
                 raw_data = self._buffer_queue.get(timeout=0.1)
 
-                # Convert to float32
+                # Convert to float32 numpy array
                 if isinstance(raw_data, bytes):
                     audio = np.frombuffer(raw_data, dtype=np.int16).astype(np.float32) / 32768.0
                 elif isinstance(raw_data, np.ndarray):
                     audio = raw_data.astype(np.float32)
-                    if np.abs(audio).max() > 1.5:
+                    if audio.dtype == np.int16 or np.abs(audio).max() > 2.0:
                         audio = audio / 32768.0
                 else:
                     continue
@@ -423,7 +509,7 @@ PipeWire (Fedora, newer Ubuntu):
                 if self._preprocessor:
                     audio = self._preprocessor.process(audio, self.sample_rate)
 
-                # Calculate and emit level
+                # Calculate level
                 self._current_audio_level = self._calculate_audio_level(audio)
                 if self.on_audio_level:
                     self.on_audio_level(self._current_audio_level)
@@ -441,98 +527,316 @@ PipeWire (Fedora, newer Ubuntu):
                 continue
             except Exception as e:
                 self._error_count += 1
-                if self._error_count % 10 == 1:
+                if self._error_count <= 3:
                     print(f"Audio processing error: {e}")
 
-    def _audio_callback_pyaudio(self, in_data, frame_count, time_info, status):
-        """PyAudio stream callback."""
-        import pyaudio
+    def _audio_callback(self, in_data, frame_count, time_info, status):
+        """Audio stream callback (backup method)."""
         if self._running:
             try:
                 self._buffer_queue.put_nowait(in_data)
             except queue.Full:
-                pass  # Drop frame if buffer full
-        return (None, pyaudio.paContinue)
+                pass
+
+        if IS_WINDOWS:
+            import pyaudio
+            return (None, pyaudio.paContinue)
+        return None
+
+    def _capture_loop(self):
+        """Polling-based audio capture loop (more reliable than callbacks on Windows)."""
+        consecutive_errors = 0
+        max_consecutive_errors = 50  # Allow more errors before giving up
+
+        # Wait a moment for stream to be ready
+        time.sleep(0.1)
+
+        # Calculate frames per read (50ms chunks)
+        frames_per_read = int(self._source_sample_rate * 0.05)
+
+        while self._running:
+            stream = None
+            with self._stream_lock:
+                stream = self._stream
+
+            if stream is None:
+                time.sleep(0.01)
+                continue
+
+            try:
+                # Check if stream is active
+                if hasattr(stream, 'is_active'):
+                    if not stream.is_active():
+                        time.sleep(0.01)
+                        continue
+
+                # Read audio data (blocking call - do NOT hold lock during read)
+                data = stream.read(frames_per_read, exception_on_overflow=False)
+
+                if data and len(data) > 0:
+                    try:
+                        self._buffer_queue.put_nowait(data)
+                        consecutive_errors = 0
+                    except queue.Full:
+                        pass  # Queue full, skip this chunk
+                else:
+                    consecutive_errors += 1
+
+            except Exception as read_error:
+                consecutive_errors += 1
+                if consecutive_errors >= max_consecutive_errors:
+                    print(f"Capture loop error after {consecutive_errors} errors: {read_error}")
+                    break
+                time.sleep(0.01)
+
+        # End of loop
+        if self._running:
+            print("Capture loop ended unexpectedly")
+
+    def _start_windows_wasapi_loopback(self, pa, device: AudioDevice) -> bool:
+        """Start WASAPI loopback capture (captures output device audio)."""
+        try:
+            import pyaudiowpatch as pyaudio
+
+            # Try to get WASAPI loopback device info
+            loopback_device = None
+
+            # First, try to get the default WASAPI loopback device
+            try:
+                loopback_device = pa.get_default_wasapi_loopback()
+                print(f"Found default WASAPI loopback: {loopback_device['name']}")
+            except Exception as e:
+                print(f"No default WASAPI loopback: {e}")
+
+            # If no default loopback, search for one
+            if loopback_device is None:
+                for i in range(pa.get_device_count()):
+                    try:
+                        dev_info = pa.get_device_info_by_index(i)
+                        if dev_info.get('isLoopbackDevice', False):
+                            loopback_device = dev_info
+                            print(f"Found loopback device: {dev_info['name']}")
+                            break
+                    except:
+                        continue
+
+            if loopback_device is None:
+                print("No WASAPI loopback device available")
+                return False
+
+            # Configure stream parameters from loopback device
+            channels = int(loopback_device['maxInputChannels'])
+            sample_rate = int(loopback_device['defaultSampleRate'])
+            device_index = int(loopback_device['index'])
+
+            # Buffer size - smaller for lower latency polling
+            buffer_size = int(sample_rate * 0.05)  # 50ms buffer
+
+            self._source_sample_rate = sample_rate
+            self._source_channels = channels
+
+            # Open stream in blocking mode (no callback) for reliable capture
+            self._stream = pa.open(
+                format=pyaudio.paInt16,
+                channels=channels,
+                rate=sample_rate,
+                input=True,
+                input_device_index=device_index,
+                frames_per_buffer=buffer_size,
+            )
+            self._stream.start_stream()
+
+            self._wasapi_loopback = True
+            self._current_device_name = loopback_device['name']
+
+            # Start capture thread for polling
+            self._capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
+            self._capture_thread.start()
+
+            print(f"WASAPI Loopback ACTIVE (polling): {loopback_device['name']} ({channels}ch @ {sample_rate}Hz)")
+            return True
+
+        except Exception as e:
+            print(f"WASAPI loopback failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
     def _start_windows(self):
-        """Start Windows audio capture with WASAPI support."""
-        import pyaudio
+        """Start Windows audio capture with robust fallback system."""
+        # Try pyaudiowpatch first for WASAPI loopback
+        has_wpatch = self._check_wasapi_loopback_support()
 
-        if self._pa is None:
-            self._pa = pyaudio.PyAudio()
+        try:
+            if has_wpatch:
+                import pyaudiowpatch as pyaudio
+            else:
+                import pyaudio
+        except ImportError as e:
+            self._emit_error(f"PyAudio not installed: {e}")
+            self._running = False
+            return
 
+        self._pa = pyaudio.PyAudio()
+
+        # STRATEGY 1: For SYSTEM_LOOPBACK mode, try WASAPI loopback first
+        if self.capture_mode == CaptureMode.SYSTEM_LOOPBACK and has_wpatch:
+            if self._start_windows_wasapi_loopback(self._pa, None):
+                return
+            print("WASAPI loopback unavailable, trying alternatives...")
+
+        # STRATEGY 2: For SYSTEM_LOOPBACK, try Stereo Mix or similar
+        if self.capture_mode == CaptureMode.SYSTEM_LOOPBACK:
+            loopback_device = self._find_stereo_mix_device()
+            if loopback_device and self._start_input_device(loopback_device):
+                return
+
+        # STRATEGY 3: Use specified device or default input
         device = None
+
         if self._device_index is not None:
-            # Use specified device
             try:
                 info = self._pa.get_device_info_by_index(self._device_index)
-                device = AudioDevice(
-                    index=self._device_index,
-                    name=info['name'],
-                    channels=int(info['maxInputChannels']),
-                    sample_rate=int(info.get('defaultSampleRate', self.sample_rate)),
-                    is_loopback=False,
-                    is_default=False,
-                )
+                if info.get('maxInputChannels', 0) > 0:
+                    device = self._create_device_from_info(info, self._device_index)
+            except:
+                pass
+
+        # STRATEGY 4: Get default input device
+        if device is None:
+            try:
+                info = self._pa.get_default_input_device_info()
+                device = self._create_device_from_info(info, info['index'])
             except:
                 pass
 
         if device is None:
-            # Auto-select best device
-            device = self.get_recommended_device(self.capture_mode)
-
-        if device is None:
-            self._emit_error("No suitable audio device found!")
+            self._emit_error("No audio input device found!")
             self._running = False
             return
 
-        self._source_channels = min(device.channels, 2)
-        self._source_sample_rate = device.sample_rate
+        # Start capture on the device
+        if self._start_input_device(device):
+            if self.capture_mode == CaptureMode.SYSTEM_LOOPBACK:
+                print("\n" + "="*50)
+                print("NOTICE: System audio loopback not available")
+                print("Using microphone instead.")
+                print("")
+                print("For TRUE stealth mode (system audio capture):")
+                print("  Option 1: Enable 'Stereo Mix' in Windows sound settings")
+                print("  Option 2: Install VB-Audio Virtual Cable (free)")
+                print("="*50 + "\n")
+            return
 
-        print(f"Using device: {device.name} ({self._source_channels}ch @ {device.sample_rate}Hz)")
+        self._emit_error("Failed to open audio stream")
+        self._running = False
+
+    def _create_device_from_info(self, info: dict, index: int) -> AudioDevice:
+        """Create AudioDevice from PyAudio device info."""
+        return AudioDevice(
+            index=index,
+            name=info.get('name', f'Device {index}'),
+            channels=max(1, min(int(info.get('maxInputChannels', 1)), 2)),
+            sample_rate=int(info.get('defaultSampleRate', self.sample_rate)),
+            is_loopback=False,
+            is_input=info.get('maxInputChannels', 0) > 0,
+            is_output=info.get('maxOutputChannels', 0) > 0,
+            is_default=False,
+        )
+
+    def _find_stereo_mix_device(self) -> Optional[AudioDevice]:
+        """Find Stereo Mix or similar loopback input device.
+
+        Note: 'PC Speaker' devices on modern Windows don't actually work as
+        loopback devices despite the name. Only true Stereo Mix works.
+        """
+        # Keywords that indicate a TRUE loopback device (not PC Speaker which doesn't work)
+        loopback_keywords = ['stereo mix', 'what u hear', 'wave out mix', 'rec. playback', 'mono mix']
+        # PC Speaker and similar names DON'T work as loopback
+        exclude_keywords = ['pc speaker', 'speaker']
+
+        for i in range(self._pa.get_device_count()):
+            try:
+                info = self._pa.get_device_info_by_index(i)
+                if info.get('maxInputChannels', 0) > 0:
+                    name_lower = info['name'].lower()
+                    # Check for true loopback device
+                    if any(kw in name_lower for kw in loopback_keywords):
+                        # Make sure it's not an excluded device
+                        if not any(ex in name_lower for ex in exclude_keywords):
+                            print(f"Found loopback device: {info['name']}")
+                            return self._create_device_from_info(info, i)
+            except:
+                continue
+
+        # No true loopback found - provide guidance
+        print("No Stereo Mix device found. To enable system audio capture:")
+        print("  1. Right-click speaker icon > Sound settings > More sound settings")
+        print("  2. Recording tab > Right-click > Show Disabled Devices")
+        print("  3. Right-click 'Stereo Mix' > Enable")
+        return None
+
+    def _start_input_device(self, device: AudioDevice) -> bool:
+        """Start capture from an input device using polling (more reliable than callbacks)."""
+        try:
+            if self._check_wasapi_loopback_support():
+                import pyaudiowpatch as pyaudio
+            else:
+                import pyaudio
+        except:
+            import pyaudio
+
+        self._source_channels = device.channels
+        self._source_sample_rate = device.sample_rate
         self._emit_device_change(device.name)
 
-        # Buffer size based on latency setting
-        buffer_size = int(device.sample_rate * (0.05 if self.low_latency else 0.1))
+        buffer_size = int(device.sample_rate * 0.05)  # 50ms buffer
 
-        # Try to open stream
-        sample_rates = [device.sample_rate, 48000, 44100, self.sample_rate]
-        sample_rates = list(dict.fromkeys(sample_rates))  # Remove duplicates
+        # Try multiple sample rates
+        rates = [device.sample_rate, 48000, 44100, 16000]
+        rates = list(dict.fromkeys(rates))
 
-        for rate in sample_rates:
+        for rate in rates:
             try:
+                # Open stream in blocking mode (no callback) for reliable capture
                 self._stream = self._pa.open(
                     format=pyaudio.paInt16,
-                    channels=self._source_channels,
+                    channels=device.channels,
                     rate=rate,
                     input=True,
                     input_device_index=device.index,
                     frames_per_buffer=buffer_size,
-                    stream_callback=self._audio_callback_pyaudio,
                 )
                 self._stream.start_stream()
                 self._source_sample_rate = rate
-                print(f"Audio capture started at {rate}Hz (buffer: {buffer_size})")
-                return
+
+                # Start capture thread for polling
+                self._capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
+                self._capture_thread.start()
+
+                print(f"Audio capture started (polling): {device.name} ({device.channels}ch @ {rate}Hz)")
+                return True
             except Exception as e:
-                print(f"Failed at {rate}Hz: {e}")
                 if self._stream:
                     try:
                         self._stream.close()
                     except:
                         pass
                     self._stream = None
+                continue
 
-        self._emit_error("Failed to open audio stream")
-        self._running = False
+        return False
 
     def _start_unix(self):
         """Start macOS/Linux audio capture."""
-        import sounddevice as sd
+        try:
+            import sounddevice as sd
+        except ImportError:
+            self._emit_error("sounddevice not installed")
+            self._running = False
+            return
 
         def callback(indata, frames, time_info, status):
-            if status:
-                pass  # Ignore status messages in production
             if self._running:
                 try:
                     self._buffer_queue.put_nowait(indata.copy())
@@ -546,9 +850,11 @@ PipeWire (Fedora, newer Ubuntu):
                 device = AudioDevice(
                     index=self._device_index,
                     name=info['name'],
-                    channels=int(info['max_input_channels']),
+                    channels=int(info.get('max_input_channels', 1)),
                     sample_rate=int(info.get('default_samplerate', self.sample_rate)),
                     is_loopback=False,
+                    is_input=True,
+                    is_output=False,
                     is_default=False,
                 )
             except:
@@ -565,45 +871,29 @@ PipeWire (Fedora, newer Ubuntu):
             return
 
         self._source_channels = min(device.channels, 2)
-        self._source_sample_rate = device.sample_rate
-
-        print(f"Using device: {device.name}")
+        self._source_sample_rate = int(device.sample_rate)
         self._emit_device_change(device.name)
 
         buffer_size = int(device.sample_rate * (0.05 if self.low_latency else 0.1))
 
-        sample_rates = [device.sample_rate, 48000, 44100, self.sample_rate]
-        sample_rates = list(dict.fromkeys(sample_rates))
-
-        for rate in sample_rates:
-            try:
-                self._stream = sd.InputStream(
-                    device=device.index,
-                    samplerate=rate,
-                    channels=self._source_channels,
-                    dtype=np.float32,
-                    callback=callback,
-                    blocksize=buffer_size,
-                )
-                self._stream.start()
-                self._source_sample_rate = rate
-                print(f"Audio capture started at {rate}Hz")
-                return
-            except Exception as e:
-                print(f"Failed at {rate}Hz: {e}")
-                if self._stream:
-                    try:
-                        self._stream.close()
-                    except:
-                        pass
-                    self._stream = None
-
-        self._emit_error("Failed to open audio stream")
-        self._running = False
+        try:
+            self._stream = sd.InputStream(
+                device=device.index,
+                samplerate=device.sample_rate,
+                channels=self._source_channels,
+                dtype=np.float32,
+                callback=callback,
+                blocksize=buffer_size,
+            )
+            self._stream.start()
+            print(f"Audio capture started: {device.name} ({self._source_channels}ch @ {device.sample_rate}Hz)")
+        except Exception as e:
+            self._emit_error(f"Failed to start capture: {e}")
+            self._running = False
 
     def _emit_error(self, message: str):
         """Emit error message."""
-        print(f"Audio error: {message}")
+        print(f"[AudioCapture] ERROR: {message}")
         if self.on_error:
             self.on_error(message)
 
@@ -613,16 +903,17 @@ PipeWire (Fedora, newer Ubuntu):
         if self.on_device_change:
             self.on_device_change(name)
 
-    def start(self):
-        """Start audio capture."""
+    def start(self) -> bool:
+        """Start audio capture. Returns True if started successfully."""
         if self._running:
-            return
+            return True
 
         self._running = True
         self._audio_buffer = np.array([], dtype=np.float32)
         self._error_count = 0
         self._chunks_processed = 0
         self._start_time = time.time()
+        self._wasapi_loopback = False
 
         # Clear queue
         while not self._buffer_queue.empty():
@@ -641,21 +932,30 @@ PipeWire (Fedora, newer Ubuntu):
         else:
             self._start_unix()
 
+        return self._running
+
     def stop(self):
         """Stop audio capture."""
         self._running = False
 
-        if self._stream:
-            try:
-                if IS_WINDOWS:
-                    self._stream.stop_stream()
-                    self._stream.close()
-                else:
-                    self._stream.stop()
-                    self._stream.close()
-            except:
-                pass
-            self._stream = None
+        # Wait for capture thread to finish
+        if self._capture_thread:
+            self._capture_thread.join(timeout=2.0)
+            self._capture_thread = None
+
+        # Close stream with lock
+        with self._stream_lock:
+            if self._stream:
+                try:
+                    if IS_WINDOWS:
+                        self._stream.stop_stream()
+                        self._stream.close()
+                    else:
+                        self._stream.stop()
+                        self._stream.close()
+                except:
+                    pass
+                self._stream = None
 
         if self._pa:
             try:
@@ -677,8 +977,7 @@ PipeWire (Fedora, newer Ubuntu):
         self._device_index = device_index
 
         if was_running:
-            self.start()
-            return self._running
+            return self.start()
         return True
 
     def is_running(self) -> bool:
@@ -703,20 +1002,28 @@ PipeWire (Fedora, newer Ubuntu):
             "audio_level": self._current_audio_level,
             "chunks_processed": self._chunks_processed,
             "uptime_seconds": uptime,
+            "wasapi_loopback": self._wasapi_loopback,
             "preprocessing_enabled": self._preprocessor is not None,
             "low_latency_mode": self.low_latency,
         }
 
 
-# Convenience function for backward compatibility
-def list_audio_devices():
-    """List all available audio devices."""
-    devices = EnhancedAudioCapture.get_available_devices(CaptureMode.SYSTEM_LOOPBACK)
-    print("\nAvailable audio devices for STEALTH MODE (system audio capture):")
-    print("-" * 60)
+def list_audio_devices(capture_mode: CaptureMode = CaptureMode.SYSTEM_LOOPBACK):
+    """List available audio devices for the given capture mode."""
+    mode_name = {
+        CaptureMode.SYSTEM_LOOPBACK: "STEALTH MODE (System Audio)",
+        CaptureMode.MICROPHONE: "MICROPHONE MODE",
+        CaptureMode.MIXED: "MIXED MODE",
+    }
+
+    print(f"\nAvailable devices for {mode_name.get(capture_mode, capture_mode.value)}:")
+    print("=" * 60)
+
+    devices = EnhancedAudioCapture.get_available_devices(capture_mode)
 
     if not devices:
-        print("No loopback devices found!")
+        print("No suitable devices found!")
+        print()
         instructions = EnhancedAudioCapture.get_setup_instructions()
         if IS_WINDOWS:
             print(instructions["windows"])
@@ -726,16 +1033,128 @@ def list_audio_devices():
             print(instructions["linux"])
         return
 
-    for device in devices:
+    recommended = EnhancedAudioCapture.get_recommended_device(capture_mode)
+
+    for dev in devices:
         flags = []
-        if device.is_loopback:
+        if dev.is_loopback:
             flags.append("LOOPBACK")
-        if device.is_default:
+        if dev.is_default:
             flags.append("DEFAULT")
+        if recommended and dev.index == recommended.index:
+            flags.append("RECOMMENDED")
+
         flag_str = f" [{', '.join(flags)}]" if flags else ""
-        print(f"  [{device.index}] {device.name}")
-        print(f"       {device.channels}ch @ {device.sample_rate}Hz{flag_str}")
+        print(f"  [{dev.index}] {dev.name}")
+        print(f"       {dev.channels}ch @ {dev.sample_rate}Hz | {dev.host_api}{flag_str}")
+
+
+def test_audio_capture():
+    """Test audio capture functionality."""
+    print("\n" + "="*60)
+    print("AUDIO CAPTURE TEST")
+    print("="*60)
+
+    chunks_received = []
+    peak_level = [0.0]
+
+    def on_chunk(chunk):
+        chunks_received.append(chunk)
+        peak = np.abs(chunk).max()
+        if peak > peak_level[0]:
+            peak_level[0] = peak
+
+    def on_level(level):
+        pass
+
+    def on_device(name):
+        print(f"  Device: {name}")
+
+    # Test 1: Microphone mode
+    print("\nTEST 1: MICROPHONE MODE")
+    print("-" * 40)
+    chunks_received.clear()
+    peak_level[0] = 0.0
+
+    capture = EnhancedAudioCapture(
+        on_audio_chunk=on_chunk,
+        capture_mode=CaptureMode.MICROPHONE,
+        on_device_change=on_device,
+        on_audio_level=on_level,
+    )
+
+    if capture.start():
+        print(f"  Started: {capture.is_running()}")
+        print("  Capturing for 3 seconds... (speak into mic)")
+
+        for i in range(30):  # 3 seconds
+            time.sleep(0.1)
+            if i % 10 == 0:
+                print(f"  Level: {capture.get_audio_level():.4f} | Chunks: {len(chunks_received)}")
+
+        capture.stop()
+        print(f"  MIC RESULT: {len(chunks_received)} chunks, Peak={peak_level[0]:.4f}")
+    else:
+        print("  [FAIL] Could not start microphone capture")
+
+    # Test 2: System loopback mode
+    print("\nTEST 2: SYSTEM LOOPBACK MODE")
+    print("-" * 40)
+    chunks_received.clear()
+    peak_level[0] = 0.0
+
+    capture = EnhancedAudioCapture(
+        on_audio_chunk=on_chunk,
+        capture_mode=CaptureMode.SYSTEM_LOOPBACK,
+        on_device_change=on_device,
+        on_audio_level=on_level,
+    )
+
+    if capture.start():
+        print(f"  Started: {capture.is_running()}")
+        print("  Capturing for 3 seconds... (play some audio on your system)")
+
+        for i in range(30):  # 3 seconds
+            time.sleep(0.1)
+            if i % 10 == 0:
+                status = capture.get_status()
+                print(f"  Level: {capture.get_audio_level():.4f} | Chunks: {len(chunks_received)} | WASAPI: {status['wasapi_loopback']}")
+
+        capture.stop()
+        print(f"  LOOPBACK RESULT: {len(chunks_received)} chunks, Peak={peak_level[0]:.4f}")
+        print(f"  WASAPI Loopback: {status['wasapi_loopback']}")
+    else:
+        print("  [FAIL] Could not start loopback capture")
+
+    print("\n" + "="*60)
+    print("TEST COMPLETE")
+    print("="*60)
+
+    if len(chunks_received) > 0:
+        print("\n[SUCCESS] Audio capture is working!")
+    else:
+        print("\n[WARNING] No audio chunks received. Check device configuration.")
 
 
 if __name__ == "__main__":
-    list_audio_devices()
+    import sys
+
+    print("ReadIn AI Audio Capture - Device Detection")
+    print()
+
+    # Check WASAPI support
+    if IS_WINDOWS:
+        if EnhancedAudioCapture._check_wasapi_loopback_support():
+            print("[OK] pyaudiowpatch available - True WASAPI loopback supported!")
+        else:
+            print("[!!] pyaudiowpatch not installed - Install for best quality:")
+            print("     pip install pyaudiowpatch")
+        print()
+
+    list_audio_devices(CaptureMode.SYSTEM_LOOPBACK)
+    print()
+    list_audio_devices(CaptureMode.MICROPHONE)
+
+    # Run test if --test flag provided
+    if len(sys.argv) > 1 and sys.argv[1] == "--test":
+        test_audio_capture()
