@@ -13,8 +13,12 @@ export default function StaticLayout({
   children: React.ReactNode;
 }) {
   return (
-    <NextIntlClientProvider locale="en" messages={messages as unknown as AbstractIntlMessages}>
-      {children}
-    </NextIntlClientProvider>
+    <html lang="en">
+      <body className="bg-premium-bg text-white antialiased">
+        <NextIntlClientProvider locale="en" messages={messages as unknown as AbstractIntlMessages}>
+          {children}
+        </NextIntlClientProvider>
+      </body>
+    </html>
   );
 }

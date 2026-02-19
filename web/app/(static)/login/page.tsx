@@ -1,14 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Mail, Lock, Loader2, Smartphone } from 'lucide-react'
 import { twoFactorApi } from '@/lib/api/auth'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [isLogin, setIsLogin] = useState(true)
+  const searchParams = useSearchParams()
+  const [isLogin, setIsLogin] = useState(() => searchParams.get('mode') !== 'signup')
   const [loading, setLoading] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [email, setEmail] = useState('')
