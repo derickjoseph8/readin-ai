@@ -199,7 +199,7 @@ def cached(
             else:
                 # Default key: prefix:arg_hash
                 arg_str = json.dumps({"args": args, "kwargs": kwargs}, sort_keys=True, default=str)
-                arg_hash = hashlib.md5(arg_str.encode()).hexdigest()[:16]
+                arg_hash = hashlib.md5(arg_str.encode(), usedforsecurity=False).hexdigest()[:16]
                 cache_key = f"{key_prefix}:{arg_hash}"
 
             # Try to get from cache
@@ -233,7 +233,7 @@ def cached_user(ttl_seconds: int = 300):
             # Build cache key
             func_name = func.__name__
             arg_str = json.dumps(kwargs, sort_keys=True, default=str)
-            arg_hash = hashlib.md5(arg_str.encode()).hexdigest()[:8]
+            arg_hash = hashlib.md5(arg_str.encode(), usedforsecurity=False).hexdigest()[:8]
             cache_key = f"user:{user_id}:{func_name}:{arg_hash}"
 
             # Try cache
@@ -428,7 +428,7 @@ def cache_response(
             if user:
                 user_id = f":user:{user.id}"
 
-        query_hash = hashlib.md5(str(request.query_params).encode()).hexdigest()[:8]
+        query_hash = hashlib.md5(str(request.query_params).encode(), usedforsecurity=False).hexdigest()[:8]
         cache_key = f"api:{key_prefix}{user_id}:{query_hash}"
 
         return cache.get(cache_key)
