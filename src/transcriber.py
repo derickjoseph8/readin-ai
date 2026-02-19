@@ -107,12 +107,30 @@ class Transcriber:
                     device="cpu",
                     compute_type="int8"  # Faster on CPU
                 )
+            except ImportError as e:
+                error_msg = f"Failed to import faster_whisper: {e}"
+                print(error_msg)
+                if self.on_error:
+                    self.on_error(error_msg)
+                raise RuntimeError(error_msg) from e
+            except OSError as e:
+                error_msg = f"Failed to load Whisper model file: {e}"
+                print(error_msg)
+                if self.on_error:
+                    self.on_error(error_msg)
+                raise RuntimeError(error_msg) from e
+            except ValueError as e:
+                error_msg = f"Invalid Whisper model configuration: {e}"
+                print(error_msg)
+                if self.on_error:
+                    self.on_error(error_msg)
+                raise RuntimeError(error_msg) from e
             except Exception as e:
                 error_msg = f"Failed to load Whisper model: {e}"
                 print(error_msg)
                 if self.on_error:
                     self.on_error(error_msg)
-                raise
+                raise RuntimeError(error_msg) from e
 
     def _transcribe_loop(self):
         """Main transcription loop."""
@@ -173,6 +191,23 @@ class Transcriber:
 
             except queue.Empty:
                 continue
+            except RuntimeError as e:
+                error_msg = f"Transcription runtime error: {e}"
+                print(error_msg)
+                if self.on_error:
+                    self.on_error(error_msg)
+            except ValueError as e:
+                error_msg = f"Transcription value error: {e}"
+                print(error_msg)
+                if self.on_error:
+                    self.on_error(error_msg)
+            except MemoryError as e:
+                error_msg = f"Transcription memory error: {e}"
+                print(error_msg)
+                if self.on_error:
+                    self.on_error(error_msg)
+                # Clear queue to free memory
+                self.clear_queue()
             except Exception as e:
                 error_msg = f"Transcription error: {e}"
                 print(error_msg)

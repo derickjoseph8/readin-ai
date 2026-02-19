@@ -10,7 +10,7 @@ from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from config import (
     STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_MONTHLY,
@@ -626,7 +626,8 @@ def reset_password(
 
 
 @app.get("/api/v1/auth/verify-email")
-def verify_email(token: str, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+def verify_email(request: Request, token: str, db: Session = Depends(get_db)):
     """
     Verify user's email address using token from welcome email.
     """
@@ -707,8 +708,15 @@ def get_supported_languages():
 # ============== User Endpoints ==============
 
 @app.get("/user/me", response_model=UserResponse)
-def get_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+def get_me(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get current user info with profession, organization, and staff details."""
+    # Use joinedload to avoid N+1 queries
+    user = db.query(User).options(
+        joinedload(User.profession),
+        joinedload(User.organization)
+    ).filter(User.id == user.id).first()
+
     profession_name = user.profession.name if user.profession else None
     organization_name = user.organization.name if user.organization else None
 
@@ -920,7 +928,8 @@ def get_status(user: User = Depends(get_current_user), db: Session = Depends(get
 # ============== Usage Tracking ==============
 
 @app.post("/usage/increment", response_model=UsageResponse)
-def increment_usage(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def increment_usage(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Increment daily usage count. Called by desktop app after each AI response."""
     today = date.today()
 
@@ -1132,7 +1141,7 @@ def get_threat_summary(
 
     Requires admin or staff role.
     """
-    if not user.is_staff and user.staff_role not in ["super_admin", "admin"]:
+    if not (user.is_staff and user.staff_role in ["super_admin", "admin"]):
         raise HTTPException(status_code=403, detail="Admin access required")
 
     from services.anomaly_detection import AnomalyDetector

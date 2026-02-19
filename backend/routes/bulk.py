@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List, Optional
 from enum import Enum
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,26 @@ router = APIRouter(prefix="/bulk", tags=["Bulk Operations"])
 
 
 # =============================================================================
+# ENUMS
+# =============================================================================
+
+class MeetingStatus(str, Enum):
+    """Valid meeting status values."""
+    ACTIVE = "active"
+    ENDED = "ended"
+    CANCELLED = "cancelled"
+    DELETED = "deleted"  # Soft delete status
+
+
+class TaskStatus(str, Enum):
+    """Valid task status values."""
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+# =============================================================================
 # SCHEMAS
 # =============================================================================
 
@@ -25,10 +45,16 @@ class BulkDeleteRequest(BaseModel):
     ids: List[int] = Field(..., min_length=1, max_length=100, description="IDs to delete (max 100)")
 
 
-class BulkUpdateStatus(BaseModel):
-    """Request to update status of multiple items."""
+class BulkUpdateMeetingStatus(BaseModel):
+    """Request to update status of multiple meetings."""
     ids: List[int] = Field(..., min_length=1, max_length=100)
-    status: str = Field(..., description="New status value")
+    status: MeetingStatus = Field(..., description="New status value")
+
+
+class BulkUpdateTaskStatus(BaseModel):
+    """Request to update status of multiple tasks."""
+    ids: List[int] = Field(..., min_length=1, max_length=100)
+    status: TaskStatus = Field(..., description="New status value")
 
 
 class BulkActionResult(BaseModel):
@@ -63,9 +89,9 @@ def bulk_delete_meetings(
     db: Session = Depends(get_db),
 ):
     """
-    Delete multiple meetings.
+    Soft delete multiple meetings.
 
-    Permanently removes meetings and their associated data.
+    Marks meetings as deleted (recoverable for 30 days).
     Limited to 100 items per request.
     """
     success_count = 0
@@ -85,7 +111,8 @@ def bulk_delete_meetings(
                 })
                 continue
 
-            db.delete(meeting)
+            # Soft delete - set status to deleted instead of removing
+            meeting.status = MeetingStatus.DELETED.value
             success_count += 1
 
         except Exception as e:
@@ -118,6 +145,7 @@ def bulk_delete_meetings(
 @router.post("/meetings/export")
 def bulk_export_meetings(
     request: BulkExportRequest,
+    limit: int = Query(50, ge=1, le=500, description="Max items to export"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -131,7 +159,7 @@ def bulk_export_meetings(
     if request.ids:
         query = query.filter(Meeting.id.in_(request.ids))
 
-    meetings = query.order_by(Meeting.started_at.desc()).limit(1000).all()
+    meetings = query.order_by(Meeting.started_at.desc()).limit(limit).all()
 
     export_data = []
     for meeting in meetings:
@@ -224,7 +252,7 @@ def bulk_export_meetings(
 
 @router.post("/tasks/update-status", response_model=BulkActionResult)
 def bulk_update_task_status(
-    request: BulkUpdateStatus,
+    request: BulkUpdateTaskStatus,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -233,12 +261,7 @@ def bulk_update_task_status(
 
     Valid statuses: pending, in_progress, completed, cancelled
     """
-    valid_statuses = ["pending", "in_progress", "completed", "cancelled"]
-    if request.status not in valid_statuses:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid status. Must be one of: {valid_statuses}",
-        )
+    # Status is now validated by Pydantic enum
 
     success_count = 0
     errors = []
@@ -257,8 +280,8 @@ def bulk_update_task_status(
                 })
                 continue
 
-            task.status = request.status
-            if request.status == "completed":
+            task.status = request.status.value
+            if request.status == TaskStatus.COMPLETED:
                 task.completed_at = datetime.utcnow()
             success_count += 1
 

@@ -12,13 +12,24 @@ import hashlib
 import hmac
 from datetime import datetime, timedelta
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Query, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, HttpUrl
 
 from database import get_db
 from models import User, APIKey, Webhook, WebhookDelivery, AuditLog, AuditAction
 from auth import get_current_user
+from services.audit_logger import AuditLogger
+
+# Rate limiting setup
+try:
+    from slowapi import Limiter
+    from slowapi.util import get_remote_address
+    limiter = Limiter(key_func=get_remote_address)
+    RATE_LIMITING_AVAILABLE = True
+except ImportError:
+    RATE_LIMITING_AVAILABLE = False
+    limiter = None
 
 router = APIRouter(prefix="/api-keys", tags=["API Keys"])
 
@@ -143,7 +154,7 @@ def list_api_keys(
             id=k.id,
             name=k.name,
             description=k.description,
-            key_prefix=k.key_prefix,
+            key_prefix=k.key_prefix[:4] + "****" if k.key_prefix else "****",
             scopes=k.scopes or ["read"],
             rate_limit_per_minute=k.rate_limit_per_minute,
             rate_limit_per_day=k.rate_limit_per_day,
@@ -250,7 +261,9 @@ def create_api_key(
 
 
 @router.delete("/{key_id}")
+@limiter.limit("5/minute") if RATE_LIMITING_AVAILABLE else lambda f: f
 def revoke_api_key(
+    request: Request,
     key_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -453,7 +466,9 @@ def update_webhook(
 
 
 @webhooks_router.delete("/{webhook_id}")
+@limiter.limit("5/minute") if RATE_LIMITING_AVAILABLE else lambda f: f
 def delete_webhook(
+    request: Request,
     webhook_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -479,7 +494,7 @@ def delete_webhook(
 @webhooks_router.get("/{webhook_id}/deliveries", response_model=List[WebhookDeliveryResponse])
 def get_webhook_deliveries(
     webhook_id: int,
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=500, description="Max deliveries to return"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -555,7 +570,9 @@ def test_webhook(
 
 
 @webhooks_router.get("/{webhook_id}/secret")
+@limiter.limit("5/minute") if RATE_LIMITING_AVAILABLE else lambda f: f
 def get_webhook_secret(
+    request: Request,
     webhook_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -571,6 +588,18 @@ def get_webhook_secret(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Webhook not found"
         )
+
+    # Audit log for sensitive secret access
+    AuditLogger.log(
+        db=db,
+        action="webhook_secret_accessed",
+        user_id=user.id,
+        details={
+            "webhook_id": webhook_id,
+            "webhook_name": webhook.name,
+            "ip_address": request.client.host if request.client else "unknown",
+        },
+    )
 
     return {"secret": webhook.secret}
 

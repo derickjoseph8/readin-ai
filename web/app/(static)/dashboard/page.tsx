@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import {
   Calendar,
   Clock,
@@ -21,7 +22,12 @@ import { useAuth } from '@/lib/hooks/useAuth'
 import { usePermissions } from '@/lib/hooks/usePermissions'
 import { useMeetings, useMeetingStats } from '@/lib/hooks/useMeetings'
 import { useAdminStats, useAdminTrends } from '@/lib/hooks/useAdmin'
-import Onboarding from '@/components/Onboarding'
+import ErrorBoundary from '@/components/ErrorBoundary'
+
+// Lazy load Onboarding modal for better initial load performance
+const Onboarding = dynamic(() => import('@/components/Onboarding'), {
+  loading: () => <div className="animate-pulse bg-gray-200 h-64 rounded-lg" />
+})
 
 // Storage key for onboarding completion
 const ONBOARDING_COMPLETED_KEY = 'readin_onboarding_completed'
@@ -500,37 +506,41 @@ export default function DashboardPage() {
       )}
 
       {/* Stats Grid */}
-      <section aria-label="Your statistics" className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard
-          title="Total Meetings"
-          value={stats?.total_meetings || 0}
-          icon={Calendar}
-          color="gold"
-        />
-        <StatCard
-          title="This Week"
-          value={stats?.meetings_this_week || 0}
-          icon={TrendingUp}
-          trend="+12%"
-          color="emerald"
-        />
-        <StatCard
-          title="AI Responses"
-          value={stats?.total_conversations || 0}
-          icon={MessageSquare}
-          color="blue"
-        />
-        <StatCard
-          title="Time Saved"
-          value={`${Math.round((stats?.total_duration_minutes || 0) * 0.3)}m`}
-          icon={Clock}
-          color="purple"
-        />
-      </section>
+      <ErrorBoundary>
+        <section aria-label="Your statistics" className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <StatCard
+            title="Total Meetings"
+            value={stats?.total_meetings || 0}
+            icon={Calendar}
+            color="gold"
+          />
+          <StatCard
+            title="This Week"
+            value={stats?.meetings_this_week || 0}
+            icon={TrendingUp}
+            trend="+12%"
+            color="emerald"
+          />
+          <StatCard
+            title="AI Responses"
+            value={stats?.total_conversations || 0}
+            icon={MessageSquare}
+            color="blue"
+          />
+          <StatCard
+            title="Time Saved"
+            value={`${Math.round((stats?.total_duration_minutes || 0) * 0.3)}m`}
+            icon={Clock}
+            color="purple"
+          />
+        </section>
+      </ErrorBoundary>
 
       {/* AI Insights Section */}
       {!permissions.isAdmin && (
-        <AIInsightsSection stats={stats} status={status} />
+        <ErrorBoundary>
+          <AIInsightsSection stats={stats} status={status} />
+        </ErrorBoundary>
       )}
 
       {/* Usage & Recent Meetings */}

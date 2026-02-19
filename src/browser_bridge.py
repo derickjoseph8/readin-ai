@@ -20,6 +20,10 @@ except ImportError:
     WEBSOCKETS_AVAILABLE = False
     print("Warning: websockets library not installed. Browser extension support disabled.")
 
+# Security constants
+MAX_MESSAGE_SIZE = 10 * 1024 * 1024  # 10MB max message size
+MAX_AUDIO_ARRAY_SIZE = 5 * 1024 * 1024  # 5MB max audio array size (approx 2.5 minutes at 16kHz)
+
 
 class BrowserBridge:
     """WebSocket server for browser extension communication."""
@@ -98,7 +102,7 @@ class BrowserBridge:
 
     def request_start_capture(self):
         """Request the extension to start capturing audio."""
-        if self._connected_clients:
+        if self._connected_clients and self._loop is not None:
             asyncio.run_coroutine_threadsafe(
                 self._broadcast({'type': 'start_capture'}),
                 self._loop
@@ -106,7 +110,7 @@ class BrowserBridge:
 
     def request_stop_capture(self):
         """Request the extension to stop capturing audio."""
-        if self._connected_clients:
+        if self._connected_clients and self._loop is not None:
             asyncio.run_coroutine_threadsafe(
                 self._broadcast({'type': 'stop_capture'}),
                 self._loop
@@ -114,7 +118,7 @@ class BrowserBridge:
 
     def request_status(self):
         """Request status from the extension."""
-        if self._connected_clients:
+        if self._connected_clients and self._loop is not None:
             asyncio.run_coroutine_threadsafe(
                 self._broadcast({'type': 'status_request'}),
                 self._loop
@@ -180,6 +184,12 @@ class BrowserBridge:
 
     async def _process_message(self, message, websocket):
         """Process a message from the browser extension."""
+        # Validate message size
+        message_size = len(message) if isinstance(message, (bytes, str)) else 0
+        if message_size > MAX_MESSAGE_SIZE:
+            print(f"Message too large ({message_size} bytes), ignoring")
+            return
+
         # Check if it's binary audio data
         if isinstance(message, bytes):
             self._handle_audio_data(message)
@@ -234,11 +244,20 @@ class BrowserBridge:
         if not self.on_audio_chunk:
             return
 
+        # Validate audio data size
+        if len(audio_bytes) > MAX_AUDIO_ARRAY_SIZE:
+            print(f"Audio data too large ({len(audio_bytes)} bytes), ignoring")
+            return
+
         try:
             # Audio is sent as Int16 PCM, convert to float32
             int16_array = np.frombuffer(audio_bytes, dtype=np.int16)
             float_array = int16_array.astype(np.float32) / 32768.0
             self.on_audio_chunk(float_array)
+        except ValueError as e:
+            print(f"Invalid audio data format: {e}")
+        except MemoryError as e:
+            print(f"Memory error processing audio data: {e}")
         except Exception as e:
             print(f"Error processing audio data: {e}")
 
@@ -247,11 +266,20 @@ class BrowserBridge:
         if not self.on_audio_chunk:
             return
 
+        # Validate audio array size (each int16 is 2 bytes equivalent)
+        if len(audio_data) * 2 > MAX_AUDIO_ARRAY_SIZE:
+            print(f"Audio array too large ({len(audio_data)} elements), ignoring")
+            return
+
         try:
             # Convert list of Int16 values to numpy float32 array
             int16_array = np.array(audio_data, dtype=np.int16)
             float_array = int16_array.astype(np.float32) / 32768.0
             self.on_audio_chunk(float_array)
+        except ValueError as e:
+            print(f"Invalid audio array data: {e}")
+        except MemoryError as e:
+            print(f"Memory error processing audio array: {e}")
         except Exception as e:
             print(f"Error processing audio array: {e}")
 

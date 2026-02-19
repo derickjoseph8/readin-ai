@@ -36,9 +36,14 @@ export default function ChatWidget() {
   // Poll for messages and status updates
   useEffect(() => {
     if (sessionId && chatStatus !== 'ended') {
+      let isMounted = true
+
       const pollMessages = async () => {
+        if (!isMounted) return
         try {
           const data = await supportApi.getChatMessages(sessionId)
+          if (!isMounted) return
+
           setMessages(data.messages)
 
           if (data.status === 'active' && chatStatus === 'waiting') {
@@ -59,12 +64,20 @@ export default function ChatWidget() {
         }
       }
 
-      pollMessages()
-      pollIntervalRef.current = setInterval(pollMessages, 3000)
+      // Start polling - initial call then interval
+      const startPolling = async () => {
+        await pollMessages()
+        if (isMounted) {
+          pollIntervalRef.current = setInterval(pollMessages, 3000)
+        }
+      }
+      startPolling()
 
       return () => {
+        isMounted = false
         if (pollIntervalRef.current) {
           clearInterval(pollIntervalRef.current)
+          pollIntervalRef.current = null
         }
       }
     }
@@ -256,7 +269,7 @@ export default function ChatWidget() {
             {(chatStatus === 'active' || chatStatus === 'ended') && (
               <>
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 overscroll-contain">
+                <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 overscroll-contain" aria-live="polite" aria-atomic="false">
                   {messages.length === 0 && chatStatus === 'active' && (
                     <div className="text-center text-gray-500 py-6 sm:py-8">
                       <p className="text-sm sm:text-base">Connected! Start the conversation.</p>

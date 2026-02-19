@@ -28,6 +28,7 @@ import { AuthProvider, useAuth } from '@/lib/hooks/useAuth'
 import { usePermissions } from '@/lib/hooks/usePermissions'
 import { useAgentStatus } from '@/lib/hooks/useAdmin'
 import ChatWidget from '@/components/ChatWidget'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 // Status colors for agent status indicator
 const statusColors = {
@@ -332,7 +333,11 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
       <DashboardSidebar />
       <div id="dashboard-main" className="lg:pl-64">
-        <div className="px-4 py-6 pt-16 lg:pt-6 sm:px-6 lg:px-8">{children}</div>
+        <div className="px-4 py-6 pt-16 lg:pt-6 sm:px-6 lg:px-8">
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
+        </div>
       </div>
       {/* Only show chat widget for non-staff users */}
       {!permissions.isStaff && <ChatWidget />}

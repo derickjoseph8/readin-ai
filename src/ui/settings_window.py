@@ -74,10 +74,17 @@ class SettingsWindow(QDialog):
     """Main settings dialog with tabbed interface."""
 
     settings_changed = pyqtSignal()
+    # Signal emitted when theme changes for immediate application
+    theme_changed = pyqtSignal(str)
+    # Signal emitted when shortcuts change for immediate registration
+    shortcuts_changed = pyqtSignal(dict)
+    # Signal emitted when specific settings change
+    setting_changed = pyqtSignal(str, object)  # key, value
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.settings = SettingsManager()
+        self._original_theme = self.settings.get("theme", "dark_gold")
         self.init_ui()
         self.load_settings()
 
@@ -458,10 +465,13 @@ class SettingsWindow(QDialog):
             self.prompt_edit.setPlainText(preset_data.get("prompt", ""))
 
     def preview_theme(self, index: int):
-        """Preview the selected theme."""
+        """Preview the selected theme and emit signal for immediate application."""
         theme_id = self.theme_combo.itemData(index)
         if theme_id:
             self.setStyleSheet(generate_stylesheet(theme_id))
+            # Emit signal for immediate theme application to overlay
+            self.theme_changed.emit(theme_id)
+            self.setting_changed.emit("theme", theme_id)
 
     def reset_shortcuts(self):
         """Reset shortcuts to defaults."""
@@ -603,8 +613,10 @@ class SettingsWindow(QDialog):
 
     def apply_settings(self):
         """Apply current settings without closing."""
-        # Audio
-        self.settings.set("audio_device", self.device_combo.currentData())
+        # Audio - validate device before saving
+        device_data = self.device_combo.currentData()
+        if self._validate_audio_device(device_data):
+            self.settings.set("audio_device", device_data)
         self.settings.set("sample_rate", int(self.sample_rate_combo.currentText()))
 
         # AI
@@ -613,27 +625,57 @@ class SettingsWindow(QDialog):
         self.settings.set("system_prompt", self.prompt_edit.toPlainText())
         self.settings.set("language", self.language_combo.currentData())
 
-        # Appearance
-        self.settings.set("theme", self.theme_combo.currentData())
+        # Appearance - immediate application
+        new_theme = self.theme_combo.currentData()
+        self.settings.set("theme", new_theme)
         self.settings.set("opacity", self.opacity_slider.value())
         self.settings.set("font_size", self.font_size_spin.value())
         self.settings.set("always_on_top", self.always_on_top_check.isChecked())
         self.settings.set("remember_position", self.remember_position_check.isChecked())
         self.settings.set("hide_from_screen_capture", self.hide_from_capture_check.isChecked())
 
-        # Shortcuts
-        self.settings.set("shortcuts", {
+        # Emit theme change for immediate application
+        if new_theme != self._original_theme:
+            self.theme_changed.emit(new_theme)
+            self._original_theme = new_theme
+
+        # Shortcuts - immediate registration
+        shortcuts = {
             "toggle_listening": self.shortcut_toggle.text(),
             "show_hide_overlay": self.shortcut_show_hide.text(),
             "clear_context": self.shortcut_clear.text()
-        })
+        }
+        self.settings.set("shortcuts", shortcuts)
         self.settings.set("shortcuts_enabled", self.enable_shortcuts_check.isChecked())
+
+        # Emit signal for immediate shortcut registration
+        if self.enable_shortcuts_check.isChecked():
+            self.shortcuts_changed.emit(shortcuts)
 
         # Advanced
         self.settings.set("auto_update_check", self.auto_update_check.isChecked())
         self.settings.set("debug_mode", self.debug_mode_check.isChecked())
 
         self.settings_changed.emit()
+
+    def _validate_audio_device(self, device_index) -> bool:
+        """Validate that the audio device index is valid before saving.
+
+        Args:
+            device_index: The device index to validate
+
+        Returns:
+            True if device is valid, False otherwise
+        """
+        if device_index is None or device_index == -1:
+            return True  # Default device is always valid
+
+        try:
+            devices = AudioCapture.get_available_devices()
+            valid_indices = [d['index'] for d in devices]
+            return device_index in valid_indices
+        except Exception:
+            return False
 
     def accept_settings(self):
         """Apply settings and close dialog."""

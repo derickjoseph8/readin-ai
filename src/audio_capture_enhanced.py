@@ -141,6 +141,7 @@ class EnhancedAudioCapture:
         self._running = False
         self._processor_thread: Optional[threading.Thread] = None
         self._audio_buffer = np.array([], dtype=np.float32)
+        self._buffer_lock = threading.Lock()  # Thread safety for buffer access
         self._samples_per_chunk = int(self.sample_rate * self.chunk_duration)
         self._buffer_queue: queue.Queue = queue.Queue(maxsize=100)
         self._device_index = device_index
@@ -514,14 +515,15 @@ PipeWire (newer distros):
                 if self.on_audio_level:
                     self.on_audio_level(self._current_audio_level)
 
-                # Buffer and emit chunks
-                self._audio_buffer = np.concatenate([self._audio_buffer, audio])
+                # Buffer and emit chunks with thread safety
+                with self._buffer_lock:
+                    self._audio_buffer = np.concatenate([self._audio_buffer, audio])
 
-                while len(self._audio_buffer) >= self._samples_per_chunk:
-                    chunk = self._audio_buffer[:self._samples_per_chunk]
-                    self._audio_buffer = self._audio_buffer[self._samples_per_chunk:]
-                    self.on_audio_chunk(chunk)
-                    self._chunks_processed += 1
+                    while len(self._audio_buffer) >= self._samples_per_chunk:
+                        chunk = self._audio_buffer[:self._samples_per_chunk]
+                        self._audio_buffer = self._audio_buffer[self._samples_per_chunk:]
+                        self.on_audio_chunk(chunk)
+                        self._chunks_processed += 1
 
             except queue.Empty:
                 continue
@@ -937,6 +939,13 @@ PipeWire (newer distros):
     def stop(self):
         """Stop audio capture."""
         self._running = False
+
+        # Clear the buffer queue before stopping threads
+        while not self._buffer_queue.empty():
+            try:
+                self._buffer_queue.get_nowait()
+            except queue.Empty:
+                break
 
         # Wait for capture thread to finish
         if self._capture_thread:

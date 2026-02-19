@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QRadioButton, QButtonGroup, QFrame, QScrollArea, QWidget,
     QMessageBox, QProgressBar
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QMetaObject, Q_ARG, Qt as QtCore
 from PyQt6.QtGui import QFont, QPalette, QColor
 
 import numpy as np
@@ -25,6 +25,10 @@ class AudioSetupDialog(QDialog):
     """Dialog for selecting audio input device on first run."""
 
     audio_level_updated = pyqtSignal(float)
+    # Signal for thread-safe testing state changes
+    testing_state_changed = pyqtSignal(bool)
+    # Signal for thread-safe test cleanup
+    test_cleanup_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -36,8 +40,10 @@ class AudioSetupDialog(QDialog):
         self._apply_dark_theme()
         self.setup_ui()
 
-        # Connect signal
+        # Connect signals for thread-safe UI updates
         self.audio_level_updated.connect(self._update_audio_level_display)
+        self.testing_state_changed.connect(self._on_testing_state_changed)
+        self.test_cleanup_requested.connect(self._cleanup_test_thread)
 
     def _apply_dark_theme(self):
         """Apply dark theme using QPalette."""
@@ -467,7 +473,8 @@ class AudioSetupDialog(QDialog):
             QMessageBox.warning(self, "No Device", "Please select an audio device first.")
             return
 
-        self._testing = True
+        # Use signal for thread-safe state change
+        self._set_testing_state(True)
         self.test_btn.setText("Stop Test")
         self.test_btn.setStyleSheet("""
             QPushButton {
@@ -490,8 +497,9 @@ class AudioSetupDialog(QDialog):
         self._test_thread.start()
 
     def _stop_test(self):
-        """Stop the audio test."""
-        self._testing = False
+        """Stop the audio test with proper thread cleanup."""
+        # Use signal for thread-safe state change
+        self._set_testing_state(False)
         self.test_btn.setText("Test Device")
         self.test_btn.setStyleSheet("""
             QPushButton {
@@ -509,6 +517,31 @@ class AudioSetupDialog(QDialog):
         self.test_status.setText("")
         self.audio_level_bar.setValue(0)
 
+        # Request cleanup of test thread
+        self.test_cleanup_requested.emit()
+
+    def _set_testing_state(self, testing: bool):
+        """Thread-safe method to set testing state."""
+        self._testing = testing
+        self.testing_state_changed.emit(testing)
+
+    def _on_testing_state_changed(self, testing: bool):
+        """Handle testing state change in main thread."""
+        # This runs in the main thread, safe for UI updates
+        pass  # UI updates are done in _start_test and _stop_test
+
+    def _cleanup_test_thread(self):
+        """Properly cleanup the test thread."""
+        if self._test_thread is not None:
+            # Wait briefly for thread to finish
+            if self._test_thread.is_alive():
+                self._test_thread.join(timeout=0.5)
+            self._test_thread = None
+
+    def _is_testing(self) -> bool:
+        """Thread-safe method to check testing state."""
+        return self._testing
+
     def _test_audio_loop(self):
         """Audio test loop running in background thread (cross-platform)."""
         try:
@@ -518,7 +551,8 @@ class AudioSetupDialog(QDialog):
                 self._test_audio_sounddevice()
         except Exception as e:
             print(f"Audio test error: {e}")
-            self._testing = False
+            # Use signal for thread-safe state change
+            self._set_testing_state(False)
 
     def _test_audio_windows(self):
         """Test audio on Windows using PyAudio."""
@@ -553,7 +587,7 @@ class AudioSetupDialog(QDialog):
                     frames_per_buffer=1024,
                 )
 
-            while self._testing:
+            while self._is_testing():
                 try:
                     data = stream.read(1024, exception_on_overflow=False)
                     audio = np.frombuffer(data, dtype=np.int16).astype(np.float32)
@@ -563,7 +597,7 @@ class AudioSetupDialog(QDialog):
                     # Normalize to 0-100 scale
                     level = min(100, int(rms / 200))
 
-                    # Emit signal to update UI
+                    # Emit signal to update UI (thread-safe via Qt signals)
                     self.audio_level_updated.emit(level)
 
                 except Exception:
@@ -575,7 +609,8 @@ class AudioSetupDialog(QDialog):
 
         except Exception as e:
             print(f"Windows audio test error: {e}")
-            self._testing = False
+            # Use signal for thread-safe state change
+            self._set_testing_state(False)
 
     def _test_audio_sounddevice(self):
         """Test audio on macOS/Linux using sounddevice."""
@@ -617,7 +652,7 @@ class AudioSetupDialog(QDialog):
 
             stream.start()
 
-            while self._testing:
+            while self._is_testing():
                 time.sleep(0.05)  # 50ms update interval
 
                 if audio_data:
@@ -644,7 +679,8 @@ class AudioSetupDialog(QDialog):
 
         except Exception as e:
             print(f"sounddevice audio test error: {e}")
-            self._testing = False
+            # Use signal for thread-safe state change
+            self._set_testing_state(False)
 
     def _update_audio_level_display(self, level: float):
         """Update the audio level bar (called from main thread via signal)."""

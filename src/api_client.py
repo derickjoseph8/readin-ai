@@ -2,17 +2,66 @@
 
 import json
 import os
+import base64
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 from datetime import datetime
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 import httpx
+
+# Try to import keyring for secure credential storage
+try:
+    import keyring
+    KEYRING_AVAILABLE = True
+except ImportError:
+    KEYRING_AVAILABLE = False
 
 # API base URL - check both env var names for compatibility
 API_BASE_URL = os.getenv("API_BASE_URL") or os.getenv("READIN_API_URL", "https://www.getreadin.us")
 
-# Local token storage
-TOKEN_FILE = Path.home() / ".readin" / "auth.json"
+# Credential storage constants
+SERVICE_NAME = "readin-ai"
+KEY_NAME = "auth_token"
+
+# Fallback encrypted file storage
+TOKEN_FILE = Path.home() / ".readin" / "auth.enc"
+SALT_FILE = Path.home() / ".readin" / ".salt"
+
+
+def _get_machine_key() -> bytes:
+    """Generate a machine-specific key for encryption fallback."""
+    import platform
+    import getpass
+    # Combine machine identifiers for a unique key
+    machine_id = f"{platform.node()}-{getpass.getuser()}-readin-ai"
+    return machine_id.encode('utf-8')
+
+
+def _get_fernet_key() -> Fernet:
+    """Get or create Fernet encryption key for fallback storage."""
+    SALT_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    # Load or create salt
+    if SALT_FILE.exists():
+        with open(SALT_FILE, 'rb') as f:
+            salt = f.read()
+    else:
+        salt = os.urandom(16)
+        with open(SALT_FILE, 'wb') as f:
+            f.write(salt)
+
+    # Derive key from machine-specific data
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=480000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(_get_machine_key()))
+    return Fernet(key)
 
 
 class APIClient:
@@ -24,32 +73,78 @@ class APIClient:
         self._load_token()
 
     def _load_token(self):
-        """Load saved token from disk."""
+        """Load saved token from secure storage."""
         try:
+            # Try keyring first (most secure)
+            if KEYRING_AVAILABLE:
+                try:
+                    token = keyring.get_password(SERVICE_NAME, KEY_NAME)
+                    if token:
+                        self._token = token
+                        return
+                except Exception:
+                    pass  # Fall through to encrypted file
+
+            # Fallback to encrypted file storage
             if TOKEN_FILE.exists():
-                with open(TOKEN_FILE, "r") as f:
-                    data = json.load(f)
+                try:
+                    fernet = _get_fernet_key()
+                    with open(TOKEN_FILE, "rb") as f:
+                        encrypted_data = f.read()
+                    decrypted_data = fernet.decrypt(encrypted_data)
+                    data = json.loads(decrypted_data.decode('utf-8'))
                     self._token = data.get("access_token")
+                except Exception:
+                    # If decryption fails, token is invalid
+                    self._token = None
         except Exception:
             self._token = None
 
     def _save_token(self, token: str):
-        """Save token to disk."""
+        """Save token to secure storage."""
         try:
+            # Try keyring first (most secure)
+            if KEYRING_AVAILABLE:
+                try:
+                    keyring.set_password(SERVICE_NAME, KEY_NAME, token)
+                    self._token = token
+                    # Clean up any old encrypted file
+                    if TOKEN_FILE.exists():
+                        try:
+                            TOKEN_FILE.unlink()
+                        except Exception:
+                            pass
+                    return
+                except Exception:
+                    pass  # Fall through to encrypted file
+
+            # Fallback to encrypted file storage
             TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(TOKEN_FILE, "w") as f:
-                json.dump({"access_token": token}, f)
+            fernet = _get_fernet_key()
+            data = json.dumps({"access_token": token}).encode('utf-8')
+            encrypted_data = fernet.encrypt(data)
+            with open(TOKEN_FILE, "wb") as f:
+                f.write(encrypted_data)
             self._token = token
         except Exception as e:
             print(f"Failed to save token: {e}")
 
     def _clear_token(self):
-        """Clear saved token."""
+        """Clear saved token from all storage locations."""
+        # Clear from keyring
+        if KEYRING_AVAILABLE:
+            try:
+                keyring.delete_password(SERVICE_NAME, KEY_NAME)
+            except Exception:
+                pass
+
+        # Clear encrypted file
         try:
             if TOKEN_FILE.exists():
                 TOKEN_FILE.unlink()
         except Exception:
             pass
+
         self._token = None
 
     def _headers(self) -> Dict[str, str]:

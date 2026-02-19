@@ -31,6 +31,7 @@ class AudioCapture:
         self._processor_thread: Optional[threading.Thread] = None
         self._capture_thread: Optional[threading.Thread] = None
         self._audio_buffer = np.array([], dtype=np.float32)
+        self._buffer_lock = threading.Lock()  # Thread safety for buffer access
         self._samples_per_chunk = int(self.sample_rate * self.chunk_duration)
         self._buffer_queue: queue.Queue = queue.Queue()
         self._device_index = device_index
@@ -267,12 +268,13 @@ class AudioCapture:
                 if self.on_audio_level:
                     self.on_audio_level(self._current_audio_level)
 
-                self._audio_buffer = np.concatenate([self._audio_buffer, audio])
+                with self._buffer_lock:
+                    self._audio_buffer = np.concatenate([self._audio_buffer, audio])
 
-                while len(self._audio_buffer) >= self._samples_per_chunk:
-                    chunk = self._audio_buffer[:self._samples_per_chunk]
-                    self._audio_buffer = self._audio_buffer[self._samples_per_chunk:]
-                    self.on_audio_chunk(chunk)
+                    while len(self._audio_buffer) >= self._samples_per_chunk:
+                        chunk = self._audio_buffer[:self._samples_per_chunk]
+                        self._audio_buffer = self._audio_buffer[self._samples_per_chunk:]
+                        self.on_audio_chunk(chunk)
 
             except queue.Empty:
                 continue
@@ -595,6 +597,13 @@ class AudioCapture:
         """Stop capturing audio."""
         self._running = False
 
+        # Clear the buffer queue before stopping threads
+        while not self._buffer_queue.empty():
+            try:
+                self._buffer_queue.get_nowait()
+            except queue.Empty:
+                break
+
         if self._stream:
             try:
                 if IS_WINDOWS:
@@ -615,7 +624,7 @@ class AudioCapture:
             self._pa = None
 
         if self._processor_thread:
-            self._processor_thread.join(timeout=1.0)
+            self._processor_thread.join(timeout=2.0)
             self._processor_thread = None
 
     def is_running(self) -> bool:

@@ -48,6 +48,7 @@ class AIAssistant:
         self._model = model
         self._custom_system_prompt = system_prompt
         self._is_generating = False
+        self._generating_lock = threading.Lock()  # Thread safety for generation flag
         self._context_provider = context_provider
         self._meeting_type = "general"
 
@@ -177,11 +178,13 @@ Remember: The person will SPEAK these naturally - you're just giving them the ke
 
     def generate_response(self, heard_text: str):
         """Generate a response to what was heard (runs in background thread)."""
-        if self._is_generating:
-            return  # Prevent concurrent generations
+        # Thread-safe check and set for concurrent generation prevention
+        with self._generating_lock:
+            if self._is_generating:
+                return  # Prevent concurrent generations
+            self._is_generating = True
 
         def _generate():
-            self._is_generating = True
             try:
                 client = self._get_client()
 
@@ -228,7 +231,8 @@ Remember: The person will SPEAK these naturally - you're just giving them the ke
                     self.on_error(str(e))
                 self.on_response(heard_text, error_msg)
             finally:
-                self._is_generating = False
+                with self._generating_lock:
+                    self._is_generating = False
 
         thread = threading.Thread(target=_generate, daemon=True)
         thread.start()
@@ -292,4 +296,5 @@ Remember: The person will SPEAK these naturally - you're just giving them the ke
 
     def is_generating(self) -> bool:
         """Check if currently generating a response."""
-        return self._is_generating
+        with self._generating_lock:
+            return self._is_generating

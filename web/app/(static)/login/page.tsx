@@ -66,11 +66,8 @@ export default function LoginPage() {
 
       if (res.ok && data.access_token) {
         localStorage.setItem('readin_token', data.access_token)
-        // Force redirect using multiple methods
         setMessage('Success! Redirecting...')
-        setTimeout(() => {
-          document.location.href = '/dashboard'
-        }, 100)
+        router.push('/dashboard')
       } else if (res.ok && data.requires_2fa) {
         // User has 2FA enabled, show 2FA input
         setRequires2FA(true)
@@ -127,9 +124,7 @@ export default function LoginPage() {
         if (res.ok && data.access_token) {
           localStorage.setItem('readin_token', data.access_token)
           setMessage('Success! Redirecting...')
-          setTimeout(() => {
-            document.location.href = '/dashboard'
-          }, 100)
+          router.push('/dashboard')
         } else {
           setIsError(true)
           setMessage(data.detail || 'Invalid verification code')
@@ -139,9 +134,7 @@ export default function LoginPage() {
         // No 2FA required after all
         localStorage.setItem('readin_token', loginData.access_token)
         setMessage('Success! Redirecting...')
-        setTimeout(() => {
-          document.location.href = '/dashboard'
-        }, 100)
+        router.push('/dashboard')
       } else {
         setIsError(true)
         setMessage(loginData.detail || 'Login failed')

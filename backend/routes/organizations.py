@@ -3,7 +3,7 @@
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -14,6 +14,22 @@ from schemas import (
     OrganizationMember
 )
 from auth import get_current_user
+
+# Rate limiting setup
+try:
+    from slowapi import Limiter
+    from slowapi.util import get_remote_address
+    limiter = Limiter(key_func=get_remote_address)
+    RATE_LIMITING_AVAILABLE = True
+except ImportError:
+    RATE_LIMITING_AVAILABLE = False
+    # Create a no-op decorator
+    class NoOpLimiter:
+        def limit(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            return decorator
+    limiter = NoOpLimiter()
 
 router = APIRouter(prefix="/organizations", tags=["Organizations"])
 
@@ -76,7 +92,9 @@ def create_organization(
 
 
 @router.get("/my", response_model=OrganizationResponse)
+@limiter.limit("30/minute") if RATE_LIMITING_AVAILABLE else lambda f: f
 def get_my_organization(
+    request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -114,13 +132,32 @@ def update_organization(
     db: Session = Depends(get_db)
 ):
     """Update organization settings. Admin only."""
-    if not user.organization_id or user.role_in_org != "admin":
+    if not user.organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="You are not a member of any organization"
+        )
+
+    if user.role_in_org != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only organization admins can update settings"
         )
 
     org = db.query(Organization).filter(Organization.id == user.organization_id).first()
+
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found"
+        )
+
+    # Check organization is active
+    if hasattr(org, 'subscription_status') and org.subscription_status in ['suspended', 'cancelled']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organization is not active. Cannot update settings."
+        )
 
     if data.name is not None:
         org.name = data.name
@@ -157,6 +194,21 @@ def list_members(
             detail="You are not a member of any organization"
         )
 
+    # Verify membership and org status
+    org = db.query(Organization).filter(Organization.id == user.organization_id).first()
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found"
+        )
+
+    # Check organization is active
+    if hasattr(org, 'subscription_status') and org.subscription_status in ['suspended', 'cancelled']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organization is not active. Contact your administrator."
+        )
+
     members = db.query(User).filter(User.organization_id == user.organization_id).all()
 
     return [
@@ -182,13 +234,32 @@ def create_invite(
     Invite a new member to the organization.
     Admin only. Team members join for free.
     """
-    if not user.organization_id or user.role_in_org != "admin":
+    if not user.organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="You are not a member of any organization"
+        )
+
+    if user.role_in_org != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only organization admins can invite members"
         )
 
     org = db.query(Organization).filter(Organization.id == user.organization_id).first()
+
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found"
+        )
+
+    # Check organization is active
+    if hasattr(org, 'subscription_status') and org.subscription_status in ['suspended', 'cancelled']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organization is not active. Cannot send invites."
+        )
 
     # Check member limit
     current_count = db.query(User).filter(User.organization_id == org.id).count()
@@ -380,10 +451,24 @@ def remove_member(
     db: Session = Depends(get_db)
 ):
     """Remove a member from the organization. Admin only."""
-    if not user.organization_id or user.role_in_org != "admin":
+    if not user.organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="You are not a member of any organization"
+        )
+
+    if user.role_in_org != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only organization admins can remove members"
+        )
+
+    # Check organization is active
+    org = db.query(Organization).filter(Organization.id == user.organization_id).first()
+    if org and hasattr(org, 'subscription_status') and org.subscription_status in ['suspended', 'cancelled']:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organization is not active. Cannot remove members."
         )
 
     if member_id == user.id:

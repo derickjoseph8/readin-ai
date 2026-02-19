@@ -81,15 +81,13 @@ jobs:
       - name: Security scan with Bandit
         run: |
           bandit -r . -x ./tests -f json -o bandit-report.json || true
-          bandit -r . -x ./tests --severity-level high || echo "::warning::Security issues found - review bandit-report.json"
-        continue-on-error: true
+          bandit -r . -x ./tests --severity-level high
 
       - name: Check for vulnerable dependencies
         run: |
           pip install -r requirements.txt
           safety check --json --output safety-report.json || true
-          safety check || echo "::warning::Vulnerable dependencies found"
-        continue-on-error: true
+          safety check
 
       - name: Upload security reports
         uses: actions/upload-artifact@v4
@@ -271,7 +269,7 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [frontend-lint, frontend-build]
+    needs: [frontend-lint, frontend-build, backend-security]
     if: always()
 
     steps:
@@ -280,6 +278,11 @@ jobs:
           # Only fail on critical frontend build issues
           if [ "${{ needs.frontend-build.result }}" != "success" ]; then
             echo "Frontend build failed - this is a blocking issue"
+            exit 1
+          fi
+          # Fail on security issues
+          if [ "${{ needs.backend-security.result }}" != "success" ]; then
+            echo "Security scan failed - this is a blocking issue"
             exit 1
           fi
           echo "CI completed - check job details for warnings"

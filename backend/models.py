@@ -872,6 +872,14 @@ class PreMeetingBriefing(Base):
 # Alias for backward compatibility
 LearningProfile = UserLearningProfile
 
+# =============================================================================
+# SECURITY INDEXES
+# =============================================================================
+
+# User model security indexes for token lookups
+Index("ix_user_email_verification_token", User.email_verification_token)
+Index("ix_user_password_reset_token", User.password_reset_token)
+
 
 # =============================================================================
 # ROLE-BASED ACCESS CONTROL (RBAC)

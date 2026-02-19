@@ -92,18 +92,18 @@ class OverlayWindow(QWidget):
 
         header.addStretch()
 
-        # Start/Stop Listening button
+        # Start/Stop Listening button - 44px height minimum for accessibility
         self.listen_btn = QPushButton("▶ Start")
-        self.listen_btn.setFixedSize(60, 24)
+        self.listen_btn.setFixedSize(80, 44)
         self.listen_btn.setToolTip("Start/Stop Listening")
         self._is_listening = False
         self._update_listen_btn_style()
         self.listen_btn.clicked.connect(self._on_listen_clicked)
         header.addWidget(self.listen_btn)
 
-        # Font size toggle button
-        self.size_btn = QPushButton("A+")
-        self.size_btn.setFixedSize(28, 24)
+        # Font size toggle button - 44x44 minimum for accessibility
+        self.size_btn = QPushButton("A+ Text")
+        self.size_btn.setFixedSize(60, 44)
         self.size_btn.setToolTip("Toggle large text mode")
         self.size_btn.setStyleSheet("""
             QPushButton {
@@ -123,9 +123,9 @@ class OverlayWindow(QWidget):
         self.size_btn.clicked.connect(self._toggle_size)
         header.addWidget(self.size_btn)
 
-        # Settings button
-        self.settings_btn = QPushButton("⚙")
-        self.settings_btn.setFixedSize(24, 24)
+        # Settings button - 44x44 minimum for accessibility
+        self.settings_btn = QPushButton("⚙ Settings")
+        self.settings_btn.setFixedSize(80, 44)
         self.settings_btn.setToolTip("Settings")
         self.settings_btn.setStyleSheet("""
             QPushButton {
@@ -133,7 +133,7 @@ class OverlayWindow(QWidget):
                 color: #ffffff;
                 border: 1px solid #444444;
                 border-radius: 4px;
-                font-size: 13px;
+                font-size: 12px;
             }
             QPushButton:hover {
                 background-color: #d4af37;
@@ -144,9 +144,9 @@ class OverlayWindow(QWidget):
         self.settings_btn.clicked.connect(self.settings_requested.emit)
         header.addWidget(self.settings_btn)
 
-        # Logout button
-        self.logout_btn = QPushButton("⏻")
-        self.logout_btn.setFixedSize(24, 24)
+        # Logout button - 44x44 minimum for accessibility
+        self.logout_btn = QPushButton("⏻ Logout")
+        self.logout_btn.setFixedSize(80, 44)
         self.logout_btn.setToolTip("Logout")
         self.logout_btn.setStyleSheet("""
             QPushButton {
@@ -165,9 +165,10 @@ class OverlayWindow(QWidget):
         self.logout_btn.clicked.connect(self.logout_requested.emit)
         header.addWidget(self.logout_btn)
 
-        # Minimize button
-        self.min_btn = QPushButton("—")
-        self.min_btn.setFixedSize(24, 24)
+        # Minimize button - 44x44 minimum for accessibility
+        self.min_btn = QPushButton("— Min")
+        self.min_btn.setFixedSize(60, 44)
+        self.min_btn.setToolTip("Minimize window")
         self.min_btn.setStyleSheet("""
             QPushButton {
                 background-color: #333333;
@@ -175,7 +176,7 @@ class OverlayWindow(QWidget):
                 border: 1px solid #444444;
                 border-radius: 4px;
                 font-weight: bold;
-                font-size: 12px;
+                font-size: 11px;
             }
             QPushButton:hover {
                 background-color: #d4af37;
@@ -186,9 +187,10 @@ class OverlayWindow(QWidget):
         self.min_btn.clicked.connect(self.showMinimized)
         header.addWidget(self.min_btn)
 
-        # Close button
-        self.close_btn = QPushButton("✕")
-        self.close_btn.setFixedSize(24, 24)
+        # Close button - 44x44 minimum for accessibility
+        self.close_btn = QPushButton("✕ Close")
+        self.close_btn.setFixedSize(70, 44)
+        self.close_btn.setToolTip("Close overlay")
         self.close_btn.setStyleSheet("""
             QPushButton {
                 background-color: #dc2626;
@@ -207,8 +209,8 @@ class OverlayWindow(QWidget):
 
         container_layout.addLayout(header)
 
-        # "They asked:" section (compact)
-        heard_header = QLabel("THEY ASKED:")
+        # "They asked:" section (compact) with color-blind accessible text labels
+        heard_header = QLabel("THEY ASKED: (Question)")
         heard_header.setStyleSheet("color: #a6adc8; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
         container_layout.addWidget(heard_header)
 
@@ -224,8 +226,8 @@ class OverlayWindow(QWidget):
         self.heard_label.setMaximumHeight(55)
         container_layout.addWidget(self.heard_label)
 
-        # "Your answer:" section (prominent, large, readable)
-        response_header = QLabel("YOUR ANSWER:")
+        # "Your answer:" section (prominent, large, readable) with color-blind accessible text labels
+        response_header = QLabel("YOUR ANSWER: (AI Response)")
         response_header.setStyleSheet("color: #a6e3a1; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
         container_layout.addWidget(response_header)
 
@@ -314,10 +316,10 @@ class OverlayWindow(QWidget):
         self._apply_response_style(self._large_mode)
 
         if self._large_mode:
-            self.size_btn.setText("A-")
+            self.size_btn.setText("A- Text")
             self.resize(520, 380)
         else:
-            self.size_btn.setText("A+")
+            self.size_btn.setText("A+ Text")
             self.resize(OVERLAY_WIDTH, OVERLAY_HEIGHT)
 
     def _update_listen_btn_style(self):
@@ -486,18 +488,99 @@ class OverlayWindow(QWidget):
         self._save_position()
 
     def _load_position(self):
-        """Load saved window position from settings."""
+        """Load saved window position from settings with multi-monitor validation."""
         if not self._settings or not self._settings.get("remember_position", True):
             self._position_window()
             return
 
         pos = self._settings.get("overlay_position")
         if pos:
-            self.move(pos.get("x", 0), pos.get("y", 0))
-            if pos.get("width") and pos.get("height"):
-                self.resize(pos.get("width"), pos.get("height"))
+            x = pos.get("x", 0)
+            y = pos.get("y", 0)
+            width = pos.get("width", OVERLAY_WIDTH)
+            height = pos.get("height", OVERLAY_HEIGHT)
+
+            # Validate position against all available screens
+            if self._validate_position(x, y, width, height):
+                self.move(x, y)
+                if width and height:
+                    self.resize(width, height)
+            else:
+                # Position is off-screen, reset to default
+                self._position_window()
         else:
             self._position_window()
+
+    def _validate_position(self, x: int, y: int, width: int, height: int) -> bool:
+        """Validate that the position is visible on at least one monitor.
+
+        Uses QApplication.screens() to detect all monitors and ensures
+        the overlay stays visible by clamping to available screen geometry.
+
+        Returns:
+            True if position is valid, False if overlay would be off-screen
+        """
+        screens = QApplication.screens()
+        if not screens:
+            return False
+
+        # Build combined geometry of all screens
+        for screen in screens:
+            geometry = screen.availableGeometry()
+            # Check if overlay center point is within this screen
+            center_x = x + width // 2
+            center_y = y + height // 2
+
+            if geometry.contains(center_x, center_y):
+                return True
+
+            # Also check if at least 100 pixels of the overlay is visible
+            overlay_rect_left = max(x, geometry.left())
+            overlay_rect_right = min(x + width, geometry.right())
+            overlay_rect_top = max(y, geometry.top())
+            overlay_rect_bottom = min(y + height, geometry.bottom())
+
+            visible_width = overlay_rect_right - overlay_rect_left
+            visible_height = overlay_rect_bottom - overlay_rect_top
+
+            if visible_width >= 100 and visible_height >= 100:
+                return True
+
+        return False
+
+    def _clamp_position_to_screen(self, x: int, y: int) -> tuple:
+        """Clamp position to ensure overlay stays visible on available screens.
+
+        Returns:
+            Tuple of (clamped_x, clamped_y) that keeps overlay visible
+        """
+        screens = QApplication.screens()
+        if not screens:
+            return (x, y)
+
+        width = self.width()
+        height = self.height()
+
+        # Find the closest screen to the requested position
+        best_screen = screens[0]
+        best_distance = float('inf')
+
+        for screen in screens:
+            geometry = screen.availableGeometry()
+            center_x = geometry.center().x()
+            center_y = geometry.center().y()
+            distance = ((x - center_x) ** 2 + (y - center_y) ** 2) ** 0.5
+
+            if distance < best_distance:
+                best_distance = distance
+                best_screen = screen
+
+        # Clamp to the best screen's geometry
+        geometry = best_screen.availableGeometry()
+        clamped_x = max(geometry.left(), min(x, geometry.right() - width))
+        clamped_y = max(geometry.top(), min(y, geometry.bottom() - height))
+
+        return (clamped_x, clamped_y)
 
     def _setup_screen_capture_protection(self):
         """

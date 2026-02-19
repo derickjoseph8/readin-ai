@@ -6,18 +6,91 @@ Provides:
 - Request/response logging
 - Performance metrics (in-memory and Prometheus)
 - Error tracking
+- Log sanitization for sensitive data
 """
 
 import time
 import logging
 import json
-from typing import Callable
+import re
+from typing import Callable, Dict, Any
 from datetime import datetime
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from config import IS_PRODUCTION, LOG_LEVEL, LOG_FORMAT
+
+
+# =============================================================================
+# LOG SANITIZATION
+# =============================================================================
+
+# Headers that should have their values redacted
+SENSITIVE_HEADERS = ["authorization", "x-api-key", "cookie", "x-auth-token", "x-session-id"]
+
+# Regex patterns for sensitive data in request bodies
+SENSITIVE_PATTERNS = [
+    # Password fields (various naming conventions)
+    (re.compile(r'("(?:password|passwd|pwd|pass|secret|credential)["\s]*:\s*")[^"]*(")', re.IGNORECASE), r'\1[REDACTED]\2'),
+    # Credit card numbers (16 digit patterns with optional separators)
+    (re.compile(r'\b(\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?)\d{4}\b'), r'\g<1>****'),
+    # API keys (sk-*, pk-*, rk-*, api-*, key-*)
+    (re.compile(r'\b(sk-|pk-|rk-|api-|key-)[a-zA-Z0-9]{8,}'), r'\1********'),
+    # Bearer tokens
+    (re.compile(r'(Bearer\s+)[a-zA-Z0-9\-_.]+', re.IGNORECASE), r'\1[REDACTED]'),
+    # SSN patterns
+    (re.compile(r'\b\d{3}-\d{2}-\d{4}\b'), r'***-**-****'),
+    # Email in certain contexts (optional, for extra privacy)
+    # (re.compile(r'("email"\s*:\s*")[^"]+@[^"]+(")', re.IGNORECASE), r'\1[REDACTED]\2'),
+]
+
+
+def sanitize_headers(headers: Dict[str, str]) -> Dict[str, str]:
+    """Redact sensitive header values."""
+    sanitized = {}
+    for key, value in headers.items():
+        if key.lower() in SENSITIVE_HEADERS:
+            sanitized[key] = "[REDACTED]"
+        else:
+            sanitized[key] = value
+    return sanitized
+
+
+def sanitize_body(body: str) -> str:
+    """Redact sensitive patterns from request/response body."""
+    if not body:
+        return body
+
+    sanitized = body
+    for pattern, replacement in SENSITIVE_PATTERNS:
+        sanitized = pattern.sub(replacement, sanitized)
+
+    return sanitized
+
+
+def sanitize_log_data(log_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Sanitize log data dictionary for sensitive information."""
+    sanitized = log_data.copy()
+
+    # Sanitize headers if present
+    if "headers" in sanitized and isinstance(sanitized["headers"], dict):
+        sanitized["headers"] = sanitize_headers(sanitized["headers"])
+
+    # Sanitize body if present
+    if "body" in sanitized and isinstance(sanitized["body"], str):
+        sanitized["body"] = sanitize_body(sanitized["body"])
+
+    # Sanitize request_body if present
+    if "request_body" in sanitized and isinstance(sanitized["request_body"], str):
+        sanitized["request_body"] = sanitize_body(sanitized["request_body"])
+
+    # Sanitize any string values that might contain sensitive data
+    for key in ["query_params", "path_params"]:
+        if key in sanitized and isinstance(sanitized[key], str):
+            sanitized[key] = sanitize_body(sanitized[key])
+
+    return sanitized
 
 # Configure structured logging
 try:
@@ -145,7 +218,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         # Calculate duration
         duration_ms = (time.time() - start_time) * 1000
 
-        # Log request
+        # Log request with sanitized data
         log_data = {
             "request_id": request_id,
             "method": request.method,
@@ -158,6 +231,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
         if user_id:
             log_data["user_id"] = user_id
+
+        # Sanitize log data before logging
+        log_data = sanitize_log_data(log_data)
 
         # Log at appropriate level
         if response.status_code >= 500:

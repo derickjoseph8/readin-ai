@@ -213,20 +213,132 @@ Emphasize strategic thinking and leadership perspective."""
         return self._settings.get(key, default)
 
     def set(self, key: str, value: Any, save: bool = True) -> None:
-        """Set a setting value and optionally save to disk."""
+        """Set a setting value and optionally save to disk.
+
+        Performs type checking, range validation, and sanitization before saving.
+        """
+        # Validate and sanitize the value
+        validated_value = self._validate_and_sanitize(key, value)
+        if validated_value is None and value is not None:
+            print(f"Warning: Invalid value for setting '{key}': {value}")
+            return
+
         old_value = self._settings.get(key)
-        self._settings[key] = value
+        self._settings[key] = validated_value
 
         if save:
             self._save()
 
         # Notify callbacks if value changed
-        if old_value != value and key in self._callbacks:
+        if old_value != validated_value and key in self._callbacks:
             for callback in self._callbacks[key]:
                 try:
-                    callback(key, value, old_value)
+                    callback(key, validated_value, old_value)
                 except Exception as e:
                     print(f"Warning: Settings callback error: {e}")
+
+    def _validate_and_sanitize(self, key: str, value: Any) -> Any:
+        """Validate and sanitize a setting value based on its type and constraints.
+
+        Args:
+            key: The setting key
+            value: The value to validate
+
+        Returns:
+            The validated/sanitized value, or None if validation fails
+        """
+        # Allow None values if the default is None
+        if value is None:
+            if key in self.DEFAULTS and self.DEFAULTS[key] is None:
+                return None
+            return None
+
+        # Type checking against DEFAULTS
+        if key in self.DEFAULTS:
+            default_value = self.DEFAULTS[key]
+            expected_type = type(default_value) if default_value is not None else None
+
+            # Type validation (skip if default is None, meaning any type is allowed)
+            if expected_type is not None and not isinstance(value, expected_type):
+                # Try type coercion for numeric types
+                if expected_type in (int, float) and isinstance(value, (int, float)):
+                    value = expected_type(value)
+                elif expected_type == bool and isinstance(value, (int, str)):
+                    value = bool(value)
+                elif expected_type == str and not isinstance(value, str):
+                    value = str(value)
+                else:
+                    print(f"Warning: Type mismatch for '{key}': expected {expected_type.__name__}, got {type(value).__name__}")
+                    return None
+
+        # Range validation for numeric settings
+        value = self._validate_numeric_range(key, value)
+        if value is None:
+            return None
+
+        # String sanitization
+        if isinstance(value, str):
+            value = self._sanitize_string(key, value)
+
+        return value
+
+    def _validate_numeric_range(self, key: str, value: Any) -> Any:
+        """Validate numeric values are within acceptable ranges.
+
+        Args:
+            key: The setting key
+            value: The value to validate
+
+        Returns:
+            The clamped value, or None if validation fails
+        """
+        # Define numeric constraints
+        numeric_constraints = {
+            "overlay_opacity": (0.5, 1.0),
+            "overlay_width": (200, 2000),
+            "overlay_height": (150, 1500),
+            "context_window_size": (1, 20),
+        }
+
+        if key in numeric_constraints and isinstance(value, (int, float)):
+            min_val, max_val = numeric_constraints[key]
+            if value < min_val or value > max_val:
+                # Clamp to valid range
+                clamped = max(min_val, min(value, max_val))
+                print(f"Warning: Value for '{key}' clamped from {value} to {clamped} (range: {min_val}-{max_val})")
+                return clamped
+
+        return value
+
+    def _sanitize_string(self, key: str, value: str) -> str:
+        """Sanitize string values to prevent issues.
+
+        Args:
+            key: The setting key
+            value: The string to sanitize
+
+        Returns:
+            The sanitized string
+        """
+        # Remove null bytes and control characters (except newlines and tabs)
+        import re
+        value = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', value)
+
+        # Limit string length for certain fields
+        max_lengths = {
+            "audio_device_name": 256,
+            "custom_system_prompt": 10000,
+            "export_directory": 500,
+            "shortcut_toggle_listen": 50,
+            "shortcut_show_hide": 50,
+            "shortcut_clear_context": 50,
+        }
+
+        if key in max_lengths and len(value) > max_lengths[key]:
+            value = value[:max_lengths[key]]
+            print(f"Warning: String value for '{key}' truncated to {max_lengths[key]} characters")
+
+        return value
 
     def set_multiple(self, settings: Dict[str, Any], save: bool = True) -> None:
         """Set multiple settings at once."""

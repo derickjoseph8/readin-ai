@@ -24,10 +24,6 @@ datas = [
 if (PROJECT_ROOT / 'src').exists():
     datas.append(('src', 'src'))
 
-# Add .env only if it exists
-if (PROJECT_ROOT / '.env').exists():
-    datas.append(('.env', '.'))
-
 # Hidden imports - all modules that PyInstaller might miss
 hidden_imports = [
     # Qt
