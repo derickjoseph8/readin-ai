@@ -9,7 +9,7 @@ import { twoFactorApi } from '@/lib/api/auth'
 export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [isLogin, setIsLogin] = useState(() => searchParams.get('mode') !== 'signup')
+  const [isLogin, setIsLogin] = useState(true)
   const [loading, setLoading] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [email, setEmail] = useState('')
@@ -23,6 +23,13 @@ export default function LoginPage() {
   const [twoFactorCode, setTwoFactorCode] = useState('')
   const [isBackupCode, setIsBackupCode] = useState(false)
   const [pendingUserId, setPendingUserId] = useState<number | null>(null)
+
+  // Check for signup mode from URL parameter
+  useEffect(() => {
+    if (searchParams.get('mode') === 'signup') {
+      setIsLogin(false)
+    }
+  }, [searchParams])
 
   // Check if user is already logged in
   useEffect(() => {
