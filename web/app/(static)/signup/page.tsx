@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Mail, Lock, Loader2 } from 'lucide-react'
-import apiClient from '@/lib/api/client'
 
 export default function SignupPage() {
   const router = useRouter()
@@ -67,9 +66,9 @@ export default function SignupPage() {
       const data = await res.json()
 
       if (res.ok && data.access_token) {
-        apiClient.setToken(data.access_token)
+        localStorage.setItem('readin_token', data.access_token)
         setMessage('Success! Redirecting...')
-        router.push('/dashboard')
+        window.location.href = '/dashboard'
       } else {
         setIsError(true)
         setMessage(data.detail || 'Registration failed')
