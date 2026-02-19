@@ -18,26 +18,22 @@ import Footer from '@/components/Footer';
 
 export default function Home() {
   return (
-    <html lang="en">
-      <body className="bg-premium-bg text-white antialiased">
-        <main className="min-h-screen">
-          <Header />
-          <Hero />
-          <TrustBadges />
-          <IntegrationLogos />
-          <Features />
-          <HowItWorks />
-          <Stats />
-          <UseCases />
-          <SecuritySection />
-          <Testimonials />
-          <ComparisonTable />
-          <Pricing />
-          <FAQ />
-          <CTA />
-          <Footer />
-        </main>
-      </body>
-    </html>
+    <main className="min-h-screen bg-premium-bg text-white">
+      <Header />
+      <Hero />
+      <TrustBadges />
+      <IntegrationLogos />
+      <Features />
+      <HowItWorks />
+      <Stats />
+      <UseCases />
+      <SecuritySection />
+      <Testimonials />
+      <ComparisonTable />
+      <Pricing />
+      <FAQ />
+      <CTA />
+      <Footer />
+    </main>
   );
 }
