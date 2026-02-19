@@ -5,6 +5,9 @@ import '../globals.css';
 // Import default English messages for static pages
 import messages from '../../messages/en.json';
 
+// Force dynamic rendering to avoid next-intl static generation issues
+export const dynamic = 'force-dynamic';
+
 export default function StaticLayout({
   children,
 }: {
