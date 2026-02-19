@@ -221,7 +221,7 @@ export default function MeetingDetailPage() {
   if (error || !meeting) {
     return (
       <div className="text-center py-20">
-        <p className="text-red-400 mb-4">{error || 'Meeting not found'}</p>
+        <p className="text-red-400 mb-4">{error?.message || 'Meeting not found'}</p>
         <Link
           href="/dashboard/meetings"
           className="text-gold-400 hover:text-gold-300 flex items-center justify-center"
