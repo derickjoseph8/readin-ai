@@ -30,10 +30,11 @@ export const localeFlags: Record<Locale, string> = {
   ja: '🇯🇵'
 };
 
-export default getRequestConfig(async ({ requestLocale }) => {
-  const locale = await requestLocale || defaultLocale;
+export default getRequestConfig(async ({ locale }) => {
+  // Validate locale or fall back to default
+  const validLocale = locales.includes(locale as Locale) ? locale : defaultLocale;
   return {
-    locale,
-    messages: (await import(`./messages/${locale}.json`)).default
+    locale: validLocale,
+    messages: (await import(`./messages/${validLocale}.json`)).default
   };
 });
