@@ -1,20 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Mail, Lock, Loader2, Smartphone } from 'lucide-react'
-import { twoFactorApi } from '@/lib/api/auth'
 
 export default function LoginPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const [isLogin, setIsLogin] = useState(true)
   const [loading, setLoading] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
   const [message, setMessage] = useState('')
   const [isError, setIsError] = useState(false)
 
@@ -23,13 +19,6 @@ export default function LoginPage() {
   const [twoFactorCode, setTwoFactorCode] = useState('')
   const [isBackupCode, setIsBackupCode] = useState(false)
   const [pendingUserId, setPendingUserId] = useState<number | null>(null)
-
-  // Check for signup mode from URL parameter
-  useEffect(() => {
-    if (searchParams.get('mode') === 'signup') {
-      setIsLogin(false)
-    }
-  }, [searchParams])
 
   // Check if user is already logged in
   useEffect(() => {
@@ -61,13 +50,12 @@ export default function LoginPage() {
     setIsError(false)
 
     const apiUrl = 'https://www.getreadin.us'
-    const endpoint = isLogin ? '/api/v1/auth/login' : '/api/v1/auth/register'
 
     try {
-      const res = await fetch(apiUrl + endpoint, {
+      const res = await fetch(apiUrl + '/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(isLogin ? { email, password } : { email, password, full_name: name }),
+        body: JSON.stringify({ email, password }),
       })
 
       const data = await res.json()
@@ -258,24 +246,11 @@ export default function LoginPage() {
             <div className="w-12 h-12 bg-gradient-to-br from-gold-400 to-gold-600 rounded-xl flex items-center justify-center mx-auto mb-4">
               <span className="text-premium-bg font-bold text-xl">R</span>
             </div>
-            <h1 className="text-2xl font-bold">{isLogin ? 'Welcome Back' : 'Create Account'}</h1>
-            <p className="text-gray-400 mt-2">{isLogin ? 'Log in to your ReadIn AI account' : 'Start your 14-day free trial'}</p>
+            <h1 className="text-2xl font-bold">Welcome Back</h1>
+            <p className="text-gray-400 mt-2">Log in to your ReadIn AI account</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none transition text-white"
-                  placeholder="John Doe"
-                />
-              </div>
-            )}
-
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
               <div className="relative">
@@ -294,11 +269,9 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-gray-300">Password</label>
-                {isLogin && (
-                  <Link href="/forgot-password" className="text-sm text-gold-400 hover:text-gold-300">
-                    Forgot password?
-                  </Link>
-                )}
+                <Link href="/forgot-password" className="text-sm text-gold-400 hover:text-gold-300">
+                  Forgot password?
+                </Link>
               </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
@@ -325,12 +298,12 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-lg hover:shadow-gold transition disabled:opacity-50 flex items-center justify-center"
             >
-              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : isLogin ? 'Log In' : 'Create Account'}
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Log In'}
             </button>
           </form>
 
           {/* SSO Options */}
-          {isLogin && (
+          <div className="mt-6">
             <div className="mt-6">
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
@@ -374,16 +347,13 @@ export default function LoginPage() {
                 </a>
               </div>
             </div>
-          )}
+          </div>
 
           <div className="mt-6 text-center text-sm">
-            <span className="text-gray-400">{isLogin ? "Don't have an account? " : 'Already have an account? '}</span>
-            <button
-              onClick={() => { setIsLogin(!isLogin); setMessage(''); }}
-              className="text-gold-400 hover:text-gold-300 font-medium"
-            >
-              {isLogin ? 'Sign Up' : 'Log In'}
-            </button>
+            <span className="text-gray-400">Don&apos;t have an account? </span>
+            <Link href="/signup" className="text-gold-400 hover:text-gold-300 font-medium">
+              Sign Up
+            </Link>
           </div>
 
           <div className="mt-6 pt-6 border-t border-premium-border text-center">
