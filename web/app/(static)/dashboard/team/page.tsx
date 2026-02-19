@@ -53,7 +53,8 @@ export default function TeamPage() {
   ])
 
   const isPremium = status?.subscription.status === 'active' || status?.subscription.status === 'trial'
-  const isTeamPlan = false // Would check if user has team plan
+  const isCompanyAccount = user?.account_type === 'company' || user?.account_type === 'business' || !!user?.organization_id || !!user?.company_name
+  const isTeamPlan = isCompanyAccount && isPremium
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -81,6 +82,63 @@ export default function TeamPage() {
       <span className={`px-2 py-1 text-xs rounded-full capitalize ${styles[role]}`}>
         {role}
       </span>
+    )
+  }
+
+  // Individual accounts need to upgrade to team account
+  if (!isCompanyAccount) {
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-white">Team Management</h1>
+          <p className="text-gray-400 mt-1">
+            Collaborate with your team on meeting intelligence
+          </p>
+        </div>
+
+        {/* Upgrade to Team Account Banner */}
+        <div className="bg-premium-card border border-premium-border rounded-xl p-8 text-center">
+          <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Building2 className="h-8 w-8 text-blue-400" />
+          </div>
+          <h2 className="text-xl font-semibold text-white mb-2">Individual Account</h2>
+          <p className="text-gray-400 mb-6 max-w-md mx-auto">
+            You're on an individual account. Upgrade to a Team account to invite members, share meeting insights, and collaborate with your team.
+          </p>
+          <button
+            onClick={() => window.location.href = '/dashboard/settings/billing'}
+            className="px-6 py-3 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-medium rounded-lg hover:shadow-gold transition-all"
+          >
+            Upgrade to Team Account
+          </button>
+        </div>
+
+        {/* Feature List */}
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="bg-premium-card border border-premium-border rounded-xl p-5">
+            <UserPlus className="h-8 w-8 text-gold-400 mb-3" />
+            <h3 className="font-medium text-white mb-1">Invite Team Members</h3>
+            <p className="text-gray-500 text-sm">
+              Add up to 10 team members to collaborate on meetings
+            </p>
+          </div>
+          <div className="bg-premium-card border border-premium-border rounded-xl p-5">
+            <Building2 className="h-8 w-8 text-gold-400 mb-3" />
+            <h3 className="font-medium text-white mb-1">Shared Library</h3>
+            <p className="text-gray-500 text-sm">
+              Access a shared library of team meeting recordings
+            </p>
+          </div>
+          <div className="bg-premium-card border border-premium-border rounded-xl p-5">
+            <Shield className="h-8 w-8 text-gold-400 mb-3" />
+            <h3 className="font-medium text-white mb-1">Admin Controls</h3>
+            <p className="text-gray-500 text-sm">
+              Manage team permissions and billing centrally
+            </p>
+          </div>
+        </div>
+      </div>
     )
   }
 

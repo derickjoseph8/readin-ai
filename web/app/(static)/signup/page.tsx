@@ -1,52 +1,20 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Mail, Lock, Loader2 } from 'lucide-react'
+import { User, Building2 } from 'lucide-react'
+
+type AccountType = 'individual' | 'company'
 
 export default function SignupPage() {
-  const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [checkingAuth, setCheckingAuth] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [accountType, setAccountType] = useState<AccountType>('individual')
+  const [companyName, setCompanyName] = useState('')
   const [message, setMessage] = useState('')
   const [isError, setIsError] = useState(false)
-
-  // Check if user is already logged in
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        // Only access localStorage on client
-        if (typeof window === 'undefined') {
-          setCheckingAuth(false)
-          return
-        }
-
-        const token = localStorage.getItem('readin_token')
-        if (token) {
-          try {
-            const res = await fetch('https://www.getreadin.us/user/me', {
-              headers: { 'Authorization': `Bearer ${token}` }
-            })
-            if (res.ok) {
-              router.replace('/dashboard')
-              return
-            }
-          } catch {
-            // Token invalid or network error, continue to signup page
-          }
-        }
-        setCheckingAuth(false)
-      } catch {
-        // Any error, just show the signup form
-        setCheckingAuth(false)
-      }
-    }
-    checkAuth()
-  }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -54,13 +22,22 @@ export default function SignupPage() {
     setMessage('')
     setIsError(false)
 
-    const apiUrl = 'https://www.getreadin.us'
-
     try {
-      const res = await fetch(apiUrl + '/api/v1/auth/register', {
+      const payload: Record<string, string> = {
+        email,
+        password,
+        full_name: name,
+        account_type: accountType,
+      }
+
+      if (accountType === 'company' && companyName) {
+        payload.company = companyName
+      }
+
+      const res = await fetch('https://www.getreadin.us/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, full_name: name }),
+        body: JSON.stringify(payload),
       })
 
       const data = await res.json()
@@ -71,33 +48,27 @@ export default function SignupPage() {
         window.location.href = '/dashboard'
       } else {
         setIsError(true)
-        setMessage(data.detail || 'Registration failed')
+        let errorMsg = 'Registration failed'
+        if (typeof data.detail === 'string') {
+          errorMsg = data.detail
+        } else if (Array.isArray(data.detail) && data.detail.length > 0) {
+          errorMsg = data.detail.map((e: { msg?: string }) => e.msg || 'Validation error').join('. ')
+        }
+        setMessage(errorMsg)
         setLoading(false)
       }
-    } catch (err) {
+    } catch {
       setIsError(true)
       setMessage('Network error - please try again')
       setLoading(false)
     }
   }
 
-  // Show loading while checking auth
-  if (checkingAuth) {
-    return (
-      <main className="min-h-screen bg-premium-bg text-white flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-gold-500" />
-      </main>
-    )
-  }
-
   return (
-    <main className="min-h-screen bg-premium-bg text-white flex items-center justify-center px-4">
-      <div className="absolute inset-0 bg-gradient-to-b from-gold-500/5 via-transparent to-transparent" />
-
-      <div className="relative w-full max-w-md">
-        <Link href="/" className="inline-flex items-center text-gray-400 hover:text-gold-400 transition mb-8">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Home
+    <main className="min-h-screen bg-premium-bg text-white flex items-center justify-center px-4 py-8">
+      <div className="w-full max-w-md">
+        <Link href="/" className="text-gray-400 hover:text-gold-400 mb-8 inline-block">
+          ← Back to Home
         </Link>
 
         <div className="bg-premium-card rounded-2xl border border-premium-border p-8">
@@ -110,47 +81,93 @@ export default function SignupPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Account Type Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Account Type</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAccountType('individual')}
+                  className={`flex flex-col items-center p-4 rounded-lg border transition-all ${
+                    accountType === 'individual'
+                      ? 'border-gold-500 bg-gold-500/10'
+                      : 'border-premium-border bg-premium-surface hover:border-gray-600'
+                  }`}
+                >
+                  <User className={`h-6 w-6 mb-2 ${accountType === 'individual' ? 'text-gold-400' : 'text-gray-400'}`} />
+                  <span className={`text-sm font-medium ${accountType === 'individual' ? 'text-gold-400' : 'text-gray-300'}`}>
+                    Individual
+                  </span>
+                  <span className="text-xs text-gray-500 mt-1">Personal use</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAccountType('company')}
+                  className={`flex flex-col items-center p-4 rounded-lg border transition-all ${
+                    accountType === 'company'
+                      ? 'border-gold-500 bg-gold-500/10'
+                      : 'border-premium-border bg-premium-surface hover:border-gray-600'
+                  }`}
+                >
+                  <Building2 className={`h-6 w-6 mb-2 ${accountType === 'company' ? 'text-gold-400' : 'text-gray-400'}`} />
+                  <span className={`text-sm font-medium ${accountType === 'company' ? 'text-gold-400' : 'text-gray-300'}`}>
+                    Company
+                  </span>
+                  <span className="text-xs text-gray-500 mt-1">Team access</span>
+                </button>
+              </div>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none transition text-white"
+                className="w-full px-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none text-white"
                 placeholder="John Doe"
                 required
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+            {/* Company Name - Only shown for company accounts */}
+            {accountType === 'company' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Company Name</label>
                 <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none transition text-white"
-                  placeholder="you@example.com"
-                  required
+                  type="text"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  className="w-full px-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none text-white"
+                  placeholder="Acme Inc."
+                  required={accountType === 'company'}
                 />
               </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none text-white"
+                placeholder="you@example.com"
+                required
+              />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none transition text-white"
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                />
-              </div>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none text-white"
+                placeholder="••••••••"
+                required
+                minLength={6}
+              />
             </div>
 
             {message && (
@@ -162,9 +179,9 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-lg hover:shadow-gold transition disabled:opacity-50 flex items-center justify-center"
+              className="w-full py-3 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-lg hover:shadow-gold disabled:opacity-50"
             >
-              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Create Account'}
+              {loading ? 'Creating Account...' : 'Create Account'}
             </button>
           </form>
 
@@ -174,21 +191,7 @@ export default function SignupPage() {
               Log In
             </Link>
           </div>
-
-          <div className="mt-6 pt-6 border-t border-premium-border text-center">
-            <p className="text-gray-500 text-sm">
-              By continuing, you agree to our{' '}
-              <Link href="/terms" className="text-gray-400 hover:text-gold-400">Terms</Link>
-              {' '}and{' '}
-              <Link href="/privacy" className="text-gray-400 hover:text-gold-400">Privacy Policy</Link>
-            </p>
-          </div>
         </div>
-
-        <p className="text-center text-gray-500 text-sm mt-6">
-          Need the app?{' '}
-          <Link href="/download" className="text-gold-400 hover:text-gold-300">Download ReadIn AI</Link>
-        </p>
       </div>
     </main>
   )

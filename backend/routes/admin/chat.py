@@ -524,13 +524,13 @@ async def get_my_chat_session(
     return enrich_session_response(db, session)
 
 
-@customer_chat_router.get("/session/messages", response_model=List[ChatMessageResponse])
+@customer_chat_router.get("/session/messages")
 async def get_my_chat_messages(
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get messages for current user's chat session."""
+    """Get messages for current user's chat session with status info."""
     session = db.query(ChatSession).filter(
         and_(
             ChatSession.user_id == current_user.id,
@@ -553,21 +553,28 @@ async def get_my_chat_messages(
             sender_name = "You"
         elif msg.sender_type == "agent":
             sender_name = "Support Agent"
+        elif msg.sender_type == "bot":
+            sender_name = "Novah (AI)"
         else:
             sender_name = "System"
 
-        responses.append(ChatMessageResponse(
-            id=msg.id,
-            session_id=msg.session_id,
-            sender_type=msg.sender_type,
-            message=msg.message,
-            message_type=msg.message_type,
-            is_read=msg.is_read,
-            created_at=msg.created_at,
-            sender_name=sender_name
-        ))
+        responses.append({
+            "id": msg.id,
+            "session_id": msg.session_id,
+            "sender_type": msg.sender_type,
+            "message": msg.message,
+            "message_type": msg.message_type,
+            "is_read": msg.is_read,
+            "created_at": msg.created_at.isoformat(),
+            "sender_name": sender_name
+        })
 
-    return responses
+    return {
+        "messages": responses,
+        "status": session.status,
+        "queue_position": session.queue_position,
+        "is_ai_handled": session.is_ai_handled
+    }
 
 
 @customer_chat_router.post("/session/messages", response_model=ChatMessageResponse, status_code=201)
@@ -714,6 +721,45 @@ async def request_human_agent(
         "message": "Transferred to agent queue",
         "queue_position": session.queue_position
     }
+
+
+@customer_chat_router.post("/session/leave-message")
+async def leave_chat_message(
+    message_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    chat_service: ChatService = Depends(get_chat_service)
+):
+    """Leave a message and exit when queue is too long."""
+    session = db.query(ChatSession).filter(
+        and_(
+            ChatSession.user_id == current_user.id,
+            ChatSession.status.in_(["waiting", "active"])
+        )
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="No active chat session")
+
+    message = message_data.get("message", "")
+    category = message_data.get("category", "general")
+
+    # Save the message as a note for agents
+    if message:
+        note_msg = ChatMessage(
+            session_id=session.id,
+            sender_id=current_user.id,
+            sender_type="customer",
+            message=f"[Left Message - {category.upper()}] {message}",
+            message_type="text"
+        )
+        db.add(note_msg)
+
+    # Mark session with offline message status
+    session.ai_resolution_status = "left_message"
+    db.commit()
+
+    return {"message": "Message saved. We'll get back to you via email."}
 
 
 @customer_chat_router.post("/session/end")

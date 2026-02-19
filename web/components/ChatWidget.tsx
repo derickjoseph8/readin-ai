@@ -29,7 +29,9 @@ export default function ChatWidget() {
   const [queuePosition, setQueuePosition] = useState<number | null>(null)
   const [error, setError] = useState('')
   const [isAiHandled, setIsAiHandled] = useState(true)
-  const [isRequestingHuman, setIsRequestingHuman] = useState(false)
+  const [showLeaveMessage, setShowLeaveMessage] = useState(false)
+  const [leaveMessageText, setLeaveMessageText] = useState('')
+  const [leaveMessageCategory, setLeaveMessageCategory] = useState<'sales' | 'billing' | 'technical'>('technical')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -100,19 +102,25 @@ export default function ChatWidget() {
     }
   }
 
-  const handleRequestHuman = async () => {
-    if (!sessionId) return
-    setIsRequestingHuman(true)
+  const handleLeaveQueue = () => {
+    setShowLeaveMessage(true)
+  }
+
+  const handleSubmitLeaveMessage = async () => {
+    if (!sessionId || !leaveMessageText.trim()) return
     setError('')
 
     try {
-      await supportApi.requestHumanAgent(sessionId)
-      setIsAiHandled(false)
-      setChatStatus('waiting')
+      await supportApi.leaveMessage(sessionId, leaveMessageText, leaveMessageCategory)
+      await supportApi.endChat(sessionId)
+      setChatStatus('ended')
+      setShowLeaveMessage(false)
+      setLeaveMessageText('')
     } catch (err: any) {
-      setError(err.message || 'Failed to request human agent')
-    } finally {
-      setIsRequestingHuman(false)
+      // If leave message endpoint doesn't exist, just end chat
+      await supportApi.endChat(sessionId)
+      setChatStatus('ended')
+      setShowLeaveMessage(false)
     }
   }
 
@@ -249,7 +257,7 @@ export default function ChatWidget() {
               </div>
             )}
 
-            {chatStatus === 'waiting' && (
+            {chatStatus === 'waiting' && !showLeaveMessage && (
               <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 text-center">
                 <div className="w-20 h-20 sm:w-24 sm:h-24 bg-blue-500/20 rounded-full flex items-center justify-center mb-4 sm:mb-6">
                   <Clock className="h-10 w-10 sm:h-12 sm:w-12 text-blue-400 animate-pulse" />
@@ -259,10 +267,76 @@ export default function ChatWidget() {
                   You're in the queue. An agent will be with you shortly.
                 </p>
                 {queuePosition && (
-                  <p className="text-yellow-400 text-sm sm:text-base font-medium">
+                  <p className="text-yellow-400 text-sm sm:text-base font-medium mb-4">
                     Queue position: #{queuePosition}
                   </p>
                 )}
+                <div className="flex flex-col gap-3 mt-4 w-full max-w-xs">
+                  <button
+                    onClick={handleLeaveQueue}
+                    className="px-6 py-3 border border-premium-border text-gray-300 rounded-lg hover:bg-premium-surface transition-colors text-sm min-h-[48px] touch-manipulation"
+                  >
+                    Leave a Message Instead
+                  </button>
+                  <button
+                    onClick={handleEndChat}
+                    className="text-sm text-red-400 hover:text-red-300 min-h-[44px] touch-manipulation"
+                  >
+                    Leave Queue
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {chatStatus === 'waiting' && showLeaveMessage && (
+              <div className="flex-1 flex flex-col p-4 sm:p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">Leave a Message</h3>
+                <p className="text-gray-400 text-sm mb-4">We'll get back to you via email.</p>
+
+                <div className="mb-4">
+                  <label className="block text-sm text-gray-400 mb-2">Category</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['sales', 'billing', 'technical'] as const).map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setLeaveMessageCategory(cat)}
+                        className={`py-2 px-3 rounded-lg text-sm capitalize transition-colors ${
+                          leaveMessageCategory === cat
+                            ? 'bg-gold-500/20 text-gold-400 border border-gold-500/50'
+                            : 'bg-premium-surface text-gray-400 border border-premium-border hover:bg-premium-surface/80'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex-1">
+                  <label className="block text-sm text-gray-400 mb-2">Your Message</label>
+                  <textarea
+                    value={leaveMessageText}
+                    onChange={(e) => setLeaveMessageText(e.target.value)}
+                    placeholder="Describe your issue..."
+                    className="w-full h-32 px-4 py-3 bg-premium-surface border border-premium-border rounded-lg text-white text-sm focus:outline-none focus:border-gold-500 resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-3 mt-4">
+                  <button
+                    onClick={() => setShowLeaveMessage(false)}
+                    className="flex-1 py-3 border border-premium-border text-gray-300 rounded-lg hover:bg-premium-surface transition-colors text-sm min-h-[48px]"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleSubmitLeaveMessage}
+                    disabled={!leaveMessageText.trim()}
+                    className="flex-1 py-3 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-medium rounded-lg hover:shadow-gold transition-all disabled:opacity-50 text-sm min-h-[48px]"
+                  >
+                    Submit & Exit
+                  </button>
+                </div>
               </div>
             )}
 
@@ -335,23 +409,12 @@ export default function ChatWidget() {
                     </div>
                     <div className="flex justify-between items-center mt-3 px-1">
                       <p className="text-xs text-gray-500 hidden sm:block">Press Enter to send</p>
-                      <div className="flex items-center gap-4 sm:gap-3 w-full sm:w-auto justify-between sm:justify-end">
-                        {isAiHandled && (
-                          <button
-                            onClick={handleRequestHuman}
-                            disabled={isRequestingHuman}
-                            className="text-sm sm:text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50 min-h-[44px] touch-manipulation px-2"
-                          >
-                            {isRequestingHuman ? 'Connecting...' : 'Talk to Human'}
-                          </button>
-                        )}
-                        <button
-                          onClick={handleEndChat}
-                          className="text-sm sm:text-xs text-red-400 hover:text-red-300 min-h-[44px] touch-manipulation px-2"
-                        >
-                          End Chat
-                        </button>
-                      </div>
+                      <button
+                        onClick={handleEndChat}
+                        className="text-sm sm:text-xs text-red-400 hover:text-red-300 min-h-[44px] touch-manipulation px-2"
+                      >
+                        End Chat
+                      </button>
                     </div>
                   </div>
                 ) : (

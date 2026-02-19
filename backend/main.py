@@ -343,6 +343,9 @@ def register(request: Request, user_data: UserCreate, db: Session = Depends(get_
                 detail="Invalid profession selected"
             )
 
+    # Determine company name (support both 'company' and 'company_name' fields)
+    company_name = user_data.company or user_data.company_name
+
     # Create user
     user = User(
         email=user_data.email,
@@ -351,6 +354,7 @@ def register(request: Request, user_data: UserCreate, db: Session = Depends(get_
         profession_id=user_data.profession_id,
         specialization=user_data.specialization,
         preferred_language=user_data.preferred_language or "en",
+        company=company_name,  # Store company name for company accounts
         subscription_status="trial"
     )
     db.add(user)
@@ -412,6 +416,14 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
         }
 
     token = create_access_token(user.id)
+
+    # Track session for security
+    try:
+        from routes.sessions import create_session as create_user_session
+        create_user_session(db, user, request, token)
+    except Exception:
+        pass  # Don't fail login if session tracking fails
+
     return Token(access_token=token)
 
 
@@ -483,6 +495,14 @@ def login_2fa(request: Request, data: TwoFactorLoginVerify, db: Session = Depend
 
     # Issue final access token
     token = create_access_token(user.id)
+
+    # Track session for security
+    try:
+        from routes.sessions import create_session as create_user_session
+        create_user_session(db, user, request, token)
+    except Exception:
+        pass  # Don't fail login if session tracking fails
+
     return Token(access_token=token)
 
 
@@ -738,6 +758,9 @@ def get_me(request: Request, user: User = Depends(get_current_user), db: Session
                 for m in members
             ]
 
+    # Determine account type based on organization or company
+    account_type = "company" if (user.organization_id or user.company) else "individual"
+
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -755,6 +778,7 @@ def get_me(request: Request, user: User = Depends(get_current_user), db: Session
         email_summary_enabled=user.email_summary_enabled,
         email_reminders_enabled=user.email_reminders_enabled,
         preferred_language=user.preferred_language or "en",
+        account_type=account_type,
         company_name=organization_name or user.company,
         is_staff=user.is_staff,
         staff_role=user.staff_role,
@@ -764,6 +788,7 @@ def get_me(request: Request, user: User = Depends(get_current_user), db: Session
 
 
 @app.patch("/user/me", response_model=UserResponse)
+@app.patch("/api/v1/user/me", response_model=UserResponse)
 def update_me(
     data: UserUpdate,
     user: User = Depends(get_current_user),
@@ -785,27 +810,27 @@ def update_me(
             )
         user.profession_id = data.profession_id
     elif data.profession is not None:
-        # Map profession string to profession_id
-        profession_map = {
-            'software_engineer': 1,
-            'product_manager': 2,
-            'designer': 3,
-            'sales': 4,
-            'marketing': 5,
-            'consultant': 6,
-            'executive': 7,
-            'student': 8,
-            'other': 9,
+        # Map profession string to profession_id by searching database
+        profession_name_map = {
+            'software_engineer': 'Software Engineer',
+            'product_manager': 'Product Manager',
+            'designer': 'UX/UI Designer',
+            'sales': 'Sales Representative',
+            'marketing': 'Marketing Manager',
+            'consultant': 'Management Consultant',
+            'executive': 'Executive',
+            'student': 'Student',
+            'other': 'Other',
         }
-        profession_id = profession_map.get(data.profession.lower())
-        if profession_id:
+        profession_name = profession_name_map.get(data.profession.lower())
+        if profession_name:
             profession = db.query(Profession).filter(
-                Profession.id == profession_id,
+                Profession.name == profession_name,
                 Profession.is_active == True
             ).first()
             if profession:
-                user.profession_id = profession_id
-    if data.company is not None and hasattr(user, 'company'):
+                user.profession_id = profession.id
+    if data.company is not None:
         user.company = data.company
     if data.specialization is not None:
         user.specialization = data.specialization
@@ -838,6 +863,9 @@ def update_me(
                 for m in members
             ]
 
+    # Determine account type based on organization or company
+    account_type = "company" if (user.organization_id or user.company) else "individual"
+
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -855,6 +883,7 @@ def update_me(
         email_summary_enabled=user.email_summary_enabled,
         email_reminders_enabled=user.email_reminders_enabled,
         preferred_language=user.preferred_language or "en",
+        account_type=account_type,
         company_name=organization_name or user.company,
         is_staff=user.is_staff,
         staff_role=user.staff_role,

@@ -70,9 +70,10 @@ class UserCreate(BaseModel):
     full_name: Optional[str] = Field(None, max_length=255)
     profession_id: Optional[int] = Field(None, ge=1)
     specialization: Optional[str] = Field(None, max_length=255)
-    preferred_language: Optional[str] = Field(default="en", pattern="^(en|es|sw)$")
-    account_type: Optional[str] = Field(default="individual", pattern="^(individual|business)$")
+    preferred_language: Optional[str] = Field(default="en", pattern="^(en|es|sw|fr|de|pt|ja)$")
+    account_type: Optional[str] = Field(default="individual", pattern="^(individual|company|business)$")
     company_name: Optional[str] = Field(None, max_length=255)
+    company: Optional[str] = Field(None, max_length=255)  # Alias for company_name
 
     @field_validator("password")
     @classmethod

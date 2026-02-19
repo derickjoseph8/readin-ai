@@ -1,5 +1,12 @@
 import type { Metadata } from 'next';
+import { NextIntlClientProvider } from 'next-intl';
 import './globals.css';
+
+// Import default messages for non-locale routes
+import messages from '../messages/en.json';
+
+// Cast messages to the expected type
+const typedMessages = messages as any;
 
 export const metadata: Metadata = {
   title: 'ReadIn AI - Your Real-Time AI Assistant for Live Conversations',
@@ -17,7 +24,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-premium-bg text-white antialiased">
-        {children}
+        <NextIntlClientProvider messages={typedMessages} locale="en">
+          {children}
+        </NextIntlClientProvider>
       </body>
     </html>
   );

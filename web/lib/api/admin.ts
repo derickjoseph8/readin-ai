@@ -480,15 +480,19 @@ export const supportApi = {
   },
 
   async getChatMessages(sessionId: number, limit: number = 50): Promise<{ messages: ChatMessage[]; status: string; queue_position: number | null; is_ai_handled?: boolean }> {
-    return apiClient.get(`/api/v1/chat/sessions/${sessionId}/messages?limit=${limit}`)
+    return apiClient.get(`/api/v1/chat/session/messages?limit=${limit}`)
   },
 
   async sendChatMessage(sessionId: number, message: string, messageType: string = 'text'): Promise<ChatMessage> {
-    return apiClient.post(`/api/v1/chat/sessions/${sessionId}/messages`, { message, message_type: messageType })
+    return apiClient.post(`/api/v1/chat/session/messages`, { message, message_type: messageType })
   },
 
   async endChat(sessionId: number): Promise<{ message: string }> {
-    return apiClient.post(`/api/v1/chat/sessions/${sessionId}/end`, {})
+    return apiClient.post(`/api/v1/chat/session/end`, {})
+  },
+
+  async leaveMessage(sessionId: number, message: string, category: 'sales' | 'billing' | 'technical'): Promise<{ message: string }> {
+    return apiClient.post(`/api/v1/chat/session/leave-message`, { message, category })
   },
 
   async requestHumanAgent(sessionId: number): Promise<{ message: string; queue_position?: number }> {

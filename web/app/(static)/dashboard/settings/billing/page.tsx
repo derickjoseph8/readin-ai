@@ -107,7 +107,7 @@ const plans = [
       'Shared meeting insights',
       'Centralized billing',
     ],
-    cta: 'Contact Sales',
+    cta: 'Upgrade to Team',
   },
 ]
 
