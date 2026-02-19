@@ -12,13 +12,11 @@ export default function StaticLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Note: html/body tags are provided by the root layout.tsx
+  // Route group layouts should only wrap children with providers
   return (
-    <html lang="en">
-      <body className="bg-premium-bg text-white antialiased">
-        <NextIntlClientProvider locale="en" messages={messages as unknown as AbstractIntlMessages}>
-          {children}
-        </NextIntlClientProvider>
-      </body>
-    </html>
+    <NextIntlClientProvider locale="en" messages={messages as unknown as AbstractIntlMessages}>
+      {children}
+    </NextIntlClientProvider>
   );
 }

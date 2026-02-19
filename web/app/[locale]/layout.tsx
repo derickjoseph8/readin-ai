@@ -40,13 +40,11 @@ export default async function LocaleLayout({
   // Fetch messages for the current locale
   const messages = await getMessages();
 
+  // Note: html/body tags are provided by the root layout.tsx
+  // Route group layouts should only wrap children with providers
   return (
-    <html lang={locale}>
-      <body className="bg-premium-bg text-white antialiased">
-        <NextIntlClientProvider messages={messages}>
-          {children}
-        </NextIntlClientProvider>
-      </body>
-    </html>
+    <NextIntlClientProvider messages={messages}>
+      {children}
+    </NextIntlClientProvider>
   );
 }

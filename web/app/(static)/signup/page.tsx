@@ -18,21 +18,32 @@ export default function SignupPage() {
   // Check if user is already logged in
   useEffect(() => {
     const checkAuth = async () => {
-      const token = localStorage.getItem('readin_token')
-      if (token) {
-        try {
-          const res = await fetch('https://www.getreadin.us/user/me', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          })
-          if (res.ok) {
-            router.replace('/dashboard')
-            return
-          }
-        } catch (err) {
-          // Token invalid, continue to signup page
+      try {
+        // Only access localStorage on client
+        if (typeof window === 'undefined') {
+          setCheckingAuth(false)
+          return
         }
+
+        const token = localStorage.getItem('readin_token')
+        if (token) {
+          try {
+            const res = await fetch('https://www.getreadin.us/user/me', {
+              headers: { 'Authorization': `Bearer ${token}` }
+            })
+            if (res.ok) {
+              router.replace('/dashboard')
+              return
+            }
+          } catch {
+            // Token invalid or network error, continue to signup page
+          }
+        }
+        setCheckingAuth(false)
+      } catch {
+        // Any error, just show the signup form
+        setCheckingAuth(false)
       }
-      setCheckingAuth(false)
     }
     checkAuth()
   }, [router])
