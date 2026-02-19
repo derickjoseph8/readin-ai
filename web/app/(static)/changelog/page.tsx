@@ -7,6 +7,29 @@ import { Sparkles, Zap, Bug, Shield, ArrowUpCircle } from 'lucide-react'
 
 const releases = [
   {
+    version: '1.4.0',
+    date: 'February 19, 2026',
+    type: 'major',
+    title: 'Security & Performance Release',
+    description: 'Comprehensive security audit fixes, enhanced stability, and improved performance across all platforms.',
+    changes: [
+      { type: 'security', text: 'Secure credential storage using OS keychain (Windows DPAPI, macOS Keychain, Linux SecretService)' },
+      { type: 'security', text: 'Fixed admin authorization logic for enhanced access control' },
+      { type: 'security', text: 'Reduced JWT token expiration from 30 days to 1 day with refresh token support' },
+      { type: 'security', text: 'Added rate limiting to all API endpoints (30-60 requests/minute)' },
+      { type: 'security', text: 'Added database indexes for improved query performance' },
+      { type: 'security', text: 'Removed sensitive data from build bundles' },
+      { type: 'improvement', text: 'Thread-safe audio buffer operations with proper locking' },
+      { type: 'improvement', text: 'Multi-monitor support for overlay positioning' },
+      { type: 'improvement', text: 'Increased touch targets for better mobile accessibility (44x44px minimum)' },
+      { type: 'improvement', text: 'Settings now apply immediately without restart' },
+      { type: 'fix', text: 'Fixed memory leak in chat polling' },
+      { type: 'fix', text: 'Fixed navigation links not working on non-homepage routes' },
+      { type: 'fix', text: 'Fixed N+1 database queries with proper eager loading' },
+      { type: 'fix', text: 'Fixed XSS vulnerability in chat widget' },
+    ]
+  },
+  {
     version: '2.0.0',
     date: 'January 30, 2026',
     type: 'major',

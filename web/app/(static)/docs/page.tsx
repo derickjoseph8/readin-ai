@@ -12,10 +12,10 @@ const docSections = [
     color: 'text-gold-400',
     bgColor: 'bg-gold-500/20',
     links: [
-      { title: 'Installation Guide', description: 'Download and install ReadIn AI on Windows' },
-      { title: 'System Requirements', description: 'Minimum specs for optimal performance' },
+      { title: 'Installation Guide', description: 'Download and install ReadIn AI v1.4.0 on Windows, macOS, or Linux' },
+      { title: 'System Requirements', description: '4GB RAM, 500MB disk space, Windows 10+/macOS 11+/Ubuntu 20.04+' },
       { title: 'Quick Start Tutorial', description: 'Get up and running in 5 minutes' },
-      { title: 'Account Setup', description: 'Create your account and select your profession' },
+      { title: 'Audio Setup', description: 'Configure Stereo Mix or VB-Cable for meeting capture' },
     ]
   },
   {
@@ -24,10 +24,10 @@ const docSections = [
     color: 'text-emerald-400',
     bgColor: 'bg-emerald-500/20',
     links: [
-      { title: 'Real-Time Transcription', description: 'How audio capture and Whisper work' },
-      { title: 'AI-Powered Responses', description: 'Getting intelligent talking points' },
-      { title: 'Profession Customization', description: 'How AI tailors responses to your career' },
-      { title: 'Overlay Interface', description: 'Using the floating overlay during calls' },
+      { title: 'Real-Time Transcription', description: 'Local Whisper AI for private, fast transcription' },
+      { title: 'AI-Powered Responses', description: 'Claude AI generates intelligent talking points' },
+      { title: 'Profession Customization', description: '60+ profession profiles for tailored responses' },
+      { title: 'Multi-Monitor Support', description: 'Overlay works seamlessly across displays' },
     ]
   },
   {
@@ -84,10 +84,10 @@ const docSections = [
     color: 'text-gold-400',
     bgColor: 'bg-gold-500/20',
     links: [
-      { title: 'Local Audio Processing', description: 'How Whisper runs on your device' },
-      { title: 'Data Encryption', description: 'How we protect your data' },
+      { title: 'Local Audio Processing', description: 'Whisper runs locally - audio never leaves your device' },
+      { title: 'Secure Credentials', description: 'OS keychain integration (DPAPI/Keychain/SecretService)' },
+      { title: 'API Security', description: 'Rate limiting, JWT tokens, encrypted communications' },
       { title: 'Data Retention', description: 'What we store and for how long' },
-      { title: 'Recording Consent', description: 'Legal considerations' },
     ]
   },
   {
@@ -98,8 +98,8 @@ const docSections = [
     links: [
       { title: 'Audio Settings', description: 'Microphone and speaker configuration' },
       { title: 'Hotkeys', description: 'Keyboard shortcuts for quick access' },
-      { title: 'Email Preferences', description: 'Control what emails you receive' },
-      { title: 'Display Options', description: 'Customize the overlay appearance' },
+      { title: 'Display Options', description: 'Customize overlay appearance and position' },
+      { title: 'Two-Factor Authentication', description: 'Secure your account with 2FA' },
     ]
   },
 ]

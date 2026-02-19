@@ -9,8 +9,8 @@ const faqs = [
     answer: 'No! The overlay is designed for quick glances. The bullet points are meant to be rephrased in your own words, not read verbatim. A brief glance looks just like you\'re thinking — completely natural.',
   },
   {
-    question: 'Is my audio sent to the cloud?',
-    answer: 'No. Your audio is transcribed locally on your device using the Whisper AI model. Only the transcribed text (not audio) is sent to generate responses, and nothing is stored after your session ends.',
+    question: 'Is my data secure?',
+    answer: 'Absolutely. Your audio is transcribed locally on your device using Whisper AI. Credentials are stored securely using your OS keychain (Windows DPAPI, macOS Keychain, Linux SecretService). All API communications are encrypted, and we use industry-standard JWT tokens with short expiration times.',
   },
   {
     question: 'Which video conferencing apps are supported?',
@@ -18,7 +18,7 @@ const faqs = [
   },
   {
     question: 'Does it work on Mac and Linux?',
-    answer: 'Yes! ReadIn AI is cross-platform and works on Windows, macOS, and Linux. On macOS, you may need to install a virtual audio driver (like BlackHole) to capture system audio.',
+    answer: 'Yes! ReadIn AI v1.4.0 is cross-platform and works on Windows, macOS, and Linux. On macOS, you may need to install a virtual audio driver (like BlackHole) to capture system audio.',
   },
   {
     question: 'What happens after my free trial?',
@@ -34,7 +34,11 @@ const faqs = [
   },
   {
     question: 'Can I customize the response style?',
-    answer: 'Yes! Premium users can customize system prompts with presets like Interview Coach, Technical Expert, Sales, and Executive modes, or create their own custom prompts.',
+    answer: 'Yes! Premium users can customize system prompts with presets like Interview Coach, Technical Expert, Sales, and Executive modes, or create their own custom prompts. The AI also learns your communication style over time.',
+  },
+  {
+    question: 'What\'s new in version 1.4.0?',
+    answer: 'Version 1.4.0 includes comprehensive security enhancements: secure credential storage, improved API rate limiting, better multi-monitor support, and numerous performance fixes. Check our changelog for full details.',
   },
 ]
 

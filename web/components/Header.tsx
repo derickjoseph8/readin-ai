@@ -2,14 +2,24 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Menu, X, Sparkles } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import LanguageSwitcher from './LanguageSwitcher';
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
   const t = useTranslations('header');
   const tc = useTranslations('common');
+
+  // Check if we're on the homepage
+  const isHomePage = pathname === '/' || pathname === '';
+
+  // Helper to get correct href for section links
+  const getSectionHref = (section: string) => {
+    return isHomePage ? `#${section}` : `/#${section}`;
+  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-premium-bg/80 backdrop-blur-xl border-b border-premium-border">
@@ -35,10 +45,10 @@ export default function Header() {
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
-            <a href="#features" className="text-gray-400 hover:text-gold-400 transition-colors">{t('features')}</a>
-            <a href="#how-it-works" className="text-gray-400 hover:text-gold-400 transition-colors">How It Works</a>
-            <a href="#pricing" className="text-gray-400 hover:text-gold-400 transition-colors">{t('pricing')}</a>
-            <a href="#faq" className="text-gray-400 hover:text-gold-400 transition-colors">FAQ</a>
+            <Link href={getSectionHref('features')} className="text-gray-400 hover:text-gold-400 transition-colors">{t('features')}</Link>
+            <Link href={getSectionHref('how-it-works')} className="text-gray-400 hover:text-gold-400 transition-colors">How It Works</Link>
+            <Link href={getSectionHref('pricing')} className="text-gray-400 hover:text-gold-400 transition-colors">{t('pricing')}</Link>
+            <Link href={getSectionHref('faq')} className="text-gray-400 hover:text-gold-400 transition-colors">FAQ</Link>
           </div>
 
           {/* CTA Buttons & Language Switcher */}
@@ -57,8 +67,9 @@ export default function Header() {
 
           {/* Mobile menu button */}
           <button
-            className="md:hidden text-gray-400 hover:text-white"
+            className="md:hidden p-2 text-gray-400 hover:text-white min-w-[44px] min-h-[44px] flex items-center justify-center"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
           >
             {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -67,24 +78,48 @@ export default function Header() {
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-premium-border animate-fade-in">
-            <div className="flex flex-col space-y-4">
-              <a href="#features" className="text-gray-400 hover:text-gold-400 transition-colors" onClick={() => setMobileMenuOpen(false)}>{t('features')}</a>
-              <a href="#how-it-works" className="text-gray-400 hover:text-gold-400 transition-colors" onClick={() => setMobileMenuOpen(false)}>How It Works</a>
-              <a href="#pricing" className="text-gray-400 hover:text-gold-400 transition-colors" onClick={() => setMobileMenuOpen(false)}>{t('pricing')}</a>
-              <a href="#faq" className="text-gray-400 hover:text-gold-400 transition-colors" onClick={() => setMobileMenuOpen(false)}>FAQ</a>
-              <div className="py-2">
+            <div className="flex flex-col space-y-2">
+              <Link
+                href={getSectionHref('features')}
+                className="py-3 px-2 text-gray-400 hover:text-gold-400 transition-colors min-h-[44px] flex items-center"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                {t('features')}
+              </Link>
+              <Link
+                href={getSectionHref('how-it-works')}
+                className="py-3 px-2 text-gray-400 hover:text-gold-400 transition-colors min-h-[44px] flex items-center"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                How It Works
+              </Link>
+              <Link
+                href={getSectionHref('pricing')}
+                className="py-3 px-2 text-gray-400 hover:text-gold-400 transition-colors min-h-[44px] flex items-center"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                {t('pricing')}
+              </Link>
+              <Link
+                href={getSectionHref('faq')}
+                className="py-3 px-2 text-gray-400 hover:text-gold-400 transition-colors min-h-[44px] flex items-center"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                FAQ
+              </Link>
+              <div className="py-3 px-2">
                 <LanguageSwitcher />
               </div>
               <Link
                 href="/login"
-                className="text-gray-400 hover:text-gold-400 transition-colors"
+                className="py-3 px-4 text-gold-400 hover:text-gold-300 transition-colors min-h-[48px] flex items-center justify-center bg-premium-surface rounded-lg border border-premium-border"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 {tc('login')}
               </Link>
               <Link
                 href="/download"
-                className="px-5 py-2.5 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-lg text-center"
+                className="py-3 px-5 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-lg text-center min-h-[48px] flex items-center justify-center"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 {t('download')}
