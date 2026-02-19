@@ -17,13 +17,10 @@ export default createMiddleware({
 });
 
 export const config = {
-  // Match all pathnames except for static files, API routes, etc.
+  // Match ONLY the internationalized locale routes
+  // All static pages, auth pages, and other non-i18n routes are excluded
   matcher: [
-    // Match all pathnames except for
-    // - … if they start with /api, /_next, /_vercel, /static, /favicon.ico, /robots.txt
-    // - … static legal/info pages (terms, privacy, cookies, gdpr, docs, changelog, contact)
-    // - … admin pages and dashboard support pages (they don't use i18n)
-    // - … if they contain a dot (.) - files with extensions
-    '/((?!api|_next|_vercel|static|favicon.ico|robots.txt|terms|privacy|cookies|gdpr|docs|changelog|contact|admin|dashboard|login|sso|.*\\..*).*)'
+    // Only match paths that start with a locale prefix
+    '/(en|es|sw|fr|de|pt|ja)/:path*'
   ]
 };
