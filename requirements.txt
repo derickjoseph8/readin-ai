@@ -1,23 +1,23 @@
-anthropic>=0.18.0,<0.19.0       # Claude API
-faster-whisper>=0.10.0,<0.11.0  # Optimized Whisper (local, fast)
-numpy>=1.24.0,<1.25.0           # Audio processing
-scipy>=1.10.0,<1.11.0           # High-quality audio resampling
-PyQt6>=6.6.0,<6.7.0             # UI framework
-psutil>=5.9.0,<5.10.0           # Process monitoring
-python-dotenv>=1.0.0,<1.1.0     # Config management
-httpx>=0.25.0,<0.26.0           # API client
+anthropic>=0.18.0,<1.0.0        # Claude API
+faster-whisper>=0.10.0,<2.0.0   # Optimized Whisper (allows av 11+ with wheels)
+numpy>=1.24.0,<2.0.0            # Audio processing
+scipy>=1.10.0,<2.0.0            # High-quality audio resampling
+PyQt6>=6.6.0,<7.0.0             # UI framework
+psutil>=5.9.0,<6.0.0            # Process monitoring
+python-dotenv>=1.0.0,<2.0.0     # Config management
+httpx>=0.25.0,<1.0.0            # API client
 
 # Platform-specific audio
 pyaudio>=0.2.14,<0.3.0; sys_platform == "win32"       # Windows audio (WASAPI support)
-sounddevice>=0.4.6,<0.5.0; sys_platform != "win32"    # macOS/Linux audio
+sounddevice>=0.4.6,<1.0.0; sys_platform != "win32"    # macOS/Linux audio
 
 # New dependencies for enhanced features
-pynput>=1.7.6,<1.8.0            # Global keyboard shortcuts
-packaging>=23.0,<23.1.0         # Version comparison for auto-updates
-websockets>=12.0,<12.1.0        # Browser extension WebSocket server
-Pillow>=10.0.0,<10.1.0          # Icon generation (optional)
-pywin32>=306,<307; sys_platform == "win32"  # Windows shortcuts and registry
+pynput>=1.7.6,<2.0.0            # Global keyboard shortcuts
+packaging>=23.0,<25.0           # Version comparison for auto-updates
+websockets>=12.0,<14.0.0        # Browser extension WebSocket server
+Pillow>=10.0.0,<11.0.0          # Icon generation (optional)
+pywin32>=306,<400; sys_platform == "win32"  # Windows shortcuts and registry
 
 # Security - Credential storage
-keyring>=24.0.0,<24.1.0         # Cross-platform secure credential storage
-cryptography>=41.0.0,<41.1.0    # Encryption for fallback storage
+keyring>=24.0.0,<25.0.0         # Cross-platform secure credential storage
+cryptography>=41.0.0,<45.0.0    # Encryption for fallback storage
