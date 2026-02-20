@@ -33,7 +33,7 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://readin:${DB_PASSWORD}@db:5432/readin_ai
-      JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
+      JWT_SECRET: ${JWT_SECRET}
       JWT_ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_DAYS: 30
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}

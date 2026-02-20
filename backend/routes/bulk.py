@@ -145,7 +145,7 @@ def bulk_delete_meetings(
 @router.post("/meetings/export")
 def bulk_export_meetings(
     request: BulkExportRequest,
-    limit: int = Query(50, ge=1, le=500, description="Max items to export"),
+    limit: int = Query(50, ge=1, le=100, description="Max items to export (max 100)"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

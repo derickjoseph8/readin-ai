@@ -337,7 +337,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       <DashboardSidebar />
       <div id="dashboard-main" className="lg:pl-64">
         <div className="px-4 py-6 pt-16 lg:pt-6 sm:px-6 lg:px-8">
-          <ErrorBoundary>
+          <ErrorBoundary name="DashboardContent">
             {children}
           </ErrorBoundary>
         </div>

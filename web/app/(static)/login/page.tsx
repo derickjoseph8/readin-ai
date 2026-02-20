@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Mail, Lock, Loader2, Smartphone } from 'lucide-react'
@@ -22,8 +22,28 @@ export default function LoginPage() {
   const [isBackupCode, setIsBackupCode] = useState(false)
   const [pendingUserId, setPendingUserId] = useState<number | null>(null)
 
+  // Track component mount state to prevent state updates after unmount
+  const isMountedRef = useRef(true)
+
+  // Safe state update helper
+  const safeSetState = useCallback(<T,>(setter: React.Dispatch<React.SetStateAction<T>>, value: T) => {
+    if (isMountedRef.current) {
+      setter(value)
+    }
+  }, [])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
   // Check if user is already logged in
   useEffect(() => {
+    let isActive = true
+
     const checkAuth = async () => {
       const token = localStorage.getItem('readin_token')
       if (token) {
@@ -31,8 +51,8 @@ export default function LoginPage() {
           const res = await fetch('https://www.getreadin.us/user/me', {
             headers: { 'Authorization': `Bearer ${token}` }
           })
-          if (res.ok) {
-            // User is authenticated, redirect to dashboard
+          if (res.ok && isActive) {
+            // User is authenticated, redirect to dashboard using Next.js router
             router.replace('/dashboard')
             return
           }
@@ -40,13 +60,21 @@ export default function LoginPage() {
           // Token invalid, continue to login page
         }
       }
-      setCheckingAuth(false)
+      if (isActive) {
+        setCheckingAuth(false)
+      }
     }
     checkAuth()
+
+    return () => {
+      isActive = false
+    }
   }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isMountedRef.current) return
+
     setLoading(true)
     setMessage('')
     setIsError(false)
@@ -60,11 +88,15 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       })
 
+      // Check if component is still mounted before updating state
+      if (!isMountedRef.current) return
+
       const data = await res.json()
 
       if (res.ok && data.access_token) {
         localStorage.setItem('readin_token', data.access_token)
         setMessage('Success! Redirecting...')
+        // Use Next.js router for client-side navigation (no setTimeout needed)
         router.push('/dashboard')
       } else if (res.ok && data.requires_2fa) {
         // User has 2FA enabled, show 2FA input
@@ -82,6 +114,8 @@ export default function LoginPage() {
         setLoading(false)
       }
     } catch (err) {
+      // Check if component is still mounted before updating state
+      if (!isMountedRef.current) return
       setIsError(true)
       setMessage('Network error - please try again')
       setLoading(false)
@@ -89,6 +123,8 @@ export default function LoginPage() {
   }
 
   const handleResendVerification = async () => {
+    if (!isMountedRef.current) return
+
     setResendingEmail(true)
     try {
       const res = await fetch('https://www.getreadin.us/api/v1/auth/resend-verification', {
@@ -96,6 +132,10 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       })
+
+      // Check if component is still mounted before updating state
+      if (!isMountedRef.current) return
+
       const data = await res.json()
       if (res.ok) {
         setIsError(false)
@@ -105,13 +145,18 @@ export default function LoginPage() {
         setMessage(data.detail || 'Failed to send verification email')
       }
     } catch {
+      if (!isMountedRef.current) return
       setMessage('Network error - please try again')
     }
-    setResendingEmail(false)
+    if (isMountedRef.current) {
+      setResendingEmail(false)
+    }
   }
 
   const handle2FASubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isMountedRef.current) return
+
     setLoading(true)
     setMessage('')
     setIsError(false)
@@ -124,6 +169,9 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       })
+
+      // Check if component is still mounted before continuing
+      if (!isMountedRef.current) return
 
       const loginData = await loginRes.json()
 
@@ -144,11 +192,15 @@ export default function LoginPage() {
           }),
         })
 
+        // Check if component is still mounted before updating state
+        if (!isMountedRef.current) return
+
         const data = await res.json()
 
         if (res.ok && data.access_token) {
           localStorage.setItem('readin_token', data.access_token)
           setMessage('Success! Redirecting...')
+          // Use Next.js router for client-side navigation
           router.push('/dashboard')
         } else {
           setIsError(true)
@@ -159,6 +211,7 @@ export default function LoginPage() {
         // No 2FA required after all
         localStorage.setItem('readin_token', loginData.access_token)
         setMessage('Success! Redirecting...')
+        // Use Next.js router for client-side navigation
         router.push('/dashboard')
       } else {
         setIsError(true)
@@ -166,6 +219,8 @@ export default function LoginPage() {
         setLoading(false)
       }
     } catch (err) {
+      // Check if component is still mounted before updating state
+      if (!isMountedRef.current) return
       setIsError(true)
       setMessage('Network error - please try again')
       setLoading(false)

@@ -159,3 +159,135 @@ export function AnalyticsPageSkeleton() {
     </div>
   )
 }
+
+export function DashboardSkeleton() {
+  return (
+    <div className="space-y-6 sm:space-y-8">
+      {/* Header */}
+      <div>
+        <Skeleton className="h-8 w-48 mb-2" />
+        <Skeleton className="h-4 w-72" />
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <SkeletonCard key={i} />
+        ))}
+      </div>
+
+      {/* AI Insights Section */}
+      <div className="bg-premium-card border border-premium-border rounded-xl p-4 sm:p-6">
+        <div className="flex items-center mb-4 sm:mb-6">
+          <Skeleton className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg mr-3" />
+          <div>
+            <Skeleton className="h-5 w-24 mb-2" />
+            <Skeleton className="h-3 w-48" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-premium-bg/50 rounded-lg p-3 sm:p-4">
+              <Skeleton className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg mb-2 sm:mb-3" />
+              <Skeleton className="h-6 w-12 mb-2" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Usage & Recent Meetings */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* Daily Usage */}
+        <div className="bg-premium-card border border-premium-border rounded-xl p-4 sm:p-6">
+          <Skeleton className="h-5 w-28 mb-4" />
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between mb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-16" />
+              </div>
+              <Skeleton className="h-2.5 w-full rounded-full" />
+            </div>
+            <Skeleton className="h-3 w-40" />
+          </div>
+          <div className="mt-6 pt-4 border-t border-premium-border">
+            <div className="flex items-center">
+              <Skeleton className="w-4 h-4 mr-2 rounded" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+            <Skeleton className="h-3 w-full mt-2" />
+          </div>
+        </div>
+
+        {/* Recent Meetings */}
+        <div className="lg:col-span-2 bg-premium-card border border-premium-border rounded-xl p-4 sm:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-4 w-16" />
+          </div>
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="p-3 sm:p-4 bg-premium-surface rounded-lg">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <Skeleton className="h-5 w-48 mb-2" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                  <div className="text-right">
+                    <Skeleton className="h-4 w-16 mb-1" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="p-4 bg-premium-card border border-premium-border rounded-xl">
+            <Skeleton className="h-5 w-40 mb-2" />
+            <Skeleton className="h-4 w-56" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function StatCardSkeleton() {
+  return (
+    <div className="bg-premium-card border border-premium-border rounded-xl p-4 sm:p-6 min-h-[120px]">
+      <div className="flex items-center justify-between mb-3 sm:mb-4">
+        <Skeleton className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg" />
+        <Skeleton className="h-4 w-12" />
+      </div>
+      <Skeleton className="h-7 w-16 mb-2" />
+      <Skeleton className="h-4 w-24" />
+    </div>
+  )
+}
+
+export function RecentMeetingsSkeleton() {
+  return (
+    <div className="space-y-2 sm:space-y-3">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="p-3 sm:p-4 bg-premium-surface rounded-lg border border-premium-border">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <Skeleton className="h-5 w-48 mb-2" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            <div className="text-right flex-shrink-0">
+              <Skeleton className="h-4 w-16 mb-1" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}

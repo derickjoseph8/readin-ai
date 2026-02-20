@@ -612,27 +612,79 @@ class SettingsWindow(QDialog):
         )
 
     def apply_settings(self):
-        """Apply current settings without closing."""
+        """Apply current settings without closing, emitting signals for each change."""
         # Audio - validate device before saving
         device_data = self.device_combo.currentData()
         if self._validate_audio_device(device_data):
+            old_device = self.settings.get("audio_device")
             self.settings.set("audio_device", device_data)
-        self.settings.set("sample_rate", int(self.sample_rate_combo.currentText()))
+            if old_device != device_data:
+                self.setting_changed.emit("audio_device", device_data)
 
-        # AI
-        self.settings.set("model", self.model_combo.currentText())
-        self.settings.set("context_size", self.context_spin.value())
-        self.settings.set("system_prompt", self.prompt_edit.toPlainText())
-        self.settings.set("language", self.language_combo.currentData())
+        old_sample_rate = self.settings.get("sample_rate")
+        new_sample_rate = int(self.sample_rate_combo.currentText())
+        self.settings.set("sample_rate", new_sample_rate)
+        if old_sample_rate != new_sample_rate:
+            self.setting_changed.emit("sample_rate", new_sample_rate)
 
-        # Appearance - immediate application
+        # AI - emit signals for each change
+        old_model = self.settings.get("model")
+        new_model = self.model_combo.currentText()
+        self.settings.set("model", new_model)
+        if old_model != new_model:
+            self.setting_changed.emit("model", new_model)
+
+        old_context = self.settings.get("context_size")
+        new_context = self.context_spin.value()
+        self.settings.set("context_size", new_context)
+        if old_context != new_context:
+            self.setting_changed.emit("context_size", new_context)
+
+        old_prompt = self.settings.get("system_prompt")
+        new_prompt = self.prompt_edit.toPlainText()
+        self.settings.set("system_prompt", new_prompt)
+        if old_prompt != new_prompt:
+            self.setting_changed.emit("system_prompt", new_prompt)
+
+        old_language = self.settings.get("language")
+        new_language = self.language_combo.currentData()
+        self.settings.set("language", new_language)
+        if old_language != new_language:
+            self.setting_changed.emit("language", new_language)
+
+        # Appearance - emit signals for immediate application
         new_theme = self.theme_combo.currentData()
         self.settings.set("theme", new_theme)
-        self.settings.set("opacity", self.opacity_slider.value())
-        self.settings.set("font_size", self.font_size_spin.value())
-        self.settings.set("always_on_top", self.always_on_top_check.isChecked())
-        self.settings.set("remember_position", self.remember_position_check.isChecked())
-        self.settings.set("hide_from_screen_capture", self.hide_from_capture_check.isChecked())
+
+        old_opacity = self.settings.get("opacity")
+        new_opacity = self.opacity_slider.value()
+        self.settings.set("opacity", new_opacity)
+        if old_opacity != new_opacity:
+            self.setting_changed.emit("opacity", new_opacity)
+
+        old_font_size = self.settings.get("font_size")
+        new_font_size = self.font_size_spin.value()
+        self.settings.set("font_size", new_font_size)
+        if old_font_size != new_font_size:
+            self.setting_changed.emit("font_size", new_font_size)
+
+        old_always_on_top = self.settings.get("always_on_top")
+        new_always_on_top = self.always_on_top_check.isChecked()
+        self.settings.set("always_on_top", new_always_on_top)
+        if old_always_on_top != new_always_on_top:
+            self.setting_changed.emit("always_on_top", new_always_on_top)
+
+        old_remember_position = self.settings.get("remember_position")
+        new_remember_position = self.remember_position_check.isChecked()
+        self.settings.set("remember_position", new_remember_position)
+        if old_remember_position != new_remember_position:
+            self.setting_changed.emit("remember_position", new_remember_position)
+
+        old_hide_from_capture = self.settings.get("hide_from_screen_capture")
+        new_hide_from_capture = self.hide_from_capture_check.isChecked()
+        self.settings.set("hide_from_screen_capture", new_hide_from_capture)
+        if old_hide_from_capture != new_hide_from_capture:
+            self.setting_changed.emit("hide_from_screen_capture", new_hide_from_capture)
 
         # Emit theme change for immediate application
         if new_theme != self._original_theme:
@@ -652,9 +704,18 @@ class SettingsWindow(QDialog):
         if self.enable_shortcuts_check.isChecked():
             self.shortcuts_changed.emit(shortcuts)
 
-        # Advanced
-        self.settings.set("auto_update_check", self.auto_update_check.isChecked())
-        self.settings.set("debug_mode", self.debug_mode_check.isChecked())
+        # Advanced - emit signals for each change
+        old_auto_update = self.settings.get("auto_update_check")
+        new_auto_update = self.auto_update_check.isChecked()
+        self.settings.set("auto_update_check", new_auto_update)
+        if old_auto_update != new_auto_update:
+            self.setting_changed.emit("auto_update_check", new_auto_update)
+
+        old_debug_mode = self.settings.get("debug_mode")
+        new_debug_mode = self.debug_mode_check.isChecked()
+        self.settings.set("debug_mode", new_debug_mode)
+        if old_debug_mode != new_debug_mode:
+            self.setting_changed.emit("debug_mode", new_debug_mode)
 
         self.settings_changed.emit()
 

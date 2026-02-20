@@ -78,9 +78,14 @@ class BrowserBridge:
         """Stop the WebSocket server."""
         self._running = False
 
-        if self._loop:
-            # Schedule server shutdown
-            asyncio.run_coroutine_threadsafe(self._shutdown(), self._loop)
+        loop = self._loop  # Capture reference to avoid race conditions
+        if loop is not None:
+            try:
+                # Schedule server shutdown
+                asyncio.run_coroutine_threadsafe(self._shutdown(), loop)
+            except RuntimeError:
+                # Loop may have been closed
+                pass
 
         if self._thread:
             self._thread.join(timeout=2.0)
@@ -102,27 +107,42 @@ class BrowserBridge:
 
     def request_start_capture(self):
         """Request the extension to start capturing audio."""
-        if self._connected_clients and self._loop is not None:
-            asyncio.run_coroutine_threadsafe(
-                self._broadcast({'type': 'start_capture'}),
-                self._loop
-            )
+        loop = self._loop  # Capture reference to avoid race conditions
+        if self._connected_clients and loop is not None:
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    self._broadcast({'type': 'start_capture'}),
+                    loop
+                )
+            except RuntimeError:
+                # Loop may have been closed between the check and use
+                pass
 
     def request_stop_capture(self):
         """Request the extension to stop capturing audio."""
-        if self._connected_clients and self._loop is not None:
-            asyncio.run_coroutine_threadsafe(
-                self._broadcast({'type': 'stop_capture'}),
-                self._loop
-            )
+        loop = self._loop  # Capture reference to avoid race conditions
+        if self._connected_clients and loop is not None:
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    self._broadcast({'type': 'stop_capture'}),
+                    loop
+                )
+            except RuntimeError:
+                # Loop may have been closed between the check and use
+                pass
 
     def request_status(self):
         """Request status from the extension."""
-        if self._connected_clients and self._loop is not None:
-            asyncio.run_coroutine_threadsafe(
-                self._broadcast({'type': 'status_request'}),
-                self._loop
-            )
+        loop = self._loop  # Capture reference to avoid race conditions
+        if self._connected_clients and loop is not None:
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    self._broadcast({'type': 'status_request'}),
+                    loop
+                )
+            except RuntimeError:
+                # Loop may have been closed between the check and use
+                pass
 
     def _run_server(self):
         """Run the WebSocket server (in background thread)."""

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   MessageSquare,
   X,
@@ -33,57 +33,91 @@ export default function ChatWidget() {
   const [leaveMessageText, setLeaveMessageText] = useState('')
   const [leaveMessageCategory, setLeaveMessageCategory] = useState<'sales' | 'billing' | 'technical'>('technical')
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const isMountedRef = useRef<boolean>(true)
+
+  // Cleanup function to clear polling interval
+  const clearPolling = useCallback(() => {
+    if (pollIntervalRef.current !== null) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+  }, [])
+
+  // Track component mount state
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      // Ensure cleanup on all unmount paths
+      clearPolling()
+    }
+  }, [clearPolling])
 
   // Poll for messages and status updates
   useEffect(() => {
-    if (sessionId && chatStatus !== 'ended') {
-      let isMounted = true
+    // Early return if no session or chat ended - also cleanup any existing interval
+    if (!sessionId || chatStatus === 'ended') {
+      clearPolling()
+      return
+    }
 
-      const pollMessages = async () => {
-        if (!isMounted) return
-        try {
-          const data = await supportApi.getChatMessages(sessionId)
-          if (!isMounted) return
+    // Define poll function inside effect to capture current sessionId
+    const pollMessages = async () => {
+      // Check mounted state before and after async operation
+      if (!isMountedRef.current) return
 
-          setMessages(data.messages)
+      try {
+        const data = await supportApi.getChatMessages(sessionId)
 
-          if (data.status === 'active' && chatStatus === 'waiting') {
-            setChatStatus('active')
-            setQueuePosition(null)
-          } else if (data.status === 'ended') {
-            setChatStatus('ended')
-          } else if (data.status === 'waiting') {
-            setQueuePosition(data.queue_position || null)
-          }
+        // Double-check mount state after async call
+        if (!isMountedRef.current) return
 
-          // Track if AI is handling or transferred to human
-          if (data.is_ai_handled !== undefined) {
-            setIsAiHandled(data.is_ai_handled)
-          }
-        } catch (err) {
+        setMessages(data.messages)
+
+        if (data.status === 'active' && chatStatus === 'waiting') {
+          setChatStatus('active')
+          setQueuePosition(null)
+        } else if (data.status === 'ended') {
+          setChatStatus('ended')
+          // Clear polling when chat ends
+          clearPolling()
+        } else if (data.status === 'waiting') {
+          setQueuePosition(data.queue_position || null)
+        }
+
+        // Track if AI is handling or transferred to human
+        if (data.is_ai_handled !== undefined) {
+          setIsAiHandled(data.is_ai_handled)
+        }
+      } catch (err) {
+        // Only log error if component is still mounted
+        if (isMountedRef.current) {
           console.error('Failed to poll messages:', err)
         }
       }
-
-      // Start polling - initial call then interval
-      const startPolling = async () => {
-        await pollMessages()
-        if (isMounted) {
-          pollIntervalRef.current = setInterval(pollMessages, 3000)
-        }
-      }
-      startPolling()
-
-      return () => {
-        isMounted = false
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current)
-          pollIntervalRef.current = null
-        }
-      }
     }
-  }, [sessionId, chatStatus])
+
+    // Clear any existing interval before starting new one (prevents race condition)
+    clearPolling()
+
+    // Initial poll immediately
+    pollMessages()
+
+    // Set up polling interval only if still mounted after initial call
+    // Use a microtask to ensure this runs after pollMessages completes
+    const timeoutId = setTimeout(() => {
+      if (isMountedRef.current && chatStatus !== 'ended') {
+        pollIntervalRef.current = setInterval(pollMessages, 3000)
+      }
+    }, 0)
+
+    // Cleanup function
+    return () => {
+      clearTimeout(timeoutId)
+      clearPolling()
+    }
+  }, [sessionId, chatStatus, clearPolling])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })

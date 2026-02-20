@@ -714,6 +714,44 @@ class OverlayWindow(QWidget):
             self._settings.set("theme", theme_id)
         self._apply_theme()
 
+    def connect_to_settings_window(self, settings_window):
+        """Connect overlay to settings window signals for immediate updates.
+
+        Args:
+            settings_window: SettingsWindow instance to connect to
+        """
+        # Connect theme changes for immediate application
+        settings_window.theme_changed.connect(self.set_theme)
+
+        # Connect individual setting changes
+        settings_window.setting_changed.connect(self._on_setting_changed)
+
+    def _on_setting_changed(self, key: str, value):
+        """Handle individual setting changes from settings window.
+
+        Args:
+            key: The setting key that changed
+            value: The new value
+        """
+        if key == "opacity":
+            self.set_opacity(value)
+        elif key == "always_on_top":
+            self._update_always_on_top(value)
+        elif key == "hide_from_screen_capture":
+            self.set_screen_capture_visibility(not value)
+
+    def _update_always_on_top(self, enabled: bool):
+        """Update the always-on-top window flag.
+
+        Args:
+            enabled: Whether to enable always-on-top
+        """
+        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
+        if enabled:
+            flags |= Qt.WindowType.WindowStaysOnTopHint
+        self.setWindowFlags(flags)
+        self.show()  # Required to apply new window flags
+
     def set_opacity(self, opacity: float):
         """Set overlay opacity (0.0-1.0 or 0-100)."""
         # Normalize to 0-1 range

@@ -139,7 +139,9 @@ def verify_api_key(key: str, key_hash: str) -> bool:
 
 
 @router.get("", response_model=List[APIKeyResponse])
+@limiter.limit("30/minute") if RATE_LIMITING_AVAILABLE else lambda f: f
 def list_api_keys(
+    request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -169,7 +171,9 @@ def list_api_keys(
 
 
 @router.post("", response_model=APIKeyCreatedResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute") if RATE_LIMITING_AVAILABLE else lambda f: f
 def create_api_key(
+    request_obj: Request,
     request: APIKeyCreate,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -312,7 +316,9 @@ webhooks_router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 
 
 @webhooks_router.get("", response_model=List[WebhookResponse])
+@limiter.limit("30/minute") if RATE_LIMITING_AVAILABLE else lambda f: f
 def list_webhooks(
+    request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -531,7 +537,9 @@ def get_webhook_deliveries(
 
 
 @webhooks_router.post("/{webhook_id}/test")
+@limiter.limit("10/minute") if RATE_LIMITING_AVAILABLE else lambda f: f
 def test_webhook(
+    request: Request,
     webhook_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -605,7 +613,9 @@ def get_webhook_secret(
 
 
 @webhooks_router.post("/{webhook_id}/rotate-secret")
+@limiter.limit("5/minute") if RATE_LIMITING_AVAILABLE else lambda f: f
 def rotate_webhook_secret(
+    request: Request,
     webhook_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -626,6 +636,18 @@ def rotate_webhook_secret(
     webhook.secret = new_secret
     webhook.updated_at = datetime.utcnow()
     db.commit()
+
+    # Audit log for sensitive secret rotation
+    AuditLogger.log(
+        db=db,
+        action="webhook_secret_rotated",
+        user_id=user.id,
+        details={
+            "webhook_id": webhook_id,
+            "webhook_name": webhook.name,
+            "ip_address": request.client.host if request.client else "unknown",
+        },
+    )
 
     return {
         "status": "success",

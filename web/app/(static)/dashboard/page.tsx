@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import {
@@ -23,10 +23,35 @@ import { usePermissions } from '@/lib/hooks/usePermissions'
 import { useMeetings, useMeetingStats } from '@/lib/hooks/useMeetings'
 import { useAdminStats, useAdminTrends } from '@/lib/hooks/useAdmin'
 import ErrorBoundary from '@/components/ErrorBoundary'
+import { StatCardSkeleton, RecentMeetingsSkeleton } from '@/components/ui/Skeleton'
 
 // Lazy load Onboarding modal for better initial load performance
 const Onboarding = dynamic(() => import('@/components/Onboarding'), {
-  loading: () => <div className="animate-pulse bg-gray-200 h-64 rounded-lg" />
+  loading: () => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      <div className="w-full max-w-2xl mx-4 bg-premium-card border border-premium-border rounded-2xl shadow-2xl p-8">
+        <div className="animate-pulse space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="h-5 w-32 bg-premium-surface rounded" />
+            <div className="h-5 w-5 bg-premium-surface rounded" />
+          </div>
+          <div className="h-2 w-full bg-premium-surface rounded-full" />
+          <div className="flex justify-center">
+            <div className="h-16 w-16 bg-premium-surface rounded-2xl" />
+          </div>
+          <div className="space-y-3 text-center">
+            <div className="h-8 w-64 bg-premium-surface rounded mx-auto" />
+            <div className="h-4 w-80 bg-premium-surface rounded mx-auto" />
+          </div>
+          <div className="flex justify-center gap-4">
+            <div className="h-10 w-24 bg-premium-surface rounded-lg" />
+            <div className="h-10 w-32 bg-gold-500/20 rounded-lg" />
+          </div>
+        </div>
+      </div>
+    </div>
+  ),
+  ssr: false
 })
 
 // Storage key for onboarding completion
@@ -473,7 +498,11 @@ export default function DashboardPage() {
         </header>
 
       {/* Admin Dashboard for staff */}
-      {permissions.isAdmin && <AdminDashboard />}
+      {permissions.isAdmin && (
+        <ErrorBoundary name="AdminDashboard">
+          <AdminDashboard />
+        </ErrorBoundary>
+      )}
 
       {/* Divider for admins */}
       {permissions.isAdmin && (
@@ -506,7 +535,16 @@ export default function DashboardPage() {
       )}
 
       {/* Stats Grid */}
-      <ErrorBoundary>
+      <ErrorBoundary
+        name="StatsSection"
+        fallback={
+          <section aria-label="Your statistics" className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <StatCardSkeleton key={i} />
+            ))}
+          </section>
+        }
+      >
         <section aria-label="Your statistics" className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <StatCard
             title="Total Meetings"
@@ -538,7 +576,7 @@ export default function DashboardPage() {
 
       {/* AI Insights Section */}
       {!permissions.isAdmin && (
-        <ErrorBoundary>
+        <ErrorBoundary name="AIInsightsSection">
           <AIInsightsSection stats={stats} status={status} />
         </ErrorBoundary>
       )}
@@ -546,80 +584,94 @@ export default function DashboardPage() {
       {/* Usage & Recent Meetings */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Daily Usage */}
-        <div className="bg-premium-card border border-premium-border rounded-xl p-4 sm:p-6">
-          <h3 className="font-semibold text-white mb-3 sm:mb-4 text-sm sm:text-base">Today&apos;s Usage</h3>
+        <ErrorBoundary name="DailyUsageSection">
+          <div className="bg-premium-card border border-premium-border rounded-xl p-4 sm:p-6">
+            <h3 className="font-semibold text-white mb-3 sm:mb-4 text-sm sm:text-base">Today&apos;s Usage</h3>
 
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-xs sm:text-sm mb-2">
-                <span className="text-gray-400">AI Responses</span>
-                <span className="text-white">
-                  {status?.usage.daily_count || 0}
-                  {status?.usage.daily_limit && ` / ${status.usage.daily_limit}`}
-                </span>
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between text-xs sm:text-sm mb-2">
+                  <span className="text-gray-400">AI Responses</span>
+                  <span className="text-white">
+                    {status?.usage.daily_count || 0}
+                    {status?.usage.daily_limit && ` / ${status.usage.daily_limit}`}
+                  </span>
+                </div>
+                <div className="h-2 sm:h-2.5 bg-premium-surface rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-gold-600 to-gold-400 rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(
+                        ((status?.usage.daily_count || 0) /
+                          (status?.usage.daily_limit || 100)) *
+                          100,
+                        100
+                      )}%`,
+                    }}
+                  />
+                </div>
               </div>
-              <div className="h-2 sm:h-2.5 bg-premium-surface rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-gold-600 to-gold-400 rounded-full transition-all"
-                  style={{
-                    width: `${Math.min(
-                      ((status?.usage.daily_count || 0) /
-                        (status?.usage.daily_limit || 100)) *
-                        100,
-                      100
-                    )}%`,
-                  }}
-                />
-              </div>
+
+              {status?.usage.daily_limit && (
+                <p className="text-xs text-gray-500">
+                  {status.usage.daily_limit - (status.usage.daily_count || 0)} responses remaining today
+                </p>
+              )}
             </div>
 
-            {status?.usage.daily_limit && (
-              <p className="text-xs text-gray-500">
-                {status.usage.daily_limit - (status.usage.daily_count || 0)} responses remaining today
+            <div className="mt-4 sm:mt-6 pt-4 border-t border-premium-border">
+              <div className="flex items-center text-gold-400">
+                <Zap className="h-4 w-4 mr-2" />
+                <span className="text-sm font-medium">Pro tip</span>
+              </div>
+              <p className="text-gray-400 text-xs sm:text-sm mt-2">
+                Use keyboard shortcuts for faster responses. Press Ctrl+Shift+R to toggle the overlay.
               </p>
-            )}
-          </div>
-
-          <div className="mt-4 sm:mt-6 pt-4 border-t border-premium-border">
-            <div className="flex items-center text-gold-400">
-              <Zap className="h-4 w-4 mr-2" />
-              <span className="text-sm font-medium">Pro tip</span>
             </div>
-            <p className="text-gray-400 text-xs sm:text-sm mt-2">
-              Use keyboard shortcuts for faster responses. Press Ctrl+Shift+R to toggle the overlay.
-            </p>
           </div>
-        </div>
+        </ErrorBoundary>
 
         {/* Recent Meetings */}
-        <div className="lg:col-span-2 bg-premium-card border border-premium-border rounded-xl p-4 sm:p-6">
-          <div className="flex items-center justify-between mb-3 sm:mb-4">
-            <h3 className="font-semibold text-white text-sm sm:text-base">Recent Meetings</h3>
-            <Link
-              href="/dashboard/meetings"
-              className="text-gold-400 text-sm hover:text-gold-300 flex items-center min-h-[44px] min-w-[44px] justify-center touch-manipulation"
-            >
-              View all
-              <ArrowRight className="h-4 w-4 ml-1" />
-            </Link>
-          </div>
+        <ErrorBoundary
+          name="RecentMeetingsSection"
+          fallback={
+            <div className="lg:col-span-2 bg-premium-card border border-premium-border rounded-xl p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="font-semibold text-white text-sm sm:text-base">Recent Meetings</h3>
+              </div>
+              <RecentMeetingsSkeleton />
+            </div>
+          }
+        >
+          <div className="lg:col-span-2 bg-premium-card border border-premium-border rounded-xl p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h3 className="font-semibold text-white text-sm sm:text-base">Recent Meetings</h3>
+              <Link
+                href="/dashboard/meetings"
+                className="text-gold-400 text-sm hover:text-gold-300 flex items-center min-h-[44px] min-w-[44px] justify-center touch-manipulation"
+              >
+                View all
+                <ArrowRight className="h-4 w-4 ml-1" />
+              </Link>
+            </div>
 
-          {meetings.length > 0 ? (
-            <div className="space-y-2 sm:space-y-3">
-              {meetings.slice(0, 5).map((meeting) => (
-                <RecentMeetingCard key={meeting.id} meeting={meeting} />
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-6 sm:py-8">
-              <Calendar className="h-10 w-10 sm:h-12 sm:w-12 text-gray-600 mx-auto mb-3" />
-              <p className="text-gray-400 text-sm sm:text-base">No meetings yet</p>
-              <p className="text-gray-500 text-xs sm:text-sm mt-1">
-                Start a meeting with ReadIn AI to see your history here
-              </p>
-            </div>
-          )}
-        </div>
+            {meetings.length > 0 ? (
+              <div className="space-y-2 sm:space-y-3">
+                {meetings.slice(0, 5).map((meeting) => (
+                  <RecentMeetingCard key={meeting.id} meeting={meeting} />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 sm:py-8">
+                <Calendar className="h-10 w-10 sm:h-12 sm:w-12 text-gray-600 mx-auto mb-3" />
+                <p className="text-gray-400 text-sm sm:text-base">No meetings yet</p>
+                <p className="text-gray-500 text-xs sm:text-sm mt-1">
+                  Start a meeting with ReadIn AI to see your history here
+                </p>
+              </div>
+            )}
+          </div>
+        </ErrorBoundary>
       </div>
 
       {/* Quick Actions */}

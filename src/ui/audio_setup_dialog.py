@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QRadioButton, QButtonGroup, QFrame, QScrollArea, QWidget,
     QMessageBox, QProgressBar
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QMetaObject, Q_ARG, Qt as QtCore
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QMetaObject, Q_ARG, Qt as QtCore, pyqtSlot
 from PyQt6.QtGui import QFont, QPalette, QColor
 
 import numpy as np
@@ -682,9 +682,26 @@ class AudioSetupDialog(QDialog):
             # Use signal for thread-safe state change
             self._set_testing_state(False)
 
+    @pyqtSlot(float)
     def _update_audio_level_display(self, level: float):
         """Update the audio level bar (called from main thread via signal)."""
         self.audio_level_bar.setValue(int(level))
+
+    def _invoke_ui_update(self, method_name: str, *args):
+        """Thread-safe UI update using QMetaObject.invokeMethod.
+
+        This provides an alternative to signals for cross-thread calls,
+        ensuring UI updates happen on the main thread.
+
+        Args:
+            method_name: Name of the method to invoke
+            *args: Arguments to pass to the method
+        """
+        QMetaObject.invokeMethod(
+            self,
+            method_name,
+            QtCore.ConnectionType.QueuedConnection
+        )
 
     def _open_sound_settings(self):
         """Open Windows Sound settings."""
