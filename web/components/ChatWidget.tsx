@@ -83,6 +83,11 @@ export default function ChatWidget() {
           // Clear polling when chat ends
           clearPolling()
         } else if (data.status === 'waiting') {
+          // Handle transfer from AI to human queue
+          // This happens when Novah transfers the user to a human agent
+          if (chatStatus === 'active') {
+            setChatStatus('waiting')
+          }
           setQueuePosition(data.queue_position || null)
         }
 
@@ -106,8 +111,9 @@ export default function ChatWidget() {
 
     // Set up polling interval only if still mounted after initial call
     // Use a microtask to ensure this runs after pollMessages completes
+    // Note: chatStatus check is redundant here since we return early if 'ended', but kept for safety
     const timeoutId = setTimeout(() => {
-      if (isMountedRef.current && chatStatus !== 'ended') {
+      if (isMountedRef.current) {
         pollIntervalRef.current = setInterval(pollMessages, 3000)
       }
     }, 0)
