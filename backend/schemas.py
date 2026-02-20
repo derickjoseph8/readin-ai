@@ -74,6 +74,9 @@ class UserCreate(BaseModel):
     account_type: Optional[str] = Field(default="individual", pattern="^(individual|company|business)$")
     company_name: Optional[str] = Field(None, max_length=255)
     company: Optional[str] = Field(None, max_length=255)  # Alias for company_name
+    country: Optional[str] = Field(None, max_length=100)  # User's country for analytics
+    city: Optional[str] = Field(None, max_length=100)  # User's city for analytics
+    industry: Optional[str] = Field(None, max_length=100)  # Industry sector for company accounts
 
     @field_validator("password")
     @classmethod

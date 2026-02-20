@@ -6,6 +6,25 @@ import { User, Building2 } from 'lucide-react'
 
 type AccountType = 'individual' | 'company'
 
+const COUNTRIES = [
+  'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany', 'France',
+  'Netherlands', 'Sweden', 'Norway', 'Denmark', 'Finland', 'Switzerland', 'Austria',
+  'Belgium', 'Ireland', 'New Zealand', 'Singapore', 'Japan', 'South Korea', 'India',
+  'Brazil', 'Mexico', 'South Africa', 'Kenya', 'Nigeria', 'Ghana', 'Egypt', 'UAE',
+  'Saudi Arabia', 'Israel', 'Spain', 'Italy', 'Portugal', 'Poland', 'Czech Republic',
+  'Argentina', 'Chile', 'Colombia', 'Philippines', 'Malaysia', 'Indonesia', 'Thailand',
+  'Vietnam', 'Taiwan', 'Hong Kong', 'China', 'Russia', 'Turkey', 'Other'
+]
+
+const INDUSTRIES = [
+  'Technology', 'Finance & Banking', 'Healthcare', 'Education', 'Legal',
+  'Consulting', 'Real Estate', 'Manufacturing', 'Retail & E-commerce',
+  'Media & Entertainment', 'Marketing & Advertising', 'Telecommunications',
+  'Energy & Utilities', 'Transportation & Logistics', 'Hospitality & Tourism',
+  'Non-profit', 'Government', 'Agriculture', 'Construction', 'Insurance',
+  'Pharmaceutical', 'Automotive', 'Aerospace', 'Food & Beverage', 'Other'
+]
+
 export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
@@ -13,6 +32,8 @@ export default function SignupPage() {
   const [name, setName] = useState('')
   const [accountType, setAccountType] = useState<AccountType>('individual')
   const [companyName, setCompanyName] = useState('')
+  const [country, setCountry] = useState('')
+  const [industry, setIndustry] = useState('')
   const [message, setMessage] = useState('')
   const [isError, setIsError] = useState(false)
 
@@ -30,8 +51,13 @@ export default function SignupPage() {
         account_type: accountType,
       }
 
-      if (accountType === 'company' && companyName) {
-        payload.company = companyName
+      if (country) {
+        payload.country = country
+      }
+
+      if (accountType === 'company') {
+        if (companyName) payload.company = companyName
+        if (industry) payload.industry = industry
       }
 
       const res = await fetch('https://www.getreadin.us/api/v1/auth/register', {
@@ -42,10 +68,25 @@ export default function SignupPage() {
 
       const data = await res.json()
 
-      if (res.ok && data.access_token) {
-        localStorage.setItem('readin_token', data.access_token)
-        setMessage('Success! Redirecting...')
-        window.location.href = '/dashboard'
+      if (res.ok) {
+        // Check if requires email verification (new flow)
+        if (data.requires_verification) {
+          setIsError(false)
+          setMessage(`Account created! Please check your email (${data.email}) to verify your account before logging in.`)
+          setLoading(false)
+          // Clear the form
+          setEmail('')
+          setPassword('')
+          setName('')
+          setCompanyName('')
+          setCountry('')
+          setIndustry('')
+        } else if (data.access_token) {
+          // Legacy flow - direct login (for backwards compatibility)
+          localStorage.setItem('readin_token', data.access_token)
+          setMessage('Success! Redirecting...')
+          window.location.href = '/dashboard'
+        }
       } else {
         setIsError(true)
         let errorMsg = 'Registration failed'
@@ -132,18 +173,52 @@ export default function SignupPage() {
 
             {/* Company Name - Only shown for company accounts */}
             {accountType === 'company' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Company Name</label>
-                <input
-                  type="text"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="w-full px-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none text-white"
-                  placeholder="Acme Inc."
-                  required={accountType === 'company'}
-                />
-              </div>
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Company Name</label>
+                  <input
+                    type="text"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    className="w-full px-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none text-white"
+                    placeholder="Acme Inc."
+                    required={accountType === 'company'}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Industry</label>
+                  <select
+                    value={industry}
+                    onChange={(e) => setIndustry(e.target.value)}
+                    className="w-full px-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none text-white"
+                    required={accountType === 'company'}
+                  >
+                    <option value="">Select Industry</option>
+                    {INDUSTRIES.map((ind) => (
+                      <option key={ind} value={ind}>{ind}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
             )}
+
+            {/* Country - Required for company accounts */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Country {accountType === 'company' && <span className="text-red-400">*</span>}
+              </label>
+              <select
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                className="w-full px-4 py-3 bg-premium-surface border border-premium-border rounded-lg focus:border-gold-500 focus:outline-none text-white"
+                required={accountType === 'company'}
+              >
+                <option value="">Select Country</option>
+                {COUNTRIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Email</label>

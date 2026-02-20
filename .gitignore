@@ -49,3 +49,7 @@ nul
 
 # Database files
 *.db
+release-artifacts/
+release-files/
+release-v140/
+*.db

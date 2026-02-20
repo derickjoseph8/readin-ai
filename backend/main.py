@@ -309,8 +309,8 @@ def shutdown():
 
 # ============== Auth Endpoints ==============
 
-@app.post("/auth/register", response_model=Token)
-@app.post("/api/v1/auth/register", response_model=Token)
+@app.post("/auth/register")
+@app.post("/api/v1/auth/register")
 @limiter.limit("3/minute")  # Strict rate limit on registration
 def register(request: Request, user_data: UserCreate, db: Session = Depends(get_db)):
     """
@@ -355,6 +355,9 @@ def register(request: Request, user_data: UserCreate, db: Session = Depends(get_
         specialization=user_data.specialization,
         preferred_language=user_data.preferred_language or "en",
         company=company_name,  # Store company name for company accounts
+        country=user_data.country,  # Geographic data for analytics
+        city=user_data.city,
+        industry=user_data.industry,  # Industry sector for company accounts
         subscription_status="trial"
     )
     db.add(user)
@@ -379,9 +382,12 @@ def register(request: Request, user_data: UserCreate, db: Session = Depends(get_
     except Exception:
         pass  # Don't fail registration if email fails
 
-    # Return token
-    token = create_access_token(user.id)
-    return Token(access_token=token)
+    # Don't return token - require email verification first
+    return {
+        "message": "Registration successful! Please check your email to verify your account.",
+        "email": user.email,
+        "requires_verification": True
+    }
 
 
 @app.post("/auth/login")
@@ -402,6 +408,13 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
+        )
+
+    # Check if email is verified (skip for staff/admin accounts)
+    if not user.email_verified and not user.is_staff:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email before logging in. Check your inbox for the verification link."
         )
 
     # Check if 2FA is enabled
@@ -672,20 +685,30 @@ def verify_email(request: Request, token: str, db: Session = Depends(get_db)):
     return {"message": "Email verified successfully! You can now access all features.", "verified": True}
 
 
+class ResendVerificationRequest(PydanticBaseModel):
+    email: str
+
+
 @app.post("/api/v1/auth/resend-verification")
 @limiter.limit("3/hour")
 def resend_verification(
     request: Request,
-    user: User = Depends(get_current_user),
+    data: ResendVerificationRequest,
     db: Session = Depends(get_db)
 ):
     """
-    Resend email verification link.
+    Resend email verification link (public endpoint).
 
     Rate limited to 3 requests per hour.
     """
+    user = db.query(User).filter(User.email == data.email).first()
+
+    if not user:
+        # Don't reveal if user exists
+        return {"message": "If this email is registered, a verification link has been sent."}
+
     if user.email_verified:
-        return {"message": "Email is already verified"}
+        return {"message": "Email is already verified. You can log in now."}
 
     # Generate new verification token
     verification_token = secrets.token_urlsafe(48)
@@ -818,9 +841,9 @@ def update_me(
             'sales': 'Sales Representative',
             'marketing': 'Marketing Manager',
             'consultant': 'Management Consultant',
-            'executive': 'Executive',
-            'student': 'Student',
-            'other': 'Other',
+            'executive': 'CEO / Managing Director',
+            'student': 'Teacher / Professor',  # No student, use educator
+            'other': 'Small Business Owner',  # Fallback
         }
         profession_name = profession_name_map.get(data.profession.lower())
         if profession_name:

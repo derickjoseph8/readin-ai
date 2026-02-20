@@ -13,6 +13,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
   const [isError, setIsError] = useState(false)
+  const [needsVerification, setNeedsVerification] = useState(false)
+  const [resendingEmail, setResendingEmail] = useState(false)
 
   // 2FA State
   const [requires2FA, setRequires2FA] = useState(false)
@@ -71,7 +73,12 @@ export default function LoginPage() {
         setLoading(false)
       } else {
         setIsError(true)
-        setMessage(data.detail || 'Login failed')
+        const errorDetail = data.detail || 'Login failed'
+        setMessage(errorDetail)
+        // Check if this is an email verification error
+        if (res.status === 403 && errorDetail.toLowerCase().includes('verify')) {
+          setNeedsVerification(true)
+        }
         setLoading(false)
       }
     } catch (err) {
@@ -79,6 +86,28 @@ export default function LoginPage() {
       setMessage('Network error - please try again')
       setLoading(false)
     }
+  }
+
+  const handleResendVerification = async () => {
+    setResendingEmail(true)
+    try {
+      const res = await fetch('https://www.getreadin.us/api/v1/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setIsError(false)
+        setMessage('Verification email sent! Please check your inbox.')
+        setNeedsVerification(false)
+      } else {
+        setMessage(data.detail || 'Failed to send verification email')
+      }
+    } catch {
+      setMessage('Network error - please try again')
+    }
+    setResendingEmail(false)
   }
 
   const handle2FASubmit = async (e: React.FormEvent) => {
@@ -290,6 +319,16 @@ export default function LoginPage() {
             {message && (
               <div className={`p-3 rounded-lg text-sm ${isError ? 'bg-red-500/10 border border-red-500/20 text-red-400' : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'}`}>
                 {message}
+                {needsVerification && (
+                  <button
+                    type="button"
+                    onClick={handleResendVerification}
+                    disabled={resendingEmail}
+                    className="mt-2 w-full py-2 bg-gold-500/20 text-gold-400 rounded-lg hover:bg-gold-500/30 transition disabled:opacity-50"
+                  >
+                    {resendingEmail ? 'Sending...' : 'Resend Verification Email'}
+                  </button>
+                )}
               </div>
             )}
 

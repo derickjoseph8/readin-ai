@@ -75,15 +75,23 @@ async def get_chat_queue(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get waiting and active chat sessions."""
+    """Get waiting and active chat sessions.
+
+    - Admins/Super Admins see all queues
+    - Regular agents only see their team's queue
+    """
     require_staff(current_user)
 
     query = db.query(ChatSession).filter(
         ChatSession.status.in_(["waiting", "active"])
     )
 
+    # If specific team requested, filter by it
     if team_id:
         query = query.filter(ChatSession.team_id == team_id)
+    # All staff can see all waiting chats (general queue approach)
+    # Chats with team_id=None are in general queue, visible to everyone
+    # Agents can pick up any chat and redirect to their team if needed
 
     sessions = query.order_by(ChatSession.started_at).all()
 
@@ -490,8 +498,8 @@ async def start_chat(
     session.status = "active"  # AI handles immediately
     db.commit()
 
-    # Send Novah's greeting message
-    greeting = novah_service.get_greeting()
+    # Send Novah's greeting message (personalized with user's name)
+    greeting = novah_service.get_greeting(current_user.full_name)
     greeting_msg = ChatMessage(
         session_id=session.id,
         sender_id=None,
@@ -629,7 +637,12 @@ async def send_customer_message(
             session.ai_resolution_status = "transferred"
             session.status = "waiting"
 
-            # Calculate queue position
+            # Store the suggested category but don't assign to team yet
+            # All chats go to general queue - agents can redirect after picking up
+            session.transfer_category = response.get("transfer_category", "general")
+            session.team_id = None  # General queue - visible to all agents
+
+            # Calculate queue position (general queue)
             queue_count = db.query(func.count(ChatSession.id)).filter(
                 and_(
                     ChatSession.status == "waiting",

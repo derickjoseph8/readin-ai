@@ -81,7 +81,10 @@ function DashboardSidebar() {
 
     // Customer support (for non-staff to create tickets)
     if (!permissions.isStaff) {
-      nav.push({ name: 'Team', href: '/dashboard/team', icon: Users })
+      // Team tab only for users in an organization
+      if (permissions.isOrgAdmin || permissions.isOrgMember) {
+        nav.push({ name: 'Team', href: '/dashboard/team', icon: Users })
+      }
       nav.push({ name: 'Support', href: '/dashboard/support', icon: HelpCircle })
     }
 

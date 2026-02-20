@@ -122,6 +122,11 @@ class User(Base):
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     role_in_org = Column(String, default="member")  # admin, member
     company = Column(String, nullable=True)  # For individual users not in an organization
+    industry = Column(String(100), nullable=True)  # Industry sector for analytics
+
+    # Geographic data (for analytics)
+    country = Column(String(100), nullable=True)
+    city = Column(String(100), nullable=True)
 
     # Staff/Team Member status (for internal teams - lifetime access while active)
     is_staff = Column(Boolean, default=False)
@@ -205,6 +210,9 @@ class User(Base):
 
     @property
     def is_active(self) -> bool:
+        # Staff members are always active (lifetime access)
+        if self.is_staff:
+            return True
         # Check organization subscription first
         if self.organization_id and self.organization:
             if self.organization.subscription_status == "active":

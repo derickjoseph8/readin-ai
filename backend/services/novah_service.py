@@ -11,7 +11,7 @@ import re
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, String
 
 from models import ChatSession, ChatMessage, KnowledgeBaseArticle, User
 
@@ -19,11 +19,11 @@ from models import ChatSession, ChatMessage, KnowledgeBaseArticle, User
 class NovahService:
     """AI chatbot service for initial customer support."""
 
-    # Novah's greeting messages
+    # Novah's greeting messages (with {name} placeholder)
     GREETINGS = [
-        "Hi! I'm Novah, ReadIn AI's virtual assistant. How can I help you today?",
-        "Hello! I'm Novah. I'm here to help you with any questions about ReadIn AI.",
-        "Welcome! I'm Novah, your AI assistant. What can I assist you with?",
+        "Hi{name}! I'm Novah, ReadIn AI's virtual assistant. How can I help you today?",
+        "Hello{name}! I'm Novah. I'm here to help you with any questions about ReadIn AI.",
+        "Welcome{name}! I'm Novah, your AI assistant. What can I assist you with?",
     ]
 
     # Direct answers for common questions (no KB search needed)
@@ -145,9 +145,13 @@ Just sign up at **getreadin.us/signup** to start your free trial!"""
 
     # Keywords that suggest transfer to human
     TRANSFER_KEYWORDS = [
-        "human", "agent", "person", "representative", "talk to someone",
-        "speak to someone", "real person", "live support", "escalate",
-        "not helpful", "doesn't help", "complaint"
+        "human", "agent", "person", "representative",
+        "talk to someone", "talk to agent", "talk to a representative", "talk to representative",
+        "speak to someone", "speak to agent", "speak to a representative", "speak to representative",
+        "real person", "live support", "live agent", "live chat",
+        "escalate", "manager", "supervisor",
+        "not helpful", "doesn't help", "complaint", "frustrated",
+        "connect me", "transfer me", "get me someone"
     ]
 
     # Keywords for transfer category detection
@@ -169,10 +173,13 @@ Just sign up at **getreadin.us/signup** to start your free trial!"""
     def __init__(self):
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
 
-    def get_greeting(self) -> str:
-        """Get a random greeting message."""
+    def get_greeting(self, user_name: Optional[str] = None) -> str:
+        """Get a random greeting message, personalized with user's name if available."""
         import random
-        return random.choice(self.GREETINGS)
+        greeting = random.choice(self.GREETINGS)
+        # Format name: ", John" or empty string if no name
+        name_str = f", {user_name.split()[0]}" if user_name else ""
+        return greeting.format(name=name_str)
 
     def get_direct_answer(self, message: str) -> Optional[str]:
         """Check if message matches a direct answer topic."""
@@ -273,23 +280,15 @@ Just sign up at **getreadin.us/signup** to start your free trial!"""
                     "detected_category": category
                 }
             else:
-                # Ask for category
-                response = """I'd be happy to connect you with one of our team members!
-
-To make sure I route you to the right person, what do you need help with?
-
-- **Sales** - Pricing, demos, or enterprise inquiries
-- **Billing** - Payments, refunds, or subscription questions
-- **Technical** - Technical support or issues
-
-Just reply with "sales", "billing", or "technical"."""
+                # Transfer immediately to general queue - agents will route as needed
+                response = "I'm connecting you with one of our team members right away. Please hold on while I find the right person to help you."
                 return {
                     "response": response,
                     "articles": [],
-                    "should_transfer": False,
-                    "transfer_reason": "",
-                    "detected_category": category,
-                    "awaiting_category": True
+                    "should_transfer": True,
+                    "transfer_reason": "User requested to speak with a representative",
+                    "transfer_category": "general",
+                    "detected_category": category
                 }
 
         # Check if this is a category response (sales/billing/technical) after we asked

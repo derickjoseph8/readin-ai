@@ -683,3 +683,59 @@ async def get_organization_tickets(
         "tickets": result,
         "total": total
     }
+
+
+# =============================================================================
+# GEOGRAPHIC ANALYTICS
+# =============================================================================
+
+@router.get("/analytics/geographic")
+async def get_geographic_analytics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get geographic distribution of users for analytics."""
+    require_admin(current_user)
+
+    # Country distribution
+    country_stats = db.query(
+        User.country,
+        func.count(User.id).label('count')
+    ).filter(
+        and_(User.is_staff == False, User.country.isnot(None), User.country != '')
+    ).group_by(User.country).order_by(func.count(User.id).desc()).all()
+
+    # City distribution (top 20)
+    city_stats = db.query(
+        User.city,
+        User.country,
+        func.count(User.id).label('count')
+    ).filter(
+        and_(User.is_staff == False, User.city.isnot(None), User.city != '')
+    ).group_by(User.city, User.country).order_by(func.count(User.id).desc()).limit(20).all()
+
+    # Industry distribution (for company accounts)
+    industry_stats = db.query(
+        User.industry,
+        func.count(User.id).label('count')
+    ).filter(
+        and_(User.is_staff == False, User.industry.isnot(None), User.industry != '')
+    ).group_by(User.industry).order_by(func.count(User.id).desc()).all()
+
+    # Total users with geographic data
+    users_with_country = db.query(func.count(User.id)).filter(
+        and_(User.is_staff == False, User.country.isnot(None), User.country != '')
+    ).scalar()
+
+    total_users = db.query(func.count(User.id)).filter(User.is_staff == False).scalar()
+
+    return {
+        "countries": [{"country": c[0], "count": c[1]} for c in country_stats],
+        "cities": [{"city": c[0], "country": c[1], "count": c[2]} for c in city_stats],
+        "industries": [{"industry": i[0], "count": i[1]} for i in industry_stats],
+        "coverage": {
+            "users_with_country": users_with_country,
+            "total_users": total_users,
+            "percentage": round((users_with_country / total_users * 100) if total_users > 0 else 0, 1)
+        }
+    }
