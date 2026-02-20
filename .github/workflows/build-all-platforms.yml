@@ -51,7 +51,7 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          brew install portaudio
+          brew install portaudio ffmpeg
 
       - name: Install Python dependencies
         run: |
@@ -93,7 +93,9 @@ jobs:
           sudo apt-get install -y portaudio19-dev python3-pyaudio libasound2-dev \
             libxcb-xinerama0 libxcb-cursor0 libxkbcommon-x11-0 libegl1 \
             libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
-            libxcb-render-util0 libxcb-shape0
+            libxcb-render-util0 libxcb-shape0 \
+            ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev \
+            libavfilter-dev libswscale-dev libswresample-dev
 
       - name: Install Python dependencies
         run: |
