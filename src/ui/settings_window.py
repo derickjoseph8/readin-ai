@@ -508,15 +508,15 @@ class SettingsWindow(QDialog):
     def check_for_updates(self):
         """Check for application updates."""
         try:
-            from update_checker import UpdateChecker
+            from src.update_checker import UpdateChecker
             checker = UpdateChecker()
-            has_update, info = checker.check_for_updates()
+            update_info = checker.check_for_updates(background=False)
 
-            if has_update:
+            if update_info:
                 QMessageBox.information(
                     self,
                     "Update Available",
-                    f"Version {info['version']} is available!\n\n{info.get('description', '')}"
+                    f"Version {update_info.version} is available!\n\n{update_info.changelog or 'New improvements and bug fixes.'}"
                 )
             else:
                 QMessageBox.information(
