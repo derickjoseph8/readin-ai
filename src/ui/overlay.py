@@ -92,69 +92,58 @@ class OverlayWindow(QWidget):
 
         header.addStretch()
 
-        # Start/Stop Listening button - 44px height minimum for accessibility
-        self.listen_btn = QPushButton("▶ Start")
-        self.listen_btn.setFixedSize(80, 44)
-        self.listen_btn.setToolTip("Start/Stop Listening")
+        # Icon-only buttons - clean minimal design with hover tooltips
+        icon_btn_style = """
+            QPushButton {
+                background-color: #333333;
+                color: #ffffff;
+                border: 1px solid #444444;
+                border-radius: 6px;
+                font-size: 16px;
+            }
+            QPushButton:hover {
+                background-color: #d4af37;
+                color: #000000;
+                border-color: #d4af37;
+            }
+        """
+
+        # Start/Stop Listening button
+        self.listen_btn = QPushButton("▶")
+        self.listen_btn.setFixedSize(36, 36)
+        self.listen_btn.setToolTip("Start Listening")
         self._is_listening = False
         self._update_listen_btn_style()
         self.listen_btn.clicked.connect(self._on_listen_clicked)
         header.addWidget(self.listen_btn)
 
-        # Font size toggle button - 44x44 minimum for accessibility
-        self.size_btn = QPushButton("A+ Text")
-        self.size_btn.setFixedSize(60, 44)
-        self.size_btn.setToolTip("Toggle large text mode")
-        self.size_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #333333;
-                color: #ffffff;
-                border: 1px solid #444444;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #d4af37;
-                color: #000000;
-                border-color: #d4af37;
-            }
-        """)
+        # Font size toggle button
+        self.size_btn = QPushButton("A")
+        self.size_btn.setFixedSize(36, 36)
+        self.size_btn.setToolTip("Toggle large text")
+        self.size_btn.setStyleSheet(icon_btn_style)
         self.size_btn.clicked.connect(self._toggle_size)
         header.addWidget(self.size_btn)
 
-        # Settings button - 44x44 minimum for accessibility
-        self.settings_btn = QPushButton("⚙ Settings")
-        self.settings_btn.setFixedSize(80, 44)
+        # Settings button
+        self.settings_btn = QPushButton("⚙")
+        self.settings_btn.setFixedSize(36, 36)
         self.settings_btn.setToolTip("Settings")
-        self.settings_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #333333;
-                color: #ffffff;
-                border: 1px solid #444444;
-                border-radius: 4px;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #d4af37;
-                color: #000000;
-                border-color: #d4af37;
-            }
-        """)
+        self.settings_btn.setStyleSheet(icon_btn_style)
         self.settings_btn.clicked.connect(self.settings_requested.emit)
         header.addWidget(self.settings_btn)
 
-        # Logout button - 44x44 minimum for accessibility
-        self.logout_btn = QPushButton("⏻ Logout")
-        self.logout_btn.setFixedSize(80, 44)
+        # Logout button
+        self.logout_btn = QPushButton("⏻")
+        self.logout_btn.setFixedSize(36, 36)
         self.logout_btn.setToolTip("Logout")
         self.logout_btn.setStyleSheet("""
             QPushButton {
                 background-color: #333333;
                 color: #ffffff;
                 border: 1px solid #444444;
-                border-radius: 4px;
-                font-size: 12px;
+                border-radius: 6px;
+                font-size: 16px;
             }
             QPushButton:hover {
                 background-color: #f59e0b;
@@ -165,40 +154,26 @@ class OverlayWindow(QWidget):
         self.logout_btn.clicked.connect(self.logout_requested.emit)
         header.addWidget(self.logout_btn)
 
-        # Minimize button - 44x44 minimum for accessibility
-        self.min_btn = QPushButton("— Min")
-        self.min_btn.setFixedSize(60, 44)
-        self.min_btn.setToolTip("Minimize window")
-        self.min_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #333333;
-                color: #ffffff;
-                border: 1px solid #444444;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #d4af37;
-                color: #000000;
-                border-color: #d4af37;
-            }
-        """)
+        # Minimize button
+        self.min_btn = QPushButton("—")
+        self.min_btn.setFixedSize(36, 36)
+        self.min_btn.setToolTip("Minimize")
+        self.min_btn.setStyleSheet(icon_btn_style)
         self.min_btn.clicked.connect(self.showMinimized)
         header.addWidget(self.min_btn)
 
-        # Close button - 44x44 minimum for accessibility
-        self.close_btn = QPushButton("✕ Close")
-        self.close_btn.setFixedSize(70, 44)
-        self.close_btn.setToolTip("Close overlay")
+        # Close button
+        self.close_btn = QPushButton("✕")
+        self.close_btn.setFixedSize(36, 36)
+        self.close_btn.setToolTip("Close")
         self.close_btn.setStyleSheet("""
             QPushButton {
                 background-color: #dc2626;
                 color: #ffffff;
                 border: none;
-                border-radius: 4px;
+                border-radius: 6px;
+                font-size: 14px;
                 font-weight: bold;
-                font-size: 11px;
             }
             QPushButton:hover {
                 background-color: #ef4444;
@@ -316,39 +291,40 @@ class OverlayWindow(QWidget):
         self._apply_response_style(self._large_mode)
 
         if self._large_mode:
-            self.size_btn.setText("A- Text")
+            self.size_btn.setToolTip("Normal text size")
             self.resize(520, 380)
         else:
-            self.size_btn.setText("A+ Text")
+            self.size_btn.setToolTip("Large text size")
             self.resize(OVERLAY_WIDTH, OVERLAY_HEIGHT)
 
     def _update_listen_btn_style(self):
         """Update listen button style based on state."""
         if self._is_listening:
-            self.listen_btn.setText("■ Stop")
+            self.listen_btn.setText("■")
+            self.listen_btn.setToolTip("Stop Listening")
             self.listen_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #ef4444;
                     color: #ffffff;
                     border: none;
-                    border-radius: 4px;
+                    border-radius: 6px;
+                    font-size: 14px;
                     font-weight: bold;
-                    font-size: 10px;
                 }
                 QPushButton:hover {
                     background-color: #dc2626;
                 }
             """)
         else:
-            self.listen_btn.setText("▶ Start")
+            self.listen_btn.setText("▶")
+            self.listen_btn.setToolTip("Start Listening")
             self.listen_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #22c55e;
                     color: #ffffff;
                     border: none;
-                    border-radius: 4px;
-                    font-weight: bold;
-                    font-size: 10px;
+                    border-radius: 6px;
+                    font-size: 16px;
                 }
                 QPushButton:hover {
                     background-color: #16a34a;

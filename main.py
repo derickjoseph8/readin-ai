@@ -63,6 +63,7 @@ from src.ui.audio_setup_dialog import AudioSetupDialog
 from src.ui.app_selector_dialog import AppSelectorDialog
 from src.ui.first_run_wizard import FirstRunWizard
 from src.browser_bridge import BrowserBridge
+from src.shortcut_creator import create_desktop_shortcut, shortcut_exists
 
 
 class SignalBridge(QObject):
@@ -1027,16 +1028,22 @@ class ReadInApp:
         return self.app.exec()
 
     def _startup_update_check(self):
-        """Silent update check on startup."""
+        """Check for updates on startup and prompt user."""
         try:
             has_update, info = self.update_checker.check_for_updates()
             if has_update:
-                self.tray.showMessage(
-                    "ReadIn AI Update",
-                    f"Version {info['version']} is available! Click to download.",
-                    QSystemTrayIcon.MessageIcon.Information,
-                    5000
+                # Show update dialog instead of just notification
+                result = QMessageBox.question(
+                    None,
+                    "Update Available",
+                    f"ReadIn AI {info['version']} is available!\n\n"
+                    f"You're currently using version {self.update_checker.current_version}.\n\n"
+                    f"{info.get('description', 'New improvements and bug fixes.')}\n\n"
+                    "Would you like to download the update now?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                 )
+                if result == QMessageBox.StandardButton.Yes and info.get("download_url"):
+                    webbrowser.open(info["download_url"])
         except Exception:
             pass  # Silently ignore startup update check failures
 
@@ -1054,6 +1061,17 @@ class ReadInApp:
 
         # Mark first run as completed (even if cancelled)
         self.settings.set("first_run_completed", True)
+
+        # Create desktop shortcut if it doesn't exist
+        if not shortcut_exists():
+            try:
+                success, message = create_desktop_shortcut()
+                if success:
+                    print(f"Desktop shortcut created: {message}")
+                else:
+                    print(f"Could not create desktop shortcut: {message}")
+            except Exception as e:
+                print(f"Error creating desktop shortcut: {e}")
 
     def _show_audio_setup(self):
         """Show audio setup dialog on first run."""
