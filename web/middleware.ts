@@ -17,11 +17,8 @@ export default createMiddleware({
 });
 
 export const config = {
-  // Match routes that need locale detection
+  // Match all paths except static files and API routes
   matcher: [
-    // Root path
-    '/',
-    // Locale-prefixed paths
-    '/(en|es|sw|fr|de|pt|ja)/:path*'
+    '/((?!api|_next|_vercel|.*\\..*).*)'
   ]
 };
