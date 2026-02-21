@@ -470,17 +470,17 @@ class ReadInApp:
     def _check_for_updates(self):
         """Check for application updates."""
         try:
-            has_update, info = self.update_checker.check_for_updates()
+            update_info = self.update_checker.check_for_updates(background=False)
 
-            if has_update:
+            if update_info:
                 result = QMessageBox.question(
                     None,
                     "Update Available",
-                    f"Version {info['version']} is available!\n\n{info.get('description', '')}\n\nWould you like to download it?",
+                    f"Version {update_info.version} is available!\n\n{update_info.changelog or 'New improvements and bug fixes.'}\n\nWould you like to download it?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                 )
-                if result == QMessageBox.StandardButton.Yes and info.get("download_url"):
-                    webbrowser.open(info["download_url"])
+                if result == QMessageBox.StandardButton.Yes and update_info.download_url:
+                    webbrowser.open(update_info.download_url)
             else:
                 QMessageBox.information(
                     None,
@@ -1030,20 +1030,20 @@ class ReadInApp:
     def _startup_update_check(self):
         """Check for updates on startup and prompt user."""
         try:
-            has_update, info = self.update_checker.check_for_updates()
-            if has_update:
+            update_info = self.update_checker.check_for_updates(background=False)
+            if update_info:
                 # Show update dialog instead of just notification
                 result = QMessageBox.question(
                     None,
                     "Update Available",
-                    f"ReadIn AI {info['version']} is available!\n\n"
+                    f"ReadIn AI {update_info.version} is available!\n\n"
                     f"You're currently using version {self.update_checker.current_version}.\n\n"
-                    f"{info.get('description', 'New improvements and bug fixes.')}\n\n"
+                    f"{update_info.changelog or 'New improvements and bug fixes.'}\n\n"
                     "Would you like to download the update now?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                 )
-                if result == QMessageBox.StandardButton.Yes and info.get("download_url"):
-                    webbrowser.open(info["download_url"])
+                if result == QMessageBox.StandardButton.Yes and update_info.download_url:
+                    webbrowser.open(update_info.download_url)
         except Exception:
             pass  # Silently ignore startup update check failures
 
