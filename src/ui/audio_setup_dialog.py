@@ -18,6 +18,7 @@ from PyQt6.QtGui import QFont, QPalette, QColor
 import numpy as np
 
 from src.audio_capture import AudioCapture
+from src.drivers.driver_installer import VirtualAudioInstaller
 from config import IS_WINDOWS, IS_MACOS, IS_LINUX
 
 
@@ -63,17 +64,17 @@ class AudioSetupDialog(QDialog):
     def setup_ui(self):
         """Set up the dialog UI."""
         self.setWindowTitle("Audio Setup - ReadIn AI")
-        self.setFixedWidth(520)
-        self.setMinimumHeight(450)
+        self.setFixedWidth(460)
+        self.setMinimumHeight(350)
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowStaysOnTopHint)
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(16)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
 
         # Header
         header = QLabel("Audio Input Setup")
-        header.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        header.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
         header.setStyleSheet("color: #ffffff; background: transparent;")
         layout.addWidget(header)
 
@@ -99,7 +100,7 @@ class AudioSetupDialog(QDialog):
 
         desc = QLabel(desc_text)
         desc.setWordWrap(True)
-        desc.setStyleSheet("color: #aaaaaa; font-size: 12px; background: transparent;")
+        desc.setStyleSheet("color: #aaaaaa; font-size: 11px; background: transparent;")
         layout.addWidget(desc)
 
         # Device list container
@@ -157,24 +158,24 @@ class AudioSetupDialog(QDialog):
                     QRadioButton {
                         color: #22c55e;
                         font-weight: bold;
-                        padding: 8px;
+                        padding: 6px;
                         background-color: #1a3a1a;
                         border-radius: 6px;
                     }
                     QRadioButton::indicator {
-                        width: 16px;
-                        height: 16px;
+                        width: 14px;
+                        height: 14px;
                     }
                 """)
             else:
                 radio.setStyleSheet("""
                     QRadioButton {
                         color: #cccccc;
-                        padding: 8px;
+                        padding: 6px;
                     }
                     QRadioButton::indicator {
-                        width: 16px;
-                        height: 16px;
+                        width: 14px;
+                        height: 14px;
                     }
                 """)
 
@@ -228,7 +229,7 @@ class AudioSetupDialog(QDialog):
         self.audio_level_bar.setMaximum(100)
         self.audio_level_bar.setValue(0)
         self.audio_level_bar.setTextVisible(False)
-        self.audio_level_bar.setFixedHeight(20)
+        self.audio_level_bar.setFixedHeight(16)
         self.audio_level_bar.setStyleSheet("""
             QProgressBar {
                 border: 1px solid #444444;
@@ -272,162 +273,14 @@ class AudioSetupDialog(QDialog):
         test_layout.addLayout(test_btn_row)
         layout.addWidget(test_frame)
 
-        # Warning if no loopback devices (platform-specific)
+        # Store reference to device frame for refreshing
+        self._device_frame = device_frame
+        self._main_layout = layout
+
+        # Warning/Install section if no loopback devices
+        self._warning_frame = None
         if not has_loopback:
-            warning_frame = QFrame()
-            warning_frame.setStyleSheet("""
-                QFrame {
-                    background-color: #3d2a00;
-                    border: 1px solid #f59e0b;
-                    border-radius: 6px;
-                    padding: 8px;
-                }
-            """)
-            warning_layout = QVBoxLayout(warning_frame)
-            warning_layout.setContentsMargins(12, 8, 12, 8)
-
-            warning_title = QLabel("No Loopback Device Found")
-            warning_title.setStyleSheet("color: #fbbf24; font-weight: bold; font-size: 12px; background: transparent;")
-            warning_layout.addWidget(warning_title)
-
-            # Platform-specific instructions
-            if IS_WINDOWS:
-                warning_text_content = (
-                    "To capture what others say in meetings, you need a loopback device.\n\n"
-                    "Option 1: Enable Stereo Mix (free)\n"
-                    "  1. Right-click speaker icon → Sound settings\n"
-                    "  2. Click 'More sound settings' → Recording tab\n"
-                    "  3. Right-click → Show Disabled Devices\n"
-                    "  4. Right-click 'Stereo Mix' → Enable\n\n"
-                    "Option 2: Install VB-Cable (free virtual audio cable)\n"
-                    "  Download from: vb-audio.com/Cable"
-                )
-            elif IS_MACOS:
-                warning_text_content = (
-                    "To capture system audio on macOS, install BlackHole (free).\n\n"
-                    "Installation:\n"
-                    "  1. Run: brew install blackhole-2ch\n"
-                    "  2. Or download from: existential.audio/blackhole\n\n"
-                    "Setup:\n"
-                    "  1. Open Audio MIDI Setup (Spotlight: 'Audio MIDI')\n"
-                    "  2. Create Multi-Output Device with BlackHole + speakers\n"
-                    "  3. Set Multi-Output as system output\n"
-                    "  4. Select BlackHole 2ch here"
-                )
-            else:  # Linux
-                warning_text_content = (
-                    "To capture system audio on Linux, use PulseAudio monitor.\n\n"
-                    "The monitor device should appear automatically.\n"
-                    "Look for 'Monitor of [your audio device]'.\n\n"
-                    "If not visible:\n"
-                    "  1. Install pavucontrol: sudo apt install pavucontrol\n"
-                    "  2. Open PulseAudio Volume Control\n"
-                    "  3. Go to Recording tab while this dialog is open\n"
-                    "  4. Change 'Record from' to 'Monitor of [speaker]'"
-                )
-
-            warning_text = QLabel(warning_text_content)
-            warning_text.setWordWrap(True)
-            warning_text.setStyleSheet("color: #fbbf24; font-size: 11px; background: transparent;")
-            warning_layout.addWidget(warning_text)
-
-            btn_row = QHBoxLayout()
-
-            if IS_WINDOWS:
-                open_sound_btn = QPushButton("Open Sound Settings")
-                open_sound_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #f59e0b;
-                        color: #000000;
-                        border: none;
-                        padding: 6px 12px;
-                        border-radius: 4px;
-                        font-weight: bold;
-                        font-size: 11px;
-                    }
-                    QPushButton:hover {
-                        background-color: #d97706;
-                    }
-                """)
-                open_sound_btn.clicked.connect(self._open_sound_settings)
-                btn_row.addWidget(open_sound_btn)
-
-                download_btn = QPushButton("Download VB-Cable")
-                download_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #3d3d3d;
-                        color: #ffffff;
-                        border: 1px solid #555555;
-                        padding: 6px 12px;
-                        border-radius: 4px;
-                        font-size: 11px;
-                    }
-                    QPushButton:hover {
-                        background-color: #4d4d4d;
-                    }
-                """)
-                download_btn.clicked.connect(self._open_vbcable_download)
-                btn_row.addWidget(download_btn)
-
-            elif IS_MACOS:
-                install_btn = QPushButton("Install BlackHole (Homebrew)")
-                install_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #f59e0b;
-                        color: #000000;
-                        border: none;
-                        padding: 6px 12px;
-                        border-radius: 4px;
-                        font-weight: bold;
-                        font-size: 11px;
-                    }
-                    QPushButton:hover {
-                        background-color: #d97706;
-                    }
-                """)
-                install_btn.clicked.connect(self._install_blackhole)
-                btn_row.addWidget(install_btn)
-
-                download_btn = QPushButton("Download BlackHole")
-                download_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #3d3d3d;
-                        color: #ffffff;
-                        border: 1px solid #555555;
-                        padding: 6px 12px;
-                        border-radius: 4px;
-                        font-size: 11px;
-                    }
-                    QPushButton:hover {
-                        background-color: #4d4d4d;
-                    }
-                """)
-                download_btn.clicked.connect(self._open_blackhole_download)
-                btn_row.addWidget(download_btn)
-
-            else:  # Linux
-                open_pavucontrol_btn = QPushButton("Open PulseAudio Control")
-                open_pavucontrol_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #f59e0b;
-                        color: #000000;
-                        border: none;
-                        padding: 6px 12px;
-                        border-radius: 4px;
-                        font-weight: bold;
-                        font-size: 11px;
-                    }
-                    QPushButton:hover {
-                        background-color: #d97706;
-                    }
-                """)
-                open_pavucontrol_btn.clicked.connect(self._open_pavucontrol)
-                btn_row.addWidget(open_pavucontrol_btn)
-
-            btn_row.addStretch()
-            warning_layout.addLayout(btn_row)
-
-            layout.addWidget(warning_frame)
+            self._create_install_section(layout)
 
         # Continue button
         btn_layout = QHBoxLayout()
@@ -780,6 +633,219 @@ class AudioSetupDialog(QDialog):
                 "Error",
                 f"Could not open PulseAudio Control: {e}"
             )
+
+    def _create_install_section(self, layout):
+        """Create compact install section for virtual audio driver."""
+        self._warning_frame = QFrame()
+        self._warning_frame.setStyleSheet("""
+            QFrame {
+                background-color: #2a3a2a;
+                border: 1px solid #22c55e;
+                border-radius: 6px;
+            }
+        """)
+        warning_layout = QVBoxLayout(self._warning_frame)
+        warning_layout.setContentsMargins(12, 8, 12, 8)
+        warning_layout.setSpacing(6)
+
+        # Compact message with install button
+        driver_name = VirtualAudioInstaller.get_driver_name()
+
+        header_row = QHBoxLayout()
+        warning_title = QLabel(f"Install {driver_name} for meeting audio capture")
+        warning_title.setStyleSheet("color: #22c55e; font-weight: bold; font-size: 11px; background: transparent;")
+        header_row.addWidget(warning_title)
+        header_row.addStretch()
+        warning_layout.addLayout(header_row)
+
+        # Button row
+        btn_row = QHBoxLayout()
+
+        self._install_btn = QPushButton(VirtualAudioInstaller.get_install_button_text())
+        self._install_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #22c55e;
+                color: #ffffff;
+                border: none;
+                padding: 6px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #16a34a;
+            }
+            QPushButton:disabled {
+                background-color: #4a4a4a;
+                color: #888888;
+            }
+        """)
+        self._install_btn.clicked.connect(self._install_virtual_audio)
+        btn_row.addWidget(self._install_btn)
+
+        self._refresh_btn = QPushButton("Refresh")
+        self._refresh_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3d3d3d;
+                color: #ffffff;
+                border: 1px solid #555555;
+                padding: 6px 12px;
+                border-radius: 4px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #4d4d4d;
+            }
+        """)
+        self._refresh_btn.clicked.connect(self._refresh_devices)
+        btn_row.addWidget(self._refresh_btn)
+
+        btn_row.addStretch()
+
+        # Install status label
+        self._install_status = QLabel("")
+        self._install_status.setStyleSheet("color: #888888; font-size: 10px; background: transparent;")
+        btn_row.addWidget(self._install_status)
+
+        warning_layout.addLayout(btn_row)
+        layout.addWidget(self._warning_frame)
+
+    def _install_virtual_audio(self):
+        """Install virtual audio driver."""
+        self._install_btn.setEnabled(False)
+        self._install_btn.setText("Installing...")
+        self._install_status.setText("")
+        self._install_status.setStyleSheet("color: #888888; font-size: 10px; background: transparent;")
+
+        # Run installation in background thread
+        def install_thread():
+            def progress_callback(msg):
+                # Update status from main thread
+                QTimer.singleShot(0, lambda: self._install_status.setText(msg))
+
+            result = VirtualAudioInstaller.install(progress_callback)
+
+            # Update UI from main thread
+            QTimer.singleShot(0, lambda: self._on_install_complete(result))
+
+        thread = threading.Thread(target=install_thread, daemon=True)
+        thread.start()
+
+    def _on_install_complete(self, result):
+        """Handle installation completion."""
+        self._install_btn.setEnabled(True)
+        self._install_btn.setText(VirtualAudioInstaller.get_install_button_text())
+
+        if result.success:
+            self._install_status.setText(result.message)
+            self._install_status.setStyleSheet("color: #22c55e; font-size: 10px; background: transparent;")
+
+            if result.needs_restart:
+                # Refresh devices after a short delay
+                QTimer.singleShot(1000, self._refresh_devices)
+        else:
+            self._install_status.setText(result.message)
+            self._install_status.setStyleSheet("color: #f59e0b; font-size: 10px; background: transparent;")
+
+    def _refresh_devices(self):
+        """Refresh the device list."""
+        # Stop any ongoing test
+        if self._testing:
+            self._stop_test()
+
+        # Clear existing device buttons
+        for btn in self.button_group.buttons():
+            self.button_group.removeButton(btn)
+            btn.deleteLater()
+
+        # Clear device frame layout
+        device_layout = self._device_frame.layout()
+        while device_layout.count():
+            item = device_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        # Reload devices
+        self._devices = AudioCapture.get_available_devices()
+        self._selected_device = None
+
+        # Sort: loopback first, then default, then others
+        def sort_key(d):
+            if d['is_loopback']:
+                return (0, d['name'])
+            if d['is_default']:
+                return (1, d['name'])
+            return (2, d['name'])
+
+        self._devices.sort(key=sort_key)
+
+        has_loopback = any(d['is_loopback'] for d in self._devices)
+
+        for i, device in enumerate(self._devices):
+            radio = QRadioButton()
+
+            name = device['name']
+            if len(name) > 45:
+                name = name[:42] + "..."
+
+            badges = []
+            if device['is_loopback']:
+                badges.append("RECOMMENDED")
+            if device['is_default']:
+                badges.append("DEFAULT")
+
+            label = name
+            if badges:
+                label += f"  [{', '.join(badges)}]"
+            radio.setText(label)
+
+            if device['is_loopback']:
+                radio.setStyleSheet("""
+                    QRadioButton {
+                        color: #22c55e;
+                        font-weight: bold;
+                        padding: 6px;
+                        background-color: #1a3a1a;
+                        border-radius: 6px;
+                    }
+                    QRadioButton::indicator {
+                        width: 14px;
+                        height: 14px;
+                    }
+                """)
+            else:
+                radio.setStyleSheet("""
+                    QRadioButton {
+                        color: #cccccc;
+                        padding: 6px;
+                    }
+                    QRadioButton::indicator {
+                        width: 14px;
+                        height: 14px;
+                    }
+                """)
+
+            radio.setProperty("device_index", device['index'])
+            self.button_group.addButton(radio, i)
+            device_layout.addWidget(radio)
+
+            if device['is_loopback'] and self._selected_device is None:
+                radio.setChecked(True)
+                self._selected_device = device['index']
+
+        if self._selected_device is None and self._devices:
+            first_btn = self.button_group.button(0)
+            if first_btn:
+                first_btn.setChecked(True)
+                self._selected_device = self._devices[0]['index']
+
+        device_layout.addStretch()
+
+        # Update warning frame visibility
+        if has_loopback and self._warning_frame:
+            self._warning_frame.hide()
+            self._install_status.setText("Virtual audio detected!")
+            self._install_status.setStyleSheet("color: #22c55e; font-size: 10px; background: transparent;")
 
     def get_selected_device(self) -> Optional[int]:
         """Get the selected device index."""

@@ -24,6 +24,10 @@ datas = [
 if (PROJECT_ROOT / 'src').exists():
     datas.append(('src', 'src'))
 
+# Include drivers directory with bundled installers
+if (PROJECT_ROOT / 'src' / 'drivers').exists():
+    datas.append(('src/drivers', 'drivers'))
+
 # Hidden imports - all modules that PyInstaller might miss
 hidden_imports = [
     # Qt

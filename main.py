@@ -4,6 +4,7 @@ Commercial version with authentication and subscription management.
 """
 
 import sys
+import os
 
 # Enable line buffering for better logging (may not work on all platforms)
 try:
@@ -13,9 +14,21 @@ except (AttributeError, OSError):
     pass  # Not supported on this platform
 
 import webbrowser
+from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QMessageBox
 from PyQt6.QtGui import QIcon, QAction
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt
+
+
+def get_asset_path(relative_path: str) -> str:
+    """Get absolute path to asset, works for dev and PyInstaller bundle."""
+    if getattr(sys, 'frozen', False):
+        # Running in PyInstaller bundle
+        base_path = Path(sys._MEIPASS) if hasattr(sys, '_MEIPASS') else Path(sys.executable).parent
+    else:
+        # Running in development
+        base_path = Path(__file__).parent
+    return str(base_path / relative_path)
 
 from config import ANTHROPIC_API_KEY
 from src.process_monitor import ProcessMonitor
@@ -266,13 +279,30 @@ class ReadInApp:
     def _setup_tray(self):
         self.tray = QSystemTrayIcon(self.app)
 
-        try:
-            self.tray.setIcon(QIcon("assets/icon.png"))
-        except Exception:
+        # Load icon from correct path (works for dev and PyInstaller bundle)
+        icon_loaded = False
+        icon_paths = [
+            get_asset_path("assets/icon.ico"),  # Windows ICO
+            get_asset_path("assets/icon.png"),  # Fallback PNG
+        ]
+
+        for icon_path in icon_paths:
+            if os.path.exists(icon_path):
+                icon = QIcon(icon_path)
+                if not icon.isNull():
+                    self.tray.setIcon(icon)
+                    self.app.setWindowIcon(icon)  # Set app icon for taskbar
+                    icon_loaded = True
+                    break
+
+        if not icon_loaded:
+            # Create fallback colored icon
             from PyQt6.QtGui import QPixmap, QColor
             pixmap = QPixmap(32, 32)
-            pixmap.fill(QColor("#89b4fa"))
-            self.tray.setIcon(QIcon(pixmap))
+            pixmap.fill(QColor("#d4a853"))  # Gold color to match brand
+            fallback_icon = QIcon(pixmap)
+            self.tray.setIcon(fallback_icon)
+            self.app.setWindowIcon(fallback_icon)
 
         self._update_tray_menu()
         self.tray.setToolTip("ReadIn AI")

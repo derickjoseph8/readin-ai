@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (e.g., 1.0.0)'
+        description: 'Version number (e.g., 1.4.1)'
         required: true
-        default: '1.0.0'
+        default: '1.4.1'
 
 env:
   APP_NAME: ReadInAI
@@ -30,22 +30,34 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install -r requirements.txt
           pip install pyinstaller
-          pip install PyQt6 anthropic faster-whisper httpx psutil pynput python-dotenv websockets pyaudio numpy pillow scipy
 
       - name: Build executable
         run: python -m PyInstaller build.spec --noconfirm
 
+      - name: Get version
+        id: version
+        run: |
+          if ("${{ github.event.inputs.version }}" -ne "") {
+            echo "VERSION=${{ github.event.inputs.version }}" >> $env:GITHUB_OUTPUT
+          } elseif ("${{ github.ref_name }}" -match "^v(.+)$") {
+            echo "VERSION=$($matches[1])" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "VERSION=1.4.1" >> $env:GITHUB_OUTPUT
+          }
+
       - name: Package artifacts
         run: |
-          $version = "${{ github.event.inputs.version || '1.0.0' }}"
-          Compress-Archive -Path dist/ReadInAI-Portable.exe -DestinationPath "ReadInAI-Windows-$version.zip"
+          $version = "${{ steps.version.outputs.VERSION }}"
+          Rename-Item -Path dist/ReadInAI-Portable.exe -NewName "ReadInAI-Windows-$version.exe"
+          Move-Item -Path "dist/ReadInAI-Windows-$version.exe" -Destination .
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: ReadInAI-Windows-*.zip
+          path: ReadInAI-Windows-*.exe
 
   build-macos:
     runs-on: macos-latest
@@ -59,26 +71,43 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install system dependencies
-        run: brew install portaudio
+        run: |
+          brew install portaudio ffmpeg
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install -r requirements.txt
           pip install pyinstaller
-          pip install PyQt6 anthropic faster-whisper httpx psutil pynput python-dotenv websockets sounddevice numpy pillow scipy
 
       - name: Build app bundle
         run: python -m PyInstaller build.spec --noconfirm
 
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_name }}" =~ ^v(.+)$ ]]; then
+            echo "VERSION=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=1.4.1" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create DMG
         run: |
-          VERSION="${{ github.event.inputs.version || '1.0.0' }}"
-          # Create DMG from app bundle
+          VERSION="${{ steps.version.outputs.VERSION }}"
           if [ -d "dist/ReadInAI.app" ]; then
+            # Create DMG from app bundle
             hdiutil create -volname "ReadIn AI" -srcfolder dist/ReadInAI.app -ov -format UDZO "ReadInAI-macOS-$VERSION.dmg"
+          elif [ -d "dist/ReadInAI" ]; then
+            # Create DMG from folder
+            mkdir -p dmg_staging
+            cp -R dist/ReadInAI dmg_staging/
+            hdiutil create -volname "ReadIn AI" -srcfolder dmg_staging -ov -format UDZO "ReadInAI-macOS-$VERSION.dmg"
           else
-            # If no .app bundle, zip the directory
-            cd dist && zip -r "../ReadInAI-macOS-$VERSION.zip" ReadInAI/
+            # Just zip the portable file
+            cd dist && zip -r "../ReadInAI-macOS-$VERSION.zip" *
           fi
 
       - name: Upload macOS artifacts
@@ -103,20 +132,37 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libportaudio2 portaudio19-dev libxcb-cursor0 libasound2-dev
+          sudo apt-get install -y \
+            libportaudio2 portaudio19-dev libasound2-dev \
+            libxcb-xinerama0 libxcb-cursor0 libxkbcommon-x11-0 libegl1 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 \
+            ffmpeg libavformat-dev libavcodec-dev libavdevice-dev \
+            libavutil-dev libavfilter-dev libswscale-dev libswresample-dev
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install -r requirements.txt
           pip install pyinstaller
-          pip install PyQt6 anthropic faster-whisper httpx psutil pynput python-dotenv websockets sounddevice numpy pillow scipy
 
       - name: Build executable
         run: python -m PyInstaller build.spec --noconfirm
 
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_name }}" =~ ^v(.+)$ ]]; then
+            echo "VERSION=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=1.4.1" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create AppImage
         run: |
-          VERSION="${{ github.event.inputs.version || '1.0.0' }}"
+          VERSION="${{ steps.version.outputs.VERSION }}"
 
           # Download appimagetool
           wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
@@ -127,7 +173,7 @@ jobs:
           mkdir -p AppDir/usr/share/applications
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
 
-          # Copy built files
+          # Copy built executable
           cp dist/ReadInAI-Portable AppDir/usr/bin/ReadInAI
           chmod +x AppDir/usr/bin/ReadInAI
 
@@ -149,7 +195,6 @@ jobs:
           Terminal=false
           EOF
 
-          # Also copy to usr/share/applications
           cp AppDir/readin-ai.desktop AppDir/usr/share/applications/
 
           # Create AppRun
@@ -163,7 +208,7 @@ jobs:
           APPRUN
           chmod +x AppDir/AppRun
 
-          # Create AppImage using --appimage-extract-and-run to avoid FUSE requirement
+          # Create AppImage
           ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir "ReadInAI-Linux-$VERSION.AppImage"
 
       - name: Upload Linux artifacts
@@ -195,5 +240,6 @@ jobs:
             artifacts/macos-build/*
             artifacts/linux-build/*
           generate_release_notes: true
+          draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

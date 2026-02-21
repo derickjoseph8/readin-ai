@@ -70,7 +70,10 @@ class AudioCapture:
                         is_loopback = (
                             'loopback' in name_lower or
                             'stereo mix' in name_lower or
-                            'what u hear' in name_lower
+                            'what u hear' in name_lower or
+                            'cable output' in name_lower or
+                            'vb-audio' in name_lower or
+                            'voicemeeter' in name_lower
                         )
                         devices.append({
                             'index': i,
@@ -180,7 +183,8 @@ class AudioCapture:
             name = info['name'].lower()
 
             if info['maxInputChannels'] > 0:
-                if 'loopback' in name or 'stereo mix' in name or 'what u hear' in name:
+                if ('loopback' in name or 'stereo mix' in name or 'what u hear' in name or
+                    'cable output' in name or 'vb-audio' in name or 'voicemeeter' in name):
                     print(f"Found loopback device: [{i}] {info['name']}")
                     return i
 
