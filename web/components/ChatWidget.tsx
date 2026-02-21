@@ -172,9 +172,23 @@ export default function ChatWidget() {
     try {
       await supportApi.sendChatMessage(sessionId, newMessage.trim())
       setNewMessage('')
-      // Immediately fetch new messages
+      // Immediately fetch new messages and check status
       const data = await supportApi.getChatMessages(sessionId)
       setMessages(data.messages)
+
+      // Check if transferred to human queue (Novah transfer)
+      if (data.status === 'waiting' && chatStatus === 'active') {
+        setChatStatus('waiting')
+        setQueuePosition(data.queue_position || null)
+        setIsAiHandled(false)
+      } else if (data.status === 'ended') {
+        setChatStatus('ended')
+      }
+
+      // Update AI handled state
+      if (data.is_ai_handled !== undefined) {
+        setIsAiHandled(data.is_ai_handled)
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to send message')
     } finally {
