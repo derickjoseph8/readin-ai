@@ -312,7 +312,7 @@ def shutdown():
 @app.post("/auth/register")
 @app.post("/api/v1/auth/register")
 @limiter.limit("3/minute")  # Strict rate limit on registration
-def register(request: Request, user_data: UserCreate, db: Session = Depends(get_db)):
+async def register(request: Request, user_data: UserCreate, db: Session = Depends(get_db)):
     """
     Register a new user.
 
@@ -378,8 +378,9 @@ def register(request: Request, user_data: UserCreate, db: Session = Depends(get_
     # Send welcome email with verification link
     try:
         email_service = EmailService(db)
-        asyncio.create_task(email_service.send_welcome_email(user.id, verification_token))
-    except Exception:
+        await email_service.send_welcome_email(user.id, verification_token)
+    except Exception as e:
+        print(f"Failed to send verification email: {e}")
         pass  # Don't fail registration if email fails
 
     # Don't return token - require email verification first
@@ -691,7 +692,7 @@ class ResendVerificationRequest(PydanticBaseModel):
 
 @app.post("/api/v1/auth/resend-verification")
 @limiter.limit("3/hour")
-def resend_verification(
+async def resend_verification(
     request: Request,
     data: ResendVerificationRequest,
     db: Session = Depends(get_db)
@@ -718,8 +719,9 @@ def resend_verification(
     # Send verification email
     try:
         email_service = EmailService(db)
-        asyncio.create_task(email_service.send_welcome_email(user.id, verification_token))
+        await email_service.send_welcome_email(user.id, verification_token)
     except Exception as e:
+        print(f"Failed to send verification email: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to send verification email"
