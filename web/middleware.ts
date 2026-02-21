@@ -17,10 +17,11 @@ export default createMiddleware({
 });
 
 export const config = {
-  // Match ONLY the internationalized locale routes
-  // All static pages, auth pages, and other non-i18n routes are excluded
+  // Match routes that need locale detection
   matcher: [
-    // Only match paths that start with a locale prefix
+    // Root path
+    '/',
+    // Locale-prefixed paths
     '/(en|es|sw|fr|de|pt|ja)/:path*'
   ]
 };
