@@ -75,7 +75,8 @@ export default function ChatWidget() {
 
         setMessages(data.messages)
 
-        if (data.status === 'active' && chatStatus === 'waiting') {
+        // Always sync status with backend - handles all state transitions
+        if (data.status === 'active') {
           setChatStatus('active')
           setQueuePosition(null)
         } else if (data.status === 'ended') {
@@ -83,11 +84,8 @@ export default function ChatWidget() {
           // Clear polling when chat ends
           clearPolling()
         } else if (data.status === 'waiting') {
-          // Handle transfer from AI to human queue
-          // This happens when Novah transfers the user to a human agent
-          if (chatStatus === 'active') {
-            setChatStatus('waiting')
-          }
+          // User is waiting in queue (either initial or after Novah transfer)
+          setChatStatus('waiting')
           setQueuePosition(data.queue_position || null)
         }
 
@@ -176,13 +174,15 @@ export default function ChatWidget() {
       const data = await supportApi.getChatMessages(sessionId)
       setMessages(data.messages)
 
-      // Check if transferred to human queue (Novah transfer)
-      if (data.status === 'waiting' && chatStatus === 'active') {
+      // Always sync status with backend response
+      // This handles Novah transfers and any other status changes
+      if (data.status === 'waiting') {
         setChatStatus('waiting')
         setQueuePosition(data.queue_position || null)
-        setIsAiHandled(false)
       } else if (data.status === 'ended') {
         setChatStatus('ended')
+      } else if (data.status === 'active') {
+        setChatStatus('active')
       }
 
       // Update AI handled state
