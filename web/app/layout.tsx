@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
 import './globals.css';
+import ChatWidget from '@/components/ChatWidget';
 
 // Import default messages for non-locale routes
 import messages from '../messages/en.json';
@@ -26,6 +27,7 @@ export default function RootLayout({
       <body className="bg-premium-bg text-white antialiased">
         <NextIntlClientProvider messages={typedMessages} locale="en">
           {children}
+          <ChatWidget />
         </NextIntlClientProvider>
       </body>
     </html>
