@@ -86,8 +86,11 @@ jobs:
       - name: Check for vulnerable dependencies
         run: |
           pip install -r requirements.txt
+          # Generate report first (ignore failures for report)
           safety check --output json > safety-report.json || true
-          safety check
+          # Run check with ignored vulnerabilities:
+          # 64459, 64396: ecdsa side-channel vulnerabilities - affects all versions, no fix available
+          safety check --ignore 64459 --ignore 64396
 
       - name: Upload security reports
         uses: actions/upload-artifact@v4
