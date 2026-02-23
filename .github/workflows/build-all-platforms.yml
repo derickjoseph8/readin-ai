@@ -31,7 +31,7 @@ jobs:
 
       - name: Build Windows executable
         run: |
-          pyinstaller --name "ReadInAI-Windows" --onefile --windowed --add-data "assets;assets" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import numpy --hidden-import anthropic main.py
+          pyinstaller --name "ReadInAI-Windows" --onefile --windowed --icon "assets/icon.ico" --add-data "assets;assets" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import numpy --hidden-import anthropic main.py
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -59,9 +59,24 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Create macOS icon
+        run: |
+          mkdir -p ReadInAI.iconset
+          sips -z 16 16 assets/icon_512.png --out ReadInAI.iconset/icon_16x16.png
+          sips -z 32 32 assets/icon_512.png --out ReadInAI.iconset/icon_16x16@2x.png
+          sips -z 32 32 assets/icon_512.png --out ReadInAI.iconset/icon_32x32.png
+          sips -z 64 64 assets/icon_512.png --out ReadInAI.iconset/icon_32x32@2x.png
+          sips -z 128 128 assets/icon_512.png --out ReadInAI.iconset/icon_128x128.png
+          sips -z 256 256 assets/icon_512.png --out ReadInAI.iconset/icon_128x128@2x.png
+          sips -z 256 256 assets/icon_512.png --out ReadInAI.iconset/icon_256x256.png
+          sips -z 512 512 assets/icon_512.png --out ReadInAI.iconset/icon_256x256@2x.png
+          sips -z 512 512 assets/icon_512.png --out ReadInAI.iconset/icon_512x512.png
+          cp assets/icon_512.png ReadInAI.iconset/icon_512x512@2x.png
+          iconutil -c icns ReadInAI.iconset -o assets/icon.icns
+
       - name: Build macOS app
         run: |
-          pyinstaller --name "ReadInAI" --onefile --windowed --add-data "assets:assets" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import sounddevice --hidden-import numpy --hidden-import anthropic main.py
+          pyinstaller --name "ReadInAI" --onefile --windowed --icon "assets/icon.icns" --add-data "assets:assets" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import sounddevice --hidden-import numpy --hidden-import anthropic main.py
 
       - name: Create DMG
         run: |
@@ -105,7 +120,7 @@ jobs:
 
       - name: Build Linux executable
         run: |
-          pyinstaller --name "ReadInAI-Linux" --onefile --add-data "assets:assets" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import sounddevice --hidden-import numpy --hidden-import anthropic main.py
+          pyinstaller --name "ReadInAI-Linux" --onefile --icon "assets/icon.png" --add-data "assets:assets" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import sounddevice --hidden-import numpy --hidden-import anthropic main.py
 
       - name: Make executable
         run: chmod +x dist/ReadInAI-Linux
