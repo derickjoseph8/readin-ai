@@ -509,15 +509,30 @@ class SettingsWindow(QDialog):
         """Check for application updates."""
         try:
             from src.update_checker import UpdateChecker
+            import webbrowser
             checker = UpdateChecker()
             update_info = checker.check_for_updates(background=False)
 
             if update_info:
-                QMessageBox.information(
-                    self,
-                    "Update Available",
-                    f"Version {update_info.version} is available!\n\n{update_info.changelog or 'New improvements and bug fixes.'}"
+                # Create a custom message box with Download button
+                msg_box = QMessageBox(self)
+                msg_box.setWindowTitle("Update Available")
+                msg_box.setText(f"Version {update_info.version} is available!")
+                msg_box.setInformativeText(
+                    f"{update_info.changelog or 'New improvements and bug fixes.'}\n\n"
+                    "Click 'Download' to get the latest version."
                 )
+                msg_box.setIcon(QMessageBox.Icon.Information)
+
+                download_btn = msg_box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
+                msg_box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+
+                msg_box.exec()
+
+                if msg_box.clickedButton() == download_btn:
+                    # Open the download page
+                    download_url = update_info.download_url or "https://www.getreadin.us/download"
+                    webbrowser.open(download_url)
             else:
                 QMessageBox.information(
                     self,
