@@ -1,6 +1,4 @@
-// Force dynamic rendering
-export const dynamic = 'force-dynamic';
-
+// Static pages layout - allows static generation for better SEO
 export default function StaticLayout({
   children,
 }: {
