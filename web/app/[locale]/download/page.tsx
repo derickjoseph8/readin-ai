@@ -20,9 +20,9 @@ export default function DownloadPage() {
   }, [])
 
   const downloadUrls: Record<string, string> = {
-    windows: 'https://www.getreadin.us/downloads/ReadInAI-Windows-1.4.5.exe',
-    mac: 'https://www.getreadin.us/downloads/ReadInAI-macOS-1.4.5.dmg',
-    linux: 'https://www.getreadin.us/downloads/ReadInAI-Linux-1.4.5.AppImage',
+    windows: 'https://www.getreadin.us/downloads/ReadInAI-Windows-1.4.6.exe',
+    mac: 'https://www.getreadin.us/downloads/ReadInAI-macOS-1.4.6.dmg',
+    linux: 'https://www.getreadin.us/downloads/ReadInAI-Linux-1.4.6.AppImage',
   }
 
   const handleDownloadClick = (os: string) => {
