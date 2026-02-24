@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from config import (
     STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_MONTHLY,
-    TRIAL_DAILY_LIMIT, APP_NAME, API_VERSION, IS_PRODUCTION, IS_DEVELOPMENT,
+    TRIAL_DAILY_LIMIT, APP_NAME, API_VERSION, APP_VERSION, IS_PRODUCTION, IS_DEVELOPMENT,
     CORS_ALLOWED_ORIGINS, SENTRY_DSN, ENVIRONMENT
 )
 from database import get_db, init_db, engine
@@ -1255,6 +1255,22 @@ def readiness_check(db: Session = Depends(get_db)):
             status_code=503,
             content={"status": "not_ready", "version": API_VERSION}
         )
+
+
+@app.get("/version")
+@app.get("/api/v1/version")
+def get_app_version():
+    """
+    Get the latest desktop app version for update checker.
+
+    Returns version info for the ReadIn AI desktop application.
+    """
+    return {
+        "version": APP_VERSION,
+        "download_url": "https://www.getreadin.us/download",
+        "changelog": "Desktop app icon fix - proper R logo now displays",
+        "required": False
+    }
 
 
 if __name__ == "__main__":
