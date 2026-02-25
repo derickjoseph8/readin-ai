@@ -155,6 +155,13 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://api.getreadin.us" />
       </head>
       <body className="bg-premium-bg text-white antialiased">
+        {/* Skip link for accessibility - visible only on focus */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-gold-500 focus:text-premium-bg focus:rounded-lg focus:font-medium focus:outline-none focus:ring-2 focus:ring-gold-400 focus:ring-offset-2 focus:ring-offset-premium-bg"
+        >
+          Skip to main content
+        </a>
         <NextIntlClientProvider messages={typedMessages} locale="en">
           {children}
           <ChatWidget />

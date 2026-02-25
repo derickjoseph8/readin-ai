@@ -7,6 +7,9 @@ from typing import Callable, Optional, List, Tuple
 import numpy as np
 
 from config import WHISPER_MODEL
+from src.logger import get_logger
+
+logger = get_logger("transcriber")
 
 
 # Supported languages from Whisper
@@ -65,7 +68,8 @@ class Transcriber:
         self._model = None
         self._model_name = model_name
         self._language = language if language != "auto" else None
-        self._audio_queue: queue.Queue = queue.Queue()
+        # Bounded queue to prevent unbounded memory growth
+        self._audio_queue: queue.Queue = queue.Queue(maxsize=10)
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._detected_language: Optional[str] = None
@@ -109,25 +113,25 @@ class Transcriber:
                 )
             except ImportError as e:
                 error_msg = f"Failed to import faster_whisper: {e}"
-                print(error_msg)
+                logger.error(error_msg)
                 if self.on_error:
                     self.on_error(error_msg)
                 raise RuntimeError(error_msg) from e
             except OSError as e:
                 error_msg = f"Failed to load Whisper model file: {e}"
-                print(error_msg)
+                logger.error(error_msg)
                 if self.on_error:
                     self.on_error(error_msg)
                 raise RuntimeError(error_msg) from e
             except ValueError as e:
                 error_msg = f"Invalid Whisper model configuration: {e}"
-                print(error_msg)
+                logger.error(error_msg)
                 if self.on_error:
                     self.on_error(error_msg)
                 raise RuntimeError(error_msg) from e
             except Exception as e:
                 error_msg = f"Failed to load Whisper model: {e}"
-                print(error_msg)
+                logger.error(error_msg)
                 if self.on_error:
                     self.on_error(error_msg)
                 raise RuntimeError(error_msg) from e
@@ -193,24 +197,24 @@ class Transcriber:
                 continue
             except RuntimeError as e:
                 error_msg = f"Transcription runtime error: {e}"
-                print(error_msg)
+                logger.error(error_msg)
                 if self.on_error:
                     self.on_error(error_msg)
             except ValueError as e:
                 error_msg = f"Transcription value error: {e}"
-                print(error_msg)
+                logger.error(error_msg)
                 if self.on_error:
                     self.on_error(error_msg)
             except MemoryError as e:
                 error_msg = f"Transcription memory error: {e}"
-                print(error_msg)
+                logger.error(error_msg)
                 if self.on_error:
                     self.on_error(error_msg)
                 # Clear queue to free memory
                 self.clear_queue()
             except Exception as e:
                 error_msg = f"Transcription error: {e}"
-                print(error_msg)
+                logger.error(error_msg)
                 if self.on_error:
                     self.on_error(error_msg)
 
@@ -237,7 +241,10 @@ class Transcriber:
     def process_audio(self, audio_chunk: np.ndarray):
         """Add audio chunk to processing queue."""
         if self._running:
-            self._audio_queue.put(audio_chunk)
+            try:
+                self._audio_queue.put_nowait(audio_chunk)
+            except queue.Full:
+                pass  # Drop audio if queue is full to prevent unbounded growth
 
     def start(self):
         """Start the transcription thread."""
@@ -266,3 +273,23 @@ class Transcriber:
                 self._audio_queue.get_nowait()
         except queue.Empty:
             pass
+
+    def unload_model(self):
+        """Unload the Whisper model to free memory."""
+        if self._model is not None:
+            del self._model
+            self._model = None
+            # Force garbage collection to release memory
+            import gc
+            gc.collect()
+
+    def __del__(self):
+        """Cleanup resources on deletion."""
+        self._running = False
+        # Clear the audio queue
+        self.clear_queue()
+        # Unload the model
+        self.unload_model()
+        # Wait for thread to finish if running
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=1.0)

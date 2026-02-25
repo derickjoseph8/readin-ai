@@ -1,6 +1,7 @@
 """ReadIn AI Backend API - Authentication, Subscriptions, Usage Tracking, ML Intelligence."""
 
 import os
+import logging
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -17,6 +18,9 @@ from config import (
     TRIAL_DAILY_LIMIT, APP_NAME, API_VERSION, APP_VERSION, IS_PRODUCTION, IS_DEVELOPMENT,
     CORS_ALLOWED_ORIGINS, SENTRY_DSN, ENVIRONMENT
 )
+
+# Set up logging
+logger = logging.getLogger(__name__)
 from database import get_db, init_db, engine
 from models import User, DailyUsage, Profession, UserLearningProfile, TeamMember, SupportTeam
 from schemas import (
@@ -25,7 +29,8 @@ from schemas import (
     PasswordChangeRequest, TeamMembershipInfo
 )
 from auth import (
-    hash_password, verify_password, create_access_token, get_current_user
+    hash_password, verify_password, create_access_token, get_current_user,
+    add_token_to_blacklist
 )
 from stripe_handler import (
     create_checkout_session, create_billing_portal_session,
@@ -89,9 +94,9 @@ if SENTRY_DSN:
                 SqlalchemyIntegration(),
             ],
         )
-        print("[OK] Sentry error tracking initialized")
+        logger.info("Sentry error tracking initialized")
     except ImportError:
-        print("[WARNING] sentry-sdk not installed, skipping Sentry initialization")
+        logger.warning("sentry-sdk not installed, skipping Sentry initialization")
 
 # Initialize FastAPI
 app = FastAPI(
@@ -110,7 +115,7 @@ app.state.limiter = limiter
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 else:
-    print("[WARNING] STRIPE_SECRET_KEY not configured. Payment features disabled.")
+    logger.warning("STRIPE_SECRET_KEY not configured. Payment features disabled.")
 
 # =============================================================================
 # MIDDLEWARE STACK (order matters - last added runs first)
@@ -224,50 +229,50 @@ app.include_router(interviews_router, tags=["Deprecated - Use /api/v1"])
 @app.on_event("startup")
 def startup():
     """Initialize database and verify configuration on startup."""
-    print()
-    print("=" * 60)
-    print(f"  {APP_NAME} Backend v{API_VERSION}")
-    print(f"  Environment: {ENVIRONMENT}")
-    print("=" * 60)
+    logger.info("")
+    logger.info("=" * 60)
+    logger.info(f"  {APP_NAME} Backend v{API_VERSION}")
+    logger.info(f"  Environment: {ENVIRONMENT}")
+    logger.info("=" * 60)
 
     # Initialize database
     try:
         init_db()
-        print("  [OK] Database connected")
+        logger.info("  [OK] Database connected")
 
         # Set up slow query logging
         setup_slow_query_logging(engine, threshold_ms=500)
-        print("  [OK] Slow query logging enabled (>500ms)")
+        logger.info("  [OK] Slow query logging enabled (>500ms)")
     except Exception as e:
-        print(f"  [ERROR] Database connection failed: {e}")
+        logger.error(f"  [ERROR] Database connection failed: {e}")
         raise
 
     # Verify Stripe configuration
     if STRIPE_SECRET_KEY:
         try:
             stripe.Account.retrieve()
-            print("  [OK] Stripe configured")
+            logger.info("  [OK] Stripe configured")
         except stripe.error.AuthenticationError:
-            print("  [WARNING] Invalid Stripe API key")
+            logger.warning("  [WARNING] Invalid Stripe API key")
     else:
-        print("  [WARNING] Stripe not configured")
+        logger.warning("  [WARNING] Stripe not configured")
 
     if STRIPE_WEBHOOK_SECRET:
-        print("  [OK] Stripe webhook secret configured")
+        logger.info("  [OK] Stripe webhook secret configured")
     else:
-        print("  [WARNING] Stripe webhook secret not configured")
+        logger.warning("  [WARNING] Stripe webhook secret not configured")
 
     if STRIPE_PRICE_MONTHLY:
-        print(f"  [OK] Stripe price ID: {STRIPE_PRICE_MONTHLY[:20]}...")
+        logger.info(f"  [OK] Stripe price ID: {STRIPE_PRICE_MONTHLY[:20]}...")
     else:
-        print("  [WARNING] Stripe price ID not configured")
+        logger.warning("  [WARNING] Stripe price ID not configured")
 
     # Start background scheduler
     try:
         start_scheduler()
-        print("  [OK] Background scheduler started")
+        logger.info("  [OK] Background scheduler started")
     except Exception as e:
-        print(f"  [WARNING] Scheduler failed to start: {e}")
+        logger.warning(f"  [WARNING] Scheduler failed to start: {e}")
 
     # Initialize system templates
     try:
@@ -276,35 +281,35 @@ def startup():
         template_service = TemplateService(db)
         template_service.initialize_system_templates()
         db.close()
-        print("  [OK] System templates initialized")
+        logger.info("  [OK] System templates initialized")
     except Exception as e:
-        print(f"  [WARNING] Template initialization failed: {e}")
+        logger.warning(f"  [WARNING] Template initialization failed: {e}")
 
     # Security status
-    print()
-    print("  Security Configuration:")
-    print(f"    CORS Origins: {len(CORS_ALLOWED_ORIGINS)} configured" if CORS_ALLOWED_ORIGINS else "    CORS Origins: Open (dev mode)")
-    print(f"    Rate Limiting: Enabled")
-    print(f"    API Docs: {'Disabled' if IS_PRODUCTION else 'http://localhost:8000/docs'}")
+    logger.info("")
+    logger.info("  Security Configuration:")
+    logger.info(f"    CORS Origins: {len(CORS_ALLOWED_ORIGINS)} configured" if CORS_ALLOWED_ORIGINS else "    CORS Origins: Open (dev mode)")
+    logger.info("    Rate Limiting: Enabled")
+    logger.info(f"    API Docs: {'Disabled' if IS_PRODUCTION else 'http://localhost:8000/docs'}")
     if SENTRY_DSN:
-        print("    Error Tracking: Sentry enabled")
+        logger.info("    Error Tracking: Sentry enabled")
 
-    print()
-    print(f"  Trial: {TRIAL_DAILY_LIMIT} responses/day for 7 days")
-    print("  Premium: $29.99/month - Unlimited responses")
-    print("=" * 60)
-    print()
+    logger.info("")
+    logger.info(f"  Trial: {TRIAL_DAILY_LIMIT} responses/day for 7 days")
+    logger.info("  Premium: $29.99/month - Unlimited responses")
+    logger.info("=" * 60)
+    logger.info("")
 
 
 @app.on_event("shutdown")
 def shutdown():
     """Clean up resources on shutdown."""
-    print("Shutting down...")
+    logger.info("Shutting down...")
     try:
         stop_scheduler()
-        print("  [OK] Scheduler stopped")
+        logger.info("  [OK] Scheduler stopped")
     except Exception as e:
-        print(f"  [WARNING] Error stopping scheduler: {e}")
+        logger.warning(f"  [WARNING] Error stopping scheduler: {e}")
 
 
 # ============== Auth Endpoints ==============
@@ -380,7 +385,7 @@ async def register(request: Request, user_data: UserCreate, db: Session = Depend
         email_service = EmailService(db)
         await email_service.send_welcome_email(user.id, verification_token)
     except Exception as e:
-        print(f"Failed to send verification email: {e}")
+        logger.error(f"Failed to send verification email: {e}")
         pass  # Don't fail registration if email fails
 
     # Don't return token - require email verification first
@@ -441,6 +446,35 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
     return Token(access_token=token)
 
 
+@app.post("/auth/logout")
+@app.post("/api/v1/auth/logout")
+async def logout(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Logout and invalidate the current access token.
+
+    The token is added to a blacklist and will no longer be accepted.
+    """
+    # Get the token from the Authorization header
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]  # Remove "Bearer " prefix
+        add_token_to_blacklist(token)
+        logger.info(f"User {user.id} logged out, token invalidated")
+
+    # End the session if session tracking is enabled
+    try:
+        from routes.sessions import end_session
+        end_session(db, user, request)
+    except Exception:
+        pass  # Don't fail logout if session tracking fails
+
+    return {"message": "Successfully logged out"}
+
+
 from pydantic import BaseModel as PydanticBaseModel
 
 
@@ -486,22 +520,30 @@ def login_2fa(request: Request, data: TwoFactorLoginVerify, db: Session = Depend
 
     # Verify the code
     if data.is_backup_code:
-        # Check backup codes
+        # Check backup codes (hashed with bcrypt for security)
         backup_codes = user.totp_backup_codes or []
         code_upper = data.code.upper().replace("-", "")
-        if code_upper not in backup_codes:
+
+        # Find and verify the matching hashed backup code
+        matched_index = None
+        for i, hashed_code in enumerate(backup_codes):
+            if verify_password(code_upper, hashed_code):
+                matched_index = i
+                break
+
+        if matched_index is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid backup code"
             )
         # Remove used backup code
-        backup_codes.remove(code_upper)
+        backup_codes.pop(matched_index)
         user.totp_backup_codes = backup_codes
         db.commit()
     else:
         # Verify TOTP code
         totp = pyotp.TOTP(user.totp_secret)
-        if not totp.verify(data.code, valid_window=1):
+        if not totp.verify(data.code, valid_window=0):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid verification code"
@@ -721,7 +763,7 @@ async def resend_verification(
         email_service = EmailService(db)
         await email_service.send_welcome_email(user.id, verification_token)
     except Exception as e:
-        print(f"Failed to send verification email: {e}")
+        logger.error(f"Failed to send verification email: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to send verification email"
@@ -1268,7 +1310,7 @@ def get_app_version():
     return {
         "version": APP_VERSION,
         "download_url": "https://www.getreadin.us/download",
-        "changelog": "Desktop app icon fix - proper R logo now displays",
+        "changelog": "v1.4.8: Improved logging, background update checks, and stability fixes from system audit",
         "required": False
     }
 

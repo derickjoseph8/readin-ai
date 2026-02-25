@@ -21,6 +21,15 @@ export default function Header() {
     return isHomePage ? `#${section}` : `/#${section}`;
   };
 
+  // Helper to check if a link is active
+  const isActive = (href: string) => {
+    // For login and download pages
+    if (href === '/login') return pathname === '/login';
+    if (href === '/download') return pathname === '/download';
+    // For section links, they're not "pages" so don't mark as current
+    return false;
+  };
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-premium-bg/80 backdrop-blur-xl border-b border-premium-border">
       {/* Announcement bar */}
@@ -54,12 +63,17 @@ export default function Header() {
           {/* CTA Buttons & Language Switcher */}
           <div className="hidden md:flex items-center space-x-4">
             <LanguageSwitcher />
-            <Link href="/login" className="px-4 py-2 text-gray-400 hover:text-white transition-colors">
+            <Link
+              href="/login"
+              className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+              aria-current={isActive('/login') ? 'page' : undefined}
+            >
               {tc('login')}
             </Link>
             <Link
               href="/download"
               className="px-5 py-2.5 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-lg hover:shadow-gold transition-all hover:-translate-y-0.5"
+              aria-current={isActive('/download') ? 'page' : undefined}
             >
               {t('download')}
             </Link>
@@ -114,6 +128,7 @@ export default function Header() {
                 href="/login"
                 className="py-3 px-4 text-gold-400 hover:text-gold-300 transition-colors min-h-[48px] flex items-center justify-center bg-premium-surface rounded-lg border border-premium-border"
                 onClick={() => setMobileMenuOpen(false)}
+                aria-current={isActive('/login') ? 'page' : undefined}
               >
                 {tc('login')}
               </Link>
@@ -121,6 +136,7 @@ export default function Header() {
                 href="/download"
                 className="py-3 px-5 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-lg text-center min-h-[48px] flex items-center justify-center"
                 onClick={() => setMobileMenuOpen(false)}
+                aria-current={isActive('/download') ? 'page' : undefined}
               >
                 {t('download')}
               </Link>

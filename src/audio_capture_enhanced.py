@@ -24,6 +24,9 @@ from enum import Enum
 import numpy as np
 
 from config import AUDIO_SAMPLE_RATE, AUDIO_CHUNK_DURATION, IS_WINDOWS, IS_MACOS, IS_LINUX
+from src.logger import get_logger
+
+logger = get_logger("audio_capture_enhanced")
 
 
 class CaptureMode(Enum):
@@ -140,6 +143,8 @@ class EnhancedAudioCapture:
 
         self._running = False
         self._processor_thread: Optional[threading.Thread] = None
+        # Bounded circular buffer: max ~10 seconds of audio
+        self._max_buffer_samples = int(10 * self.sample_rate)
         self._audio_buffer = np.array([], dtype=np.float32)
         self._buffer_lock = threading.Lock()  # Thread safety for buffer access
         self._samples_per_chunk = int(self.sample_rate * self.chunk_duration)
@@ -291,7 +296,7 @@ class EnhancedAudioCapture:
             pa.terminate()
 
         except Exception as e:
-            print(f"Error listing Windows devices: {e}")
+            logger.error(f"Error listing Windows devices: {e}")
 
         return devices
 
@@ -346,7 +351,7 @@ class EnhancedAudioCapture:
                     ))
 
         except Exception as e:
-            print(f"Error listing audio devices: {e}")
+            logger.error(f"Error listing audio devices: {e}")
 
         return devices
 
@@ -519,6 +524,11 @@ PipeWire (newer distros):
                 with self._buffer_lock:
                     self._audio_buffer = np.concatenate([self._audio_buffer, audio])
 
+                    # Enforce bounded buffer: drop oldest samples if buffer exceeds max size
+                    if len(self._audio_buffer) > self._max_buffer_samples:
+                        excess = len(self._audio_buffer) - self._max_buffer_samples
+                        self._audio_buffer = self._audio_buffer[excess:]
+
                     while len(self._audio_buffer) >= self._samples_per_chunk:
                         chunk = self._audio_buffer[:self._samples_per_chunk]
                         self._audio_buffer = self._audio_buffer[self._samples_per_chunk:]
@@ -530,7 +540,7 @@ PipeWire (newer distros):
             except Exception as e:
                 self._error_count += 1
                 if self._error_count <= 3:
-                    print(f"Audio processing error: {e}")
+                    logger.error(f"Audio processing error: {e}")
 
     def _audio_callback(self, in_data, frame_count, time_info, status):
         """Audio stream callback (backup method)."""
@@ -587,13 +597,13 @@ PipeWire (newer distros):
             except Exception as read_error:
                 consecutive_errors += 1
                 if consecutive_errors >= max_consecutive_errors:
-                    print(f"Capture loop error after {consecutive_errors} errors: {read_error}")
+                    logger.error(f"Capture loop error after {consecutive_errors} errors: {read_error}")
                     break
                 time.sleep(0.01)
 
         # End of loop
         if self._running:
-            print("Capture loop ended unexpectedly")
+            logger.warning("Capture loop ended unexpectedly")
 
     def _start_windows_wasapi_loopback(self, pa, device: AudioDevice) -> bool:
         """Start WASAPI loopback capture (captures output device audio)."""
@@ -606,9 +616,9 @@ PipeWire (newer distros):
             # First, try to get the default WASAPI loopback device
             try:
                 loopback_device = pa.get_default_wasapi_loopback()
-                print(f"Found default WASAPI loopback: {loopback_device['name']}")
+                logger.info(f"Found default WASAPI loopback: {loopback_device['name']}")
             except Exception as e:
-                print(f"No default WASAPI loopback: {e}")
+                logger.debug(f"No default WASAPI loopback: {e}")
 
             # If no default loopback, search for one
             if loopback_device is None:
@@ -617,13 +627,13 @@ PipeWire (newer distros):
                         dev_info = pa.get_device_info_by_index(i)
                         if dev_info.get('isLoopbackDevice', False):
                             loopback_device = dev_info
-                            print(f"Found loopback device: {dev_info['name']}")
+                            logger.info(f"Found loopback device: {dev_info['name']}")
                             break
                     except:
                         continue
 
             if loopback_device is None:
-                print("No WASAPI loopback device available")
+                logger.warning("No WASAPI loopback device available")
                 return False
 
             # Configure stream parameters from loopback device
@@ -655,13 +665,11 @@ PipeWire (newer distros):
             self._capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
             self._capture_thread.start()
 
-            print(f"WASAPI Loopback ACTIVE (polling): {loopback_device['name']} ({channels}ch @ {sample_rate}Hz)")
+            logger.info(f"WASAPI Loopback ACTIVE (polling): {loopback_device['name']} ({channels}ch @ {sample_rate}Hz)")
             return True
 
         except Exception as e:
-            print(f"WASAPI loopback failed: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"WASAPI loopback failed: {e}", exc_info=True)
             return False
 
     def _start_windows(self):
@@ -685,7 +693,7 @@ PipeWire (newer distros):
         if self.capture_mode == CaptureMode.SYSTEM_LOOPBACK and has_wpatch:
             if self._start_windows_wasapi_loopback(self._pa, None):
                 return
-            print("WASAPI loopback unavailable, trying alternatives...")
+            logger.info("WASAPI loopback unavailable, trying alternatives...")
 
         # STRATEGY 2: For SYSTEM_LOOPBACK, try Stereo Mix or similar
         if self.capture_mode == CaptureMode.SYSTEM_LOOPBACK:
@@ -720,14 +728,11 @@ PipeWire (newer distros):
         # Start capture on the device
         if self._start_input_device(device):
             if self.capture_mode == CaptureMode.SYSTEM_LOOPBACK:
-                print("\n" + "="*50)
-                print("NOTICE: System audio loopback not available")
-                print("Using microphone instead.")
-                print("")
-                print("For TRUE stealth mode (system audio capture):")
-                print("  Option 1: Enable 'Stereo Mix' in Windows sound settings")
-                print("  Option 2: Install VB-Audio Virtual Cable (free)")
-                print("="*50 + "\n")
+                logger.warning(
+                    "System audio loopback not available. Using microphone instead. "
+                    "For stealth mode: Enable 'Stereo Mix' in Windows sound settings "
+                    "or install VB-Audio Virtual Cable."
+                )
             return
 
         self._emit_error("Failed to open audio stream")
@@ -766,16 +771,18 @@ PipeWire (newer distros):
                     if any(kw in name_lower for kw in loopback_keywords):
                         # Make sure it's not an excluded device
                         if not any(ex in name_lower for ex in exclude_keywords):
-                            print(f"Found loopback device: {info['name']}")
+                            logger.info(f"Found loopback device: {info['name']}")
                             return self._create_device_from_info(info, i)
             except:
                 continue
 
         # No true loopback found - provide guidance
-        print("No Stereo Mix device found. To enable system audio capture:")
-        print("  1. Right-click speaker icon > Sound settings > More sound settings")
-        print("  2. Recording tab > Right-click > Show Disabled Devices")
-        print("  3. Right-click 'Stereo Mix' > Enable")
+        logger.info(
+            "No Stereo Mix device found. To enable system audio capture: "
+            "1. Right-click speaker icon > Sound settings > More sound settings, "
+            "2. Recording tab > Right-click > Show Disabled Devices, "
+            "3. Right-click 'Stereo Mix' > Enable"
+        )
         return None
 
     def _start_input_device(self, device: AudioDevice) -> bool:
@@ -816,7 +823,7 @@ PipeWire (newer distros):
                 self._capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
                 self._capture_thread.start()
 
-                print(f"Audio capture started (polling): {device.name} ({device.channels}ch @ {rate}Hz)")
+                logger.info(f"Audio capture started (polling): {device.name} ({device.channels}ch @ {rate}Hz)")
                 return True
             except Exception as e:
                 if self._stream:
@@ -888,14 +895,21 @@ PipeWire (newer distros):
                 blocksize=buffer_size,
             )
             self._stream.start()
-            print(f"Audio capture started: {device.name} ({self._source_channels}ch @ {device.sample_rate}Hz)")
+            logger.info(f"Audio capture started: {device.name} ({self._source_channels}ch @ {device.sample_rate}Hz)")
         except Exception as e:
+            # Ensure stream is closed on error
+            if self._stream:
+                try:
+                    self._stream.close()
+                except:
+                    pass
+                self._stream = None
             self._emit_error(f"Failed to start capture: {e}")
             self._running = False
 
     def _emit_error(self, message: str):
         """Emit error message."""
-        print(f"[AudioCapture] ERROR: {message}")
+        logger.error(f"AudioCapture: {message}")
         if self.on_error:
             self.on_error(message)
 
@@ -937,7 +951,7 @@ PipeWire (newer distros):
         return self._running
 
     def stop(self):
-        """Stop audio capture."""
+        """Stop audio capture and release all resources."""
         self._running = False
 
         # Clear the buffer queue before stopping threads
@@ -976,6 +990,51 @@ PipeWire (newer distros):
         if self._processor_thread:
             self._processor_thread.join(timeout=1.0)
             self._processor_thread = None
+
+        # Clear audio buffer
+        with self._buffer_lock:
+            self._audio_buffer = np.array([], dtype=np.float32)
+
+    def __del__(self):
+        """Cleanup resources on deletion."""
+        self._cleanup_resources()
+
+    def _cleanup_resources(self):
+        """Release all audio resources."""
+        self._running = False
+
+        # Clear the buffer queue
+        while not self._buffer_queue.empty():
+            try:
+                self._buffer_queue.get_nowait()
+            except queue.Empty:
+                break
+
+        # Close audio stream with lock
+        with self._stream_lock:
+            if self._stream:
+                try:
+                    if IS_WINDOWS:
+                        self._stream.stop_stream()
+                        self._stream.close()
+                    else:
+                        self._stream.stop()
+                        self._stream.close()
+                except:
+                    pass
+                self._stream = None
+
+        # Terminate PyAudio instance
+        if self._pa:
+            try:
+                self._pa.terminate()
+            except:
+                pass
+            self._pa = None
+
+        # Clear audio buffer
+        with self._buffer_lock:
+            self._audio_buffer = np.array([], dtype=np.float32)
 
     def set_device(self, device_index: Optional[int]) -> bool:
         """Set audio device. Restarts capture if running."""
@@ -1025,21 +1084,19 @@ def list_audio_devices(capture_mode: CaptureMode = CaptureMode.SYSTEM_LOOPBACK):
         CaptureMode.MIXED: "MIXED MODE",
     }
 
-    print(f"\nAvailable devices for {mode_name.get(capture_mode, capture_mode.value)}:")
-    print("=" * 60)
+    logger.info(f"Available devices for {mode_name.get(capture_mode, capture_mode.value)}:")
 
     devices = EnhancedAudioCapture.get_available_devices(capture_mode)
 
     if not devices:
-        print("No suitable devices found!")
-        print()
+        logger.warning("No suitable devices found!")
         instructions = EnhancedAudioCapture.get_setup_instructions()
         if IS_WINDOWS:
-            print(instructions["windows"])
+            logger.info(instructions["windows"])
         elif IS_MACOS:
-            print(instructions["macos"])
+            logger.info(instructions["macos"])
         else:
-            print(instructions["linux"])
+            logger.info(instructions["linux"])
         return
 
     recommended = EnhancedAudioCapture.get_recommended_device(capture_mode)
@@ -1054,15 +1111,14 @@ def list_audio_devices(capture_mode: CaptureMode = CaptureMode.SYSTEM_LOOPBACK):
             flags.append("RECOMMENDED")
 
         flag_str = f" [{', '.join(flags)}]" if flags else ""
-        print(f"  [{dev.index}] {dev.name}")
-        print(f"       {dev.channels}ch @ {dev.sample_rate}Hz | {dev.host_api}{flag_str}")
+        logger.info(f"  [{dev.index}] {dev.name} - {dev.channels}ch @ {dev.sample_rate}Hz | {dev.host_api}{flag_str}")
 
 
 def test_audio_capture():
     """Test audio capture functionality."""
-    print("\n" + "="*60)
-    print("AUDIO CAPTURE TEST")
-    print("="*60)
+    logger.info("=" * 60)
+    logger.info("AUDIO CAPTURE TEST")
+    logger.info("=" * 60)
 
     chunks_received = []
     peak_level = [0.0]
@@ -1077,11 +1133,11 @@ def test_audio_capture():
         pass
 
     def on_device(name):
-        print(f"  Device: {name}")
+        logger.info(f"  Device: {name}")
 
     # Test 1: Microphone mode
-    print("\nTEST 1: MICROPHONE MODE")
-    print("-" * 40)
+    logger.info("TEST 1: MICROPHONE MODE")
+    logger.info("-" * 40)
     chunks_received.clear()
     peak_level[0] = 0.0
 
@@ -1093,22 +1149,22 @@ def test_audio_capture():
     )
 
     if capture.start():
-        print(f"  Started: {capture.is_running()}")
-        print("  Capturing for 3 seconds... (speak into mic)")
+        logger.info(f"  Started: {capture.is_running()}")
+        logger.info("  Capturing for 3 seconds... (speak into mic)")
 
         for i in range(30):  # 3 seconds
             time.sleep(0.1)
             if i % 10 == 0:
-                print(f"  Level: {capture.get_audio_level():.4f} | Chunks: {len(chunks_received)}")
+                logger.info(f"  Level: {capture.get_audio_level():.4f} | Chunks: {len(chunks_received)}")
 
         capture.stop()
-        print(f"  MIC RESULT: {len(chunks_received)} chunks, Peak={peak_level[0]:.4f}")
+        logger.info(f"  MIC RESULT: {len(chunks_received)} chunks, Peak={peak_level[0]:.4f}")
     else:
-        print("  [FAIL] Could not start microphone capture")
+        logger.error("  [FAIL] Could not start microphone capture")
 
     # Test 2: System loopback mode
-    print("\nTEST 2: SYSTEM LOOPBACK MODE")
-    print("-" * 40)
+    logger.info("TEST 2: SYSTEM LOOPBACK MODE")
+    logger.info("-" * 40)
     chunks_received.clear()
     peak_level[0] = 0.0
 
@@ -1120,48 +1176,44 @@ def test_audio_capture():
     )
 
     if capture.start():
-        print(f"  Started: {capture.is_running()}")
-        print("  Capturing for 3 seconds... (play some audio on your system)")
+        logger.info(f"  Started: {capture.is_running()}")
+        logger.info("  Capturing for 3 seconds... (play some audio on your system)")
 
         for i in range(30):  # 3 seconds
             time.sleep(0.1)
             if i % 10 == 0:
                 status = capture.get_status()
-                print(f"  Level: {capture.get_audio_level():.4f} | Chunks: {len(chunks_received)} | WASAPI: {status['wasapi_loopback']}")
+                logger.info(f"  Level: {capture.get_audio_level():.4f} | Chunks: {len(chunks_received)} | WASAPI: {status['wasapi_loopback']}")
 
         capture.stop()
-        print(f"  LOOPBACK RESULT: {len(chunks_received)} chunks, Peak={peak_level[0]:.4f}")
-        print(f"  WASAPI Loopback: {status['wasapi_loopback']}")
+        logger.info(f"  LOOPBACK RESULT: {len(chunks_received)} chunks, Peak={peak_level[0]:.4f}")
+        logger.info(f"  WASAPI Loopback: {status['wasapi_loopback']}")
     else:
-        print("  [FAIL] Could not start loopback capture")
+        logger.error("  [FAIL] Could not start loopback capture")
 
-    print("\n" + "="*60)
-    print("TEST COMPLETE")
-    print("="*60)
+    logger.info("=" * 60)
+    logger.info("TEST COMPLETE")
+    logger.info("=" * 60)
 
     if len(chunks_received) > 0:
-        print("\n[SUCCESS] Audio capture is working!")
+        logger.info("[SUCCESS] Audio capture is working!")
     else:
-        print("\n[WARNING] No audio chunks received. Check device configuration.")
+        logger.warning("[WARNING] No audio chunks received. Check device configuration.")
 
 
 if __name__ == "__main__":
     import sys
 
-    print("ReadIn AI Audio Capture - Device Detection")
-    print()
+    logger.info("ReadIn AI Audio Capture - Device Detection")
 
     # Check WASAPI support
     if IS_WINDOWS:
         if EnhancedAudioCapture._check_wasapi_loopback_support():
-            print("[OK] pyaudiowpatch available - True WASAPI loopback supported!")
+            logger.info("[OK] pyaudiowpatch available - True WASAPI loopback supported!")
         else:
-            print("[!!] pyaudiowpatch not installed - Install for best quality:")
-            print("     pip install pyaudiowpatch")
-        print()
+            logger.warning("[!!] pyaudiowpatch not installed - Install for best quality: pip install pyaudiowpatch")
 
     list_audio_devices(CaptureMode.SYSTEM_LOOPBACK)
-    print()
     list_audio_devices(CaptureMode.MICROPHONE)
 
     # Run test if --test flag provided

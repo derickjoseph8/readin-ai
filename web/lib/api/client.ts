@@ -87,12 +87,21 @@ const isNetworkError = (err: unknown): boolean => {
 class ApiClient {
   private baseUrl: string
   private token: string | null = null
+  // Track pending requests by URL+method to prevent duplicate in-flight requests
+  private pendingRequests: Map<string, Promise<any>> = new Map()
 
   constructor(baseUrl: string = API_URL) {
     this.baseUrl = baseUrl
     if (typeof window !== 'undefined') {
       this.token = localStorage.getItem('readin_token')
     }
+  }
+
+  /**
+   * Generate a unique key for a request based on URL and method
+   */
+  private getRequestKey(endpoint: string, method: string): string {
+    return `${method}:${endpoint}`
   }
 
   setToken(token: string) {
@@ -116,8 +125,22 @@ class ApiClient {
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
-    retryCount: number = 0
+    retryCount: number = 0,
+    skipDedup: boolean = false
   ): Promise<T> {
+    const method = options.method || 'GET'
+    const requestKey = this.getRequestKey(endpoint, method)
+
+    // For GET requests, deduplicate in-flight requests
+    // Skip deduplication for retries to avoid promise conflicts
+    if (method === 'GET' && !skipDedup && retryCount === 0) {
+      const pendingRequest = this.pendingRequests.get(requestKey)
+      if (pendingRequest) {
+        // Return the existing in-flight request
+        return pendingRequest as Promise<T>
+      }
+    }
+
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...options.headers,
@@ -127,6 +150,8 @@ class ApiClient {
       (headers as Record<string, string>)['Authorization'] = `Bearer ${this.token}`
     }
 
+    // Create the request promise
+    const requestPromise = (async (): Promise<T> => {
     try {
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
         ...options,
@@ -205,7 +230,7 @@ class ApiClient {
         if (error.retryable && retryCount < MAX_RETRIES) {
           const backoffDelay = getBackoffDelay(retryCount)
           await delay(backoffDelay)
-          return this.request<T>(endpoint, options, retryCount + 1)
+          return this.request<T>(endpoint, options, retryCount + 1, true)
         }
 
         throw error
@@ -230,7 +255,7 @@ class ApiClient {
         if (retryCount < MAX_RETRIES) {
           const backoffDelay = getBackoffDelay(retryCount)
           await delay(backoffDelay)
-          return this.request<T>(endpoint, options, retryCount + 1)
+          return this.request<T>(endpoint, options, retryCount + 1, true)
         }
 
         // Update message to indicate all retries exhausted
@@ -256,6 +281,19 @@ class ApiClient {
       }
       throw unknownError
     }
+    })()
+
+    // Store the request promise for deduplication (only for GET requests on first attempt)
+    if (method === 'GET' && retryCount === 0 && !skipDedup) {
+      this.pendingRequests.set(requestKey, requestPromise)
+
+      // Clean up the pending request when it completes (success or failure)
+      requestPromise.finally(() => {
+        this.pendingRequests.delete(requestKey)
+      })
+    }
+
+    return requestPromise
   }
 
   async get<T>(endpoint: string): Promise<T> {

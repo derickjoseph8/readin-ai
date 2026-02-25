@@ -4,6 +4,7 @@ import { getMessages, unstable_setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { locales, type Locale } from '@/i18n';
 import '../globals.css';
+import SetHtmlLang from '@/components/SetHtmlLang';
 
 const BASE_URL = 'https://www.getreadin.us';
 
@@ -136,8 +137,10 @@ export default async function LocaleLayout({
 
   // Note: html/body tags are provided by the root layout.tsx
   // Route group layouts should only wrap children with providers
+  // SetHtmlLang dynamically updates the lang attribute on the html element
   return (
     <NextIntlClientProvider messages={messages}>
+      <SetHtmlLang locale={locale} />
       {children}
     </NextIntlClientProvider>
   );

@@ -1,4 +1,19 @@
-"""Rate limiting middleware using SlowAPI with Redis support."""
+"""
+Rate limiting middleware using SlowAPI with Redis support.
+
+IMPORTANT: Redis is REQUIRED for production deployments!
+============================================================
+In-memory rate limiting is NOT suitable for production because:
+- Rate limits are not shared across multiple application instances
+- Memory usage grows unbounded over time
+- State is lost on application restart
+
+For production, configure REDIS_URL environment variable to point to a Redis instance.
+Example: REDIS_URL=redis://localhost:6379/0
+
+The rate limiter will fall back to in-memory storage if Redis is unavailable,
+but this should only be used for development/testing.
+"""
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -14,6 +29,7 @@ from config import (
     RATE_LIMIT_AI,
     RATE_LIMIT_DEFAULT,
     REDIS_URL,
+    IS_PRODUCTION,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,6 +69,9 @@ def _get_storage_uri() -> str:
     """
     Get the storage URI for rate limiting.
     Uses Redis if available, falls back to in-memory.
+
+    WARNING: In-memory storage is NOT suitable for production!
+    Configure REDIS_URL for production deployments.
     """
     if REDIS_URL:
         try:
@@ -64,6 +83,20 @@ def _get_storage_uri() -> str:
             return REDIS_URL
         except Exception as e:
             logger.warning(f"Redis not available for rate limiting, using memory: {e}")
+
+    # Fallback to in-memory storage with warning
+    if IS_PRODUCTION:
+        logger.warning(
+            "SECURITY WARNING: Rate limiter falling back to in-memory storage in PRODUCTION! "
+            "This is NOT recommended. Rate limits will not be shared across instances "
+            "and will be lost on restart. Configure REDIS_URL for production deployments."
+        )
+    else:
+        logger.warning(
+            "Rate limiter using in-memory storage. "
+            "This is acceptable for development but NOT for production. "
+            "Configure REDIS_URL for production deployments."
+        )
     return "memory://"
 
 

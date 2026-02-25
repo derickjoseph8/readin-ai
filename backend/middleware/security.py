@@ -56,10 +56,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             )
 
         # Content Security Policy
+        # Note: 'unsafe-inline' removed from script-src for better XSS protection
+        # Use nonces or hashes for inline scripts instead
         csp_directives = [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' https://js.stripe.com",
-            "style-src 'self' 'unsafe-inline'",
+            "script-src 'self' https://js.stripe.com",
+            "style-src 'self' 'unsafe-inline'",  # unsafe-inline needed for style attribute
             "img-src 'self' data: https:",
             "font-src 'self' data:",
             "connect-src 'self' https://api.stripe.com https://api.anthropic.com",
@@ -67,6 +69,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",
+            "upgrade-insecure-requests",  # Upgrade HTTP to HTTPS
+            "report-uri /api/v1/csp-report",  # CSP violation reporting endpoint
         ]
         response.headers["Content-Security-Policy"] = "; ".join(csp_directives)
 

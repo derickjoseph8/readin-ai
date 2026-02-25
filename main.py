@@ -5,6 +5,7 @@ Commercial version with authentication and subscription management.
 
 import sys
 import os
+import threading
 
 # Enable line buffering for better logging (may not work on all platforms)
 try:
@@ -12,6 +13,10 @@ try:
     sys.stderr.reconfigure(line_buffering=True)
 except (AttributeError, OSError):
     pass  # Not supported on this platform
+
+# Initialize logging first
+from src.logger import get_logger
+logger = get_logger("main")
 
 import webbrowser
 from pathlib import Path
@@ -82,6 +87,8 @@ class SignalBridge(QObject):
     browser_capture_stopped = pyqtSignal()
     # Audio level signal for UI feedback
     audio_level_updated = pyqtSignal(float)
+    # Update checker signal
+    update_available = pyqtSignal(object)  # UpdateInfo object
 
 
 class ReadInApp:
@@ -110,6 +117,7 @@ class ReadInApp:
         self.signals.browser_meeting_detected.connect(self._on_browser_meeting_detected)
         self.signals.browser_capture_started.connect(self._on_browser_capture_started)
         self.signals.browser_capture_stopped.connect(self._on_browser_capture_stopped)
+        self.signals.update_available.connect(self._on_update_available)
 
         # Components
         self.overlay = OverlayWindow()
@@ -158,7 +166,7 @@ class ReadInApp:
                 enable_preprocessing=True,  # Noise reduction, normalization
                 low_latency=False,  # Balanced latency for quality
             )
-            print("Using ENHANCED audio capture (better quality, stealth mode)")
+            logger.info("Using ENHANCED audio capture (better quality, stealth mode)")
         else:
             self.audio_capture = AudioCapture(
                 on_audio_chunk=self.transcriber.process_audio,
@@ -190,6 +198,11 @@ class ReadInApp:
 
         # Initialize update checker
         self.update_checker = UpdateChecker()
+
+        # Thread safety locks for shared state
+        self._listening_lock = threading.Lock()  # Protects _listening state
+        self._overlay_lock = threading.Lock()  # Protects overlay state changes
+        self._state_lock = threading.Lock()  # Protects general state (_user_status, _current_meeting_app)
 
         self._listening = False
         self._user_status = None
@@ -245,7 +258,7 @@ class ReadInApp:
         """Clear conversation context."""
         self.ai_assistant.clear_context()
         self.overlay.reset()
-        print("Context cleared")
+        logger.info("Context cleared")
 
     def _on_theme_changed(self, key: str, theme: str, old_value):
         """Handle theme change."""
@@ -258,7 +271,8 @@ class ReadInApp:
 
     def _on_audio_device_changed(self, key: str, device_index, old_value):
         """Handle audio device change."""
-        was_listening = self._listening
+        with self._listening_lock:
+            was_listening = self._listening
         if was_listening:
             self.audio_capture.stop()
 
@@ -269,7 +283,7 @@ class ReadInApp:
 
     def _on_audio_error(self, error_message: str):
         """Handle audio capture errors."""
-        print(f"Audio error: {error_message}")
+        logger.error(f"Audio error: {error_message}")
         self.tray.showMessage(
             "ReadIn AI - Audio Error",
             error_message,
@@ -428,7 +442,7 @@ class ReadInApp:
         self.hotkey_manager.stop()
         self._setup_hotkeys()
 
-        print("Settings applied")
+        logger.info("Settings applied")
 
     def _export_conversations(self):
         """Export recorded conversations."""
@@ -512,7 +526,7 @@ class ReadInApp:
 
     def _on_login_success(self):
         """Called when user successfully logs in."""
-        print("Login successful")
+        logger.info("Login successful")
         self._refresh_user_status()
         self._update_tray_menu()
 
@@ -530,7 +544,8 @@ class ReadInApp:
         """Logout user."""
         self._stop_listening()
         api.logout()
-        self._user_status = None
+        with self._state_lock:
+            self._user_status = None
         self._update_tray_menu()
         self.overlay.hide()
 
@@ -545,7 +560,8 @@ class ReadInApp:
 
         status = api.get_status()
         if "error" not in status:
-            self._user_status = status
+            with self._state_lock:
+                self._user_status = status
             self._update_tray_menu()
 
             # Check if account is active
@@ -571,7 +587,7 @@ class ReadInApp:
             x = (geom.width() - self.overlay.width()) // 2
             y = (geom.height() - self.overlay.height()) // 2
             self.overlay.move(x, y)
-            print(f"Repositioned overlay to CENTER: ({x}, {y}) on screen {geom.width()}x{geom.height()}")
+            logger.debug(f"Repositioned overlay to CENTER: ({x}, {y}) on screen {geom.width()}x{geom.height()}")
 
         # Disable screen capture protection temporarily to test visibility
         self.overlay.set_screen_capture_visibility(True)
@@ -587,18 +603,21 @@ class ReadInApp:
             import ctypes
             hwnd = int(self.overlay.winId())
             ctypes.windll.user32.FlashWindow(hwnd, True)
-        except:
-            pass
+        except (AttributeError, OSError, ValueError) as e:
+            # Expected to fail on non-Windows or if window handle is invalid
+            logger.debug(f"Could not flash taskbar window: {e}")
 
-        print(f"Overlay visible: {self.overlay.isVisible()}, geometry: {self.overlay.geometry()}")
+        logger.debug(f"Overlay visible: {self.overlay.isVisible()}, geometry: {self.overlay.geometry()}")
 
     def _on_overlay_listen_toggled(self, start: bool):
         """Handle listen button toggle from overlay."""
+        with self._listening_lock:
+            is_listening = self._listening
         if start:
-            if not self._listening:
+            if not is_listening:
                 self._start_listening(skip_dialog=True)
         else:
-            if self._listening:
+            if is_listening:
                 self._stop_listening()
 
     def _toggle_listening(self):
@@ -606,74 +625,95 @@ class ReadInApp:
             self._show_login()
             return
 
-        if self._listening:
+        with self._listening_lock:
+            is_listening = self._listening
+        if is_listening:
             self._stop_listening()
         else:
             self._start_listening()
 
     def _start_listening(self, meeting_app: str = None, skip_dialog: bool = False):
-        if self._listening:
-            return
-
-        # Check subscription status first
-        self._refresh_user_status()
-        if self._user_status and not self._user_status.get("is_active"):
-            self._show_upgrade_prompt()
-            return
-
-        # Show meeting type dialog if not skipped (e.g., for auto-detected meetings)
-        meeting_type = "general"
-        meeting_title = None
-
-        if not skip_dialog:
-            result = MeetingTypeDialog.get_meeting_type(
-                detected_app=meeting_app or self._current_meeting_app
-            )
-            if result is None:
-                # User cancelled
+        with self._listening_lock:
+            if self._listening:
                 return
-            meeting_type, meeting_title = result
+            # Set flag early to prevent re-entry
+            self._listening = True
 
-        # Start the meeting session
-        self.meeting_session.start(
-            meeting_type=meeting_type,
-            title=meeting_title,
-            meeting_app=meeting_app or self._current_meeting_app
-        )
+        try:
+            # Check subscription status first
+            self._refresh_user_status()
+            with self._state_lock:
+                user_status = self._user_status
+            if user_status and not user_status.get("is_active"):
+                with self._listening_lock:
+                    self._listening = False
+                self._show_upgrade_prompt()
+                return
 
-        # Set meeting type on AI assistant for context
-        self.ai_assistant.set_meeting_type(meeting_type)
+            # Show meeting type dialog if not skipped (e.g., for auto-detected meetings)
+            meeting_type = "general"
+            meeting_title = None
 
-        # Refresh personalization context
-        if api.is_logged_in():
-            self.context_provider.refresh_context()
+            with self._state_lock:
+                current_meeting_app = self._current_meeting_app
 
-        self._listening = True
-        self.transcriber.start()
-        self.audio_capture.start()
-        self.overlay.reset()
-        self.overlay.set_listening_state(True)
-        self._show_overlay()
+            if not skip_dialog:
+                result = MeetingTypeDialog.get_meeting_type(
+                    detected_app=meeting_app or current_meeting_app
+                )
+                if result is None:
+                    # User cancelled
+                    with self._listening_lock:
+                        self._listening = False
+                    return
+                meeting_type, meeting_title = result
 
-        if hasattr(self, 'toggle_action'):
-            self.toggle_action.setText("Stop Listening")
-        if hasattr(self, 'status_action'):
-            self.status_action.setText("Status: Listening...")
-        print(f"Started listening for audio (type: {meeting_type})")
+            # Start the meeting session
+            self.meeting_session.start(
+                meeting_type=meeting_type,
+                title=meeting_title,
+                meeting_app=meeting_app or current_meeting_app
+            )
+
+            # Set meeting type on AI assistant for context
+            self.ai_assistant.set_meeting_type(meeting_type)
+
+            # Refresh personalization context
+            if api.is_logged_in():
+                self.context_provider.refresh_context()
+
+            self.transcriber.start()
+            self.audio_capture.start()
+            with self._overlay_lock:
+                self.overlay.reset()
+                self.overlay.set_listening_state(True)
+            self._show_overlay()
+
+            if hasattr(self, 'toggle_action'):
+                self.toggle_action.setText("Stop Listening")
+            if hasattr(self, 'status_action'):
+                self.status_action.setText("Status: Listening...")
+            logger.info(f"Started listening for audio (type: {meeting_type})")
+        except Exception as e:
+            # Reset listening state on error
+            with self._listening_lock:
+                self._listening = False
+            raise
 
     def _stop_listening(self):
-        if not self._listening:
-            return
+        with self._listening_lock:
+            if not self._listening:
+                return
+            self._listening = False
 
-        self._listening = False
         self.audio_capture.stop()
         self.transcriber.stop()
         self.ai_assistant.clear_context()
-        self.overlay.set_listening_state(False)
+        with self._overlay_lock:
+            self.overlay.set_listening_state(False)
 
         # End the meeting session and get summary
         if self.meeting_session.is_active:
-            import threading
             def end_meeting():
                 summary = self.meeting_session.end()
                 if summary:
@@ -684,18 +724,23 @@ class ReadInApp:
             self.toggle_action.setText("Start Listening")
         if hasattr(self, 'status_action'):
             self.status_action.setText("Status: Ready")
-        print("Stopped listening")
+        logger.info("Stopped listening")
 
     def _on_meeting_detected(self, process_name: str):
         if not api.is_logged_in():
             return
 
-        # Prevent duplicate calls
-        if self._listening and self._current_meeting_app == process_name:
+        # Prevent duplicate calls with thread-safe check
+        with self._listening_lock:
+            is_listening = self._listening
+        with self._state_lock:
+            current_app = self._current_meeting_app
+        if is_listening and current_app == process_name:
             return
 
-        print(f"Meeting app detected: {process_name}")
-        self._current_meeting_app = process_name
+        logger.info(f"Meeting app detected: {process_name}")
+        with self._state_lock:
+            self._current_meeting_app = process_name
         if hasattr(self, 'status_action'):
             self.status_action.setText(f"Status: {process_name} detected")
         self.tray.showMessage(
@@ -711,8 +756,9 @@ class ReadInApp:
         if not api.is_logged_in():
             return
 
-        print(f"Browser meeting detected: {meeting_name} at {url}")
-        self._current_meeting_app = f"{meeting_name} (Browser)"
+        logger.info(f"Browser meeting detected: {meeting_name} at {url}")
+        with self._state_lock:
+            self._current_meeting_app = f"{meeting_name} (Browser)"
         if hasattr(self, 'status_action'):
             self.status_action.setText(f"Status: {meeting_name} (Browser)")
         self.tray.showMessage(
@@ -727,21 +773,33 @@ class ReadInApp:
         if not api.is_logged_in():
             return
 
-        print("Browser extension started audio capture")
+        logger.info("Browser extension started audio capture")
 
-        # Start transcription if not already listening
-        if not self._listening:
+        # Start transcription if not already listening (thread-safe check and set)
+        with self._listening_lock:
+            if self._listening:
+                return
+            self._listening = True
+
+        try:
             # Check subscription status first
             self._refresh_user_status()
-            if self._user_status and not self._user_status.get("is_active"):
+            with self._state_lock:
+                user_status = self._user_status
+            if user_status and not user_status.get("is_active"):
+                with self._listening_lock:
+                    self._listening = False
                 self._show_upgrade_prompt()
                 return
+
+            with self._state_lock:
+                current_meeting_app = self._current_meeting_app or "Browser Meeting"
 
             # Start the meeting session
             self.meeting_session.start(
                 meeting_type="general",
                 title=None,
-                meeting_app=self._current_meeting_app or "Browser Meeting"
+                meeting_app=current_meeting_app
             )
 
             self.ai_assistant.set_meeting_type("general")
@@ -750,34 +808,43 @@ class ReadInApp:
             if api.is_logged_in():
                 self.context_provider.refresh_context()
 
-            self._listening = True
             self.transcriber.start()
             # Note: Audio comes from browser bridge, not local audio capture
-            self.overlay.reset()
-            self.overlay.set_listening_state(True)
+            with self._overlay_lock:
+                self.overlay.reset()
+                self.overlay.set_listening_state(True)
             self._show_overlay()
 
             if hasattr(self, 'toggle_action'):
                 self.toggle_action.setText("Stop Listening")
             if hasattr(self, 'status_action'):
                 self.status_action.setText("Status: Listening (Browser)...")
+        except Exception:
+            with self._listening_lock:
+                self._listening = False
+            raise
 
     def _on_browser_capture_stopped(self):
         """Handle browser extension stopping audio capture."""
-        print("Browser extension stopped audio capture")
+        logger.info("Browser extension stopped audio capture")
 
-        if self._listening and self.browser_bridge.is_capturing() == False:
+        with self._listening_lock:
+            is_listening = self._listening
+        if is_listening and self.browser_bridge.is_capturing() == False:
             # Only stop if we were using browser audio
-            if self._current_meeting_app and "Browser" in self._current_meeting_app:
+            with self._state_lock:
+                current_app = self._current_meeting_app
+            if current_app and "Browser" in current_app:
                 self._stop_listening()
-                self._current_meeting_app = None
+                with self._state_lock:
+                    self._current_meeting_app = None
 
     def _on_multiple_apps_detected(self, apps: list):
         """Handle when multiple meeting apps are detected."""
         if not api.is_logged_in():
             return
 
-        print(f"Multiple meeting apps detected: {apps}")
+        logger.info(f"Multiple meeting apps detected: {apps}")
 
         # Show selection dialog
         selected_app = AppSelectorDialog.select_app(apps)
@@ -797,9 +864,10 @@ class ReadInApp:
             )
 
     def _on_meeting_ended(self):
-        print("Meeting app closed")
+        logger.info("Meeting app closed")
         self._stop_listening()
-        self._current_meeting_app = None
+        with self._state_lock:
+            self._current_meeting_app = None
         if hasattr(self, 'status_action'):
             self.status_action.setText("Status: Ready")
         self.overlay.hide()
@@ -813,7 +881,7 @@ class ReadInApp:
             self._show_upgrade_prompt()
             return
 
-        print(f"Heard: {text}")
+        logger.debug(f"Heard: {text}")
         self.overlay.set_heard_text(text)
         self.ai_assistant.generate_response(text)
 
@@ -821,7 +889,7 @@ class ReadInApp:
         self.overlay.append_response_text(chunk)
 
     def _on_ai_response(self, heard_text: str, response: str):
-        print(f"Response: {response}")
+        logger.debug(f"Response: {response}")
         self.overlay.set_response_text(response)
 
         # Save conversation to meeting session
@@ -989,7 +1057,7 @@ class ReadInApp:
 
     def run(self):
         if not ANTHROPIC_API_KEY:
-            print("WARNING: ANTHROPIC_API_KEY not set!")
+            logger.warning("ANTHROPIC_API_KEY not set!")
 
         # Check for first run - show setup wizard
         if not self.settings.get("first_run_completed", False):
@@ -1000,7 +1068,7 @@ class ReadInApp:
 
         # Check login status and refresh
         if api.is_logged_in():
-            print("User logged in, checking subscription...")
+            logger.info("User logged in, checking subscription...")
             self._refresh_user_status()
 
             # Refresh personalization context
@@ -1008,9 +1076,9 @@ class ReadInApp:
 
             # Check for active meeting to resume
             if self.meeting_session.resume_active():
-                print("Resumed active meeting session")
+                logger.info("Resumed active meeting session")
         else:
-            print("User not logged in")
+            logger.info("User not logged in")
             # Show login after a short delay
             QTimer.singleShot(500, self._show_login)
 
@@ -1019,7 +1087,7 @@ class ReadInApp:
         # Start browser bridge for extension support
         self.browser_bridge.start()
 
-        print("ReadIn AI started")
+        logger.info("ReadIn AI started")
 
         # Check for updates on startup if enabled
         if self.settings.get("auto_update_check", True):
@@ -1028,35 +1096,45 @@ class ReadInApp:
         return self.app.exec()
 
     def _startup_update_check(self):
-        """Check for updates on startup and prompt user."""
+        """Check for updates on startup in background thread."""
         try:
-            update_info = self.update_checker.check_for_updates(background=False)
-            if update_info:
-                # Show update dialog instead of just notification
-                result = QMessageBox.question(
-                    None,
-                    "Update Available",
-                    f"ReadIn AI {update_info.version} is available!\n\n"
-                    f"You're currently using version {self.update_checker.current_version}.\n\n"
-                    f"{update_info.changelog or 'New improvements and bug fixes.'}\n\n"
-                    "Would you like to download the update now?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
-                if result == QMessageBox.StandardButton.Yes and update_info.download_url:
-                    webbrowser.open(update_info.download_url)
-        except Exception:
-            pass  # Silently ignore startup update check failures
+            # Set up callback to emit signal when update is found
+            def on_update_found(update_info):
+                self.signals.update_available.emit(update_info)
+
+            self.update_checker.on_update_available = on_update_found
+            self.update_checker.check_for_updates(background=True)
+        except Exception as e:
+            # Log startup update check failures but don't interrupt user
+            logger.debug(f"Startup update check failed: {e}")
+
+    def _on_update_available(self, update_info):
+        """Handle update available signal on main thread."""
+        try:
+            result = QMessageBox.question(
+                None,
+                "Update Available",
+                f"ReadIn AI {update_info.version} is available!\n\n"
+                f"You're currently using version {self.update_checker.current_version}.\n\n"
+                f"{update_info.changelog or 'New improvements and bug fixes.'}\n\n"
+                "Would you like to download the update now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if result == QMessageBox.StandardButton.Yes and update_info.download_url:
+                webbrowser.open(update_info.download_url)
+        except Exception as e:
+            logger.debug(f"Failed to show update dialog: {e}")
 
     def _show_first_run_wizard(self):
         """Show first run setup wizard."""
-        print("First run detected - showing setup wizard...")
+        logger.info("First run detected - showing setup wizard...")
         accepted, device_index = FirstRunWizard.run_wizard()
 
         if accepted and device_index is not None:
             # Save the selected device
             self.settings.set("audio_device", device_index)
             self.audio_capture.set_device(device_index)
-            print(f"Audio device configured: index {device_index}")
+            logger.info(f"Audio device configured: index {device_index}")
             self.settings.set("audio_setup_completed", True)
 
         # Mark first run as completed (even if cancelled)
@@ -1067,22 +1145,22 @@ class ReadInApp:
             try:
                 success, message = create_desktop_shortcut()
                 if success:
-                    print(f"Desktop shortcut created: {message}")
+                    logger.info(f"Desktop shortcut created: {message}")
                 else:
-                    print(f"Could not create desktop shortcut: {message}")
+                    logger.warning(f"Could not create desktop shortcut: {message}")
             except Exception as e:
-                print(f"Error creating desktop shortcut: {e}")
+                logger.error(f"Error creating desktop shortcut: {e}")
 
     def _show_audio_setup(self):
         """Show audio setup dialog on first run."""
-        print("First run detected - showing audio setup...")
+        logger.info("First run detected - showing audio setup...")
         device_index = AudioSetupDialog.get_audio_device()
 
         if device_index is not None:
             # Save the selected device
             self.settings.set("audio_device", device_index)
             self.audio_capture.set_device(device_index)
-            print(f"Audio device configured: index {device_index}")
+            logger.info(f"Audio device configured: index {device_index}")
 
         # Mark setup as completed (even if cancelled, don't show again)
         self.settings.set("audio_setup_completed", True)

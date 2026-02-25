@@ -23,7 +23,7 @@ from pydantic import BaseModel
 
 from database import get_db
 from models import User
-from auth import get_current_user, verify_password
+from auth import get_current_user, verify_password, hash_password
 
 router = APIRouter(prefix="/api/v1/2fa", tags=["Two-Factor Authentication"])
 
@@ -71,14 +71,21 @@ class TwoFactorLoginRequest(BaseModel):
 # HELPER FUNCTIONS
 # =============================================================================
 
-def generate_backup_codes(count: int = 10) -> List[str]:
-    """Generate a list of backup codes."""
-    codes = []
+def generate_backup_codes(count: int = 10) -> tuple[List[str], List[str]]:
+    """
+    Generate a list of backup codes.
+
+    Returns a tuple of (plain_codes, hashed_codes).
+    Plain codes are shown to the user once, hashed codes are stored in the database.
+    """
+    plain_codes = []
+    hashed_codes = []
     for _ in range(count):
         # Generate 8-character alphanumeric codes
         code = secrets.token_hex(4).upper()
-        codes.append(code)
-    return codes
+        plain_codes.append(code)
+        hashed_codes.append(hash_password(code))
+    return plain_codes, hashed_codes
 
 
 def generate_qr_code(provisioning_uri: str) -> str:
@@ -186,23 +193,23 @@ def verify_and_enable_2fa(
 
     # Verify the TOTP code
     totp = pyotp.TOTP(user.totp_secret)
-    if not totp.verify(request.code, valid_window=1):
+    if not totp.verify(request.code, valid_window=0):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid verification code"
         )
 
-    # Generate backup codes
-    backup_codes = generate_backup_codes(10)
+    # Generate backup codes (plain for display, hashed for storage)
+    plain_codes, hashed_codes = generate_backup_codes(10)
 
     # Enable 2FA
     user.totp_enabled = True
-    user.totp_backup_codes = backup_codes
+    user.totp_backup_codes = hashed_codes
     db.commit()
 
     return {
         "message": "Two-factor authentication enabled successfully",
-        "backup_codes": backup_codes
+        "backup_codes": plain_codes
     }
 
 
@@ -231,14 +238,17 @@ def disable_2fa(
     # Verify TOTP code if provided
     if request.code:
         totp = pyotp.TOTP(user.totp_secret)
-        code_valid = totp.verify(request.code, valid_window=1)
+        code_valid = totp.verify(request.code, valid_window=0)
 
         # Check backup codes if TOTP didn't match
         if not code_valid:
             backup_codes = user.totp_backup_codes or []
             code_upper = request.code.upper().replace("-", "")
-            if code_upper in backup_codes:
-                code_valid = True
+            # Check each hashed backup code
+            for hashed_code in backup_codes:
+                if verify_password(code_upper, hashed_code):
+                    code_valid = True
+                    break
 
         if not code_valid:
             raise HTTPException(
@@ -272,18 +282,18 @@ def regenerate_backup_codes(
 
     # Verify the TOTP code
     totp = pyotp.TOTP(user.totp_secret)
-    if not totp.verify(request.code, valid_window=1):
+    if not totp.verify(request.code, valid_window=0):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid verification code"
         )
 
-    # Generate new backup codes
-    backup_codes = generate_backup_codes(10)
-    user.totp_backup_codes = backup_codes
+    # Generate new backup codes (plain for display, hashed for storage)
+    plain_codes, hashed_codes = generate_backup_codes(10)
+    user.totp_backup_codes = hashed_codes
     db.commit()
 
-    return BackupCodesResponse(codes=backup_codes)
+    return BackupCodesResponse(codes=plain_codes)
 
 
 @router.post("/validate")
@@ -303,18 +313,25 @@ def validate_totp_code(
         )
 
     if request.is_backup_code:
-        # Validate backup code
+        # Validate backup code (hashed with bcrypt)
         backup_codes = user.totp_backup_codes or []
         code_upper = request.code.upper().replace("-", "")
 
-        if code_upper not in backup_codes:
+        # Find and verify the matching hashed backup code
+        matched_index = None
+        for i, hashed_code in enumerate(backup_codes):
+            if verify_password(code_upper, hashed_code):
+                matched_index = i
+                break
+
+        if matched_index is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid backup code"
             )
 
         # Remove used backup code
-        backup_codes.remove(code_upper)
+        backup_codes.pop(matched_index)
         user.totp_backup_codes = backup_codes
         db.commit()
 
@@ -326,7 +343,7 @@ def validate_totp_code(
     else:
         # Validate TOTP code
         totp = pyotp.TOTP(user.totp_secret)
-        if not totp.verify(request.code, valid_window=1):
+        if not totp.verify(request.code, valid_window=0):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid verification code"

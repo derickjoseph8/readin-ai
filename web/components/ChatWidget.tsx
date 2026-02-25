@@ -33,15 +33,22 @@ export default function ChatWidget() {
   const [leaveMessageText, setLeaveMessageText] = useState('')
   const [leaveMessageCategory, setLeaveMessageCategory] = useState<'sales' | 'billing' | 'technical'>('technical')
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isMountedRef = useRef<boolean>(true)
+  const pollIntervalMs = useRef<number>(1000) // Start at 1 second
+  const lastMessageCount = useRef<number>(0)
 
-  // Cleanup function to clear polling interval
+  // Cleanup function to clear polling timeout
   const clearPolling = useCallback(() => {
     if (pollIntervalRef.current !== null) {
-      clearInterval(pollIntervalRef.current)
+      clearTimeout(pollIntervalRef.current)
       pollIntervalRef.current = null
     }
+  }, [])
+
+  // Reset polling interval to minimum (called when user sends a message)
+  const resetPollingInterval = useCallback(() => {
+    pollIntervalMs.current = 1000 // Reset to 1 second
   }, [])
 
   // Track component mount state
@@ -54,9 +61,9 @@ export default function ChatWidget() {
     }
   }, [clearPolling])
 
-  // Poll for messages and status updates
+  // Poll for messages and status updates with exponential backoff
   useEffect(() => {
-    // Early return if no session or chat ended - also cleanup any existing interval
+    // Early return if no session or chat ended - also cleanup any existing timeout
     if (!sessionId || chatStatus === 'ended') {
       clearPolling()
       return
@@ -75,6 +82,15 @@ export default function ChatWidget() {
 
         setMessages(data.messages)
 
+        // Check if there are new messages - if so, reset the polling interval
+        if (data.messages.length > lastMessageCount.current) {
+          pollIntervalMs.current = 1000 // Reset to 1 second on new messages
+        } else {
+          // No new messages - increase interval with exponential backoff (max 30 seconds)
+          pollIntervalMs.current = Math.min(pollIntervalMs.current * 1.5, 30000)
+        }
+        lastMessageCount.current = data.messages.length
+
         // Always sync status with backend - handles all state transitions
         if (data.status === 'active') {
           setChatStatus('active')
@@ -83,6 +99,7 @@ export default function ChatWidget() {
           setChatStatus('ended')
           // Clear polling when chat ends
           clearPolling()
+          return // Don't schedule next poll
         } else if (data.status === 'waiting') {
           // User is waiting in queue (either initial or after Novah transfer)
           setChatStatus('waiting')
@@ -93,32 +110,34 @@ export default function ChatWidget() {
         if (data.is_ai_handled !== undefined) {
           setIsAiHandled(data.is_ai_handled)
         }
+
+        // Schedule next poll with current interval
+        if (isMountedRef.current) {
+          pollIntervalRef.current = setTimeout(pollMessages, pollIntervalMs.current)
+        }
       } catch (err) {
         // Only log error if component is still mounted
         if (isMountedRef.current) {
           console.error('Failed to poll messages:', err)
+          // On error, still schedule next poll but with backoff
+          pollIntervalMs.current = Math.min(pollIntervalMs.current * 2, 30000)
+          pollIntervalRef.current = setTimeout(pollMessages, pollIntervalMs.current)
         }
       }
     }
 
-    // Clear any existing interval before starting new one (prevents race condition)
+    // Clear any existing timeout before starting new one (prevents race condition)
     clearPolling()
+
+    // Reset polling interval when starting a new session
+    pollIntervalMs.current = 1000
+    lastMessageCount.current = 0
 
     // Initial poll immediately
     pollMessages()
 
-    // Set up polling interval only if still mounted after initial call
-    // Use a microtask to ensure this runs after pollMessages completes
-    // Note: chatStatus check is redundant here since we return early if 'ended', but kept for safety
-    const timeoutId = setTimeout(() => {
-      if (isMountedRef.current) {
-        pollIntervalRef.current = setInterval(pollMessages, 3000)
-      }
-    }, 0)
-
     // Cleanup function
     return () => {
-      clearTimeout(timeoutId)
       clearPolling()
     }
   }, [sessionId, chatStatus, clearPolling])
@@ -166,6 +185,9 @@ export default function ChatWidget() {
     if (!newMessage.trim() || !sessionId) return
     setIsSending(true)
     setError('')
+
+    // Reset polling interval when user sends a message
+    resetPollingInterval()
 
     try {
       await supportApi.sendChatMessage(sessionId, newMessage.trim())

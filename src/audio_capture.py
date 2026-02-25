@@ -8,6 +8,9 @@ from typing import Callable, Optional, List, Tuple, Dict, Any
 import numpy as np
 
 from config import AUDIO_SAMPLE_RATE, AUDIO_CHUNK_DURATION, IS_WINDOWS, IS_MACOS, IS_LINUX
+from src.logger import get_logger
+
+logger = get_logger("audio_capture")
 
 
 class AudioCapture:
@@ -30,10 +33,12 @@ class AudioCapture:
         self._running = False
         self._processor_thread: Optional[threading.Thread] = None
         self._capture_thread: Optional[threading.Thread] = None
+        # Bounded circular buffer: max ~10 seconds of audio
+        self._max_buffer_samples = int(10 * self.sample_rate)
         self._audio_buffer = np.array([], dtype=np.float32)
         self._buffer_lock = threading.Lock()  # Thread safety for buffer access
         self._samples_per_chunk = int(self.sample_rate * self.chunk_duration)
-        self._buffer_queue: queue.Queue = queue.Queue()
+        self._buffer_queue: queue.Queue = queue.Queue(maxsize=100)
         self._device_index = device_index
         self._current_device_name = ""
         self._current_audio_level = 0.0
@@ -85,7 +90,7 @@ class AudioCapture:
                         })
                 pa.terminate()
             except Exception as e:
-                print(f"Error listing Windows audio devices: {e}")
+                logger.error(f"Error listing Windows audio devices: {e}", exc_info=True)
         else:
             try:
                 import sounddevice as sd
@@ -109,7 +114,7 @@ class AudioCapture:
                             'sample_rate': int(device.get('default_samplerate', AUDIO_SAMPLE_RATE)),
                         })
             except Exception as e:
-                print(f"Error listing audio devices: {e}")
+                logger.error(f"Error listing audio devices: {e}", exc_info=True)
 
         return devices
 
@@ -161,7 +166,7 @@ class AudioCapture:
 
     def _emit_error(self, message: str):
         """Emit an error message."""
-        print(f"Audio error: {message}")
+        logger.error(f"Audio error: {message}")
         if self.on_error:
             self.on_error(message)
 
@@ -185,7 +190,7 @@ class AudioCapture:
             if info['maxInputChannels'] > 0:
                 if ('loopback' in name or 'stereo mix' in name or 'what u hear' in name or
                     'cable output' in name or 'vb-audio' in name or 'voicemeeter' in name):
-                    print(f"Found loopback device: [{i}] {info['name']}")
+                    logger.info(f"Found loopback device: [{i}] {info['name']}")
                     return i
 
         return None
@@ -200,7 +205,7 @@ class AudioCapture:
         for i in range(self._pa.get_device_count()):
             info = self._pa.get_device_info_by_index(i)
             if info['maxInputChannels'] > 0:
-                print(f"Fallback input: [{i}] {info['name']}")
+                logger.info(f"Fallback input: [{i}] {info['name']}")
                 return i
         return None
 
@@ -275,6 +280,11 @@ class AudioCapture:
                 with self._buffer_lock:
                     self._audio_buffer = np.concatenate([self._audio_buffer, audio])
 
+                    # Enforce bounded buffer: drop oldest samples if buffer exceeds max size
+                    if len(self._audio_buffer) > self._max_buffer_samples:
+                        excess = len(self._audio_buffer) - self._max_buffer_samples
+                        self._audio_buffer = self._audio_buffer[excess:]
+
                     while len(self._audio_buffer) >= self._samples_per_chunk:
                         chunk = self._audio_buffer[:self._samples_per_chunk]
                         self._audio_buffer = self._audio_buffer[self._samples_per_chunk:]
@@ -287,11 +297,11 @@ class AudioCapture:
                 current_time = time.time()
                 # Rate limit error logging
                 if current_time - self._last_error_time > 5.0:
-                    print(f"Audio processing error: {e}")
+                    logger.error(f"Audio processing error: {e}")
                     self._last_error_time = current_time
                 # If too many errors, try to recover
                 if self._error_count > 10:
-                    print("Too many audio errors, attempting recovery...")
+                    logger.warning("Too many audio errors, attempting recovery...")
                     self._error_count = 0
                     self._audio_buffer = np.array([], dtype=np.float32)
 
@@ -299,7 +309,10 @@ class AudioCapture:
         """PyAudio stream callback."""
         import pyaudio
         if self._running:
-            self._buffer_queue.put(in_data)
+            try:
+                self._buffer_queue.put_nowait(in_data)
+            except queue.Full:
+                pass  # Drop audio if queue is full to prevent unbounded growth
         return (None, pyaudio.paContinue)
 
     def _start_windows(self):
@@ -336,7 +349,7 @@ class AudioCapture:
         self._source_channels = channels
         self._source_sample_rate = device_sample_rate
 
-        print(f"Using device: {device_name} ({channels}ch @ {device_sample_rate}Hz)")
+        logger.info(f"Using device: {device_name} ({channels}ch @ {device_sample_rate}Hz)")
         self._emit_device_change(device_name)
 
         # Try with device's native sample rate first, then fall back
@@ -357,15 +370,16 @@ class AudioCapture:
                 )
                 self._stream.start_stream()
                 self._source_sample_rate = try_rate
-                print(f"Audio capture started (Windows) at {try_rate}Hz")
+                logger.info(f"Audio capture started (Windows) at {try_rate}Hz")
                 return
             except Exception as e:
-                print(f"Failed to start at {try_rate}Hz: {e}")
+                logger.warning(f"Failed to start at {try_rate}Hz: {e}")
                 if self._stream:
                     try:
                         self._stream.close()
-                    except:
-                        pass
+                    except (OSError, AttributeError) as e:
+                        # Stream may already be closed or invalid
+                        logger.debug(f"Stream close warning: {e}")
                     self._stream = None
                 continue
 
@@ -385,7 +399,7 @@ class AudioCapture:
                 )
                 self._stream.start_stream()
                 self._emit_device_change("Default Input")
-                print("Audio capture started (default device)")
+                logger.info("Audio capture started (default device)")
             except Exception as e2:
                 self._emit_error(f"Audio capture failed: {e2}")
                 self._running = False
@@ -399,7 +413,7 @@ class AudioCapture:
 
         def callback(indata, frames, time_info, status):
             if status:
-                print(f"Audio status: {status}")
+                logger.debug(f"Audio status: {status}")
             if self._running:
                 # Put raw data in queue - processing thread handles conversion
                 self._buffer_queue.put(indata.copy())
@@ -419,7 +433,7 @@ class AudioCapture:
                     if channels == 0:
                         raise ValueError(f"Device {device_name} has no input channels")
                 except Exception as e:
-                    print(f"Device {device_index} error: {e}, falling back to default")
+                    logger.warning(f"Device {device_index} error: {e}, falling back to default")
                     device_index = None
 
             # If no device specified, try to find BlackHole or loopback
@@ -432,7 +446,7 @@ class AudioCapture:
                             device_name = dev['name']
                             channels = min(int(dev['max_input_channels']), 2)
                             device_sample_rate = int(dev.get('default_samplerate', self.sample_rate))
-                            print(f"Auto-selected loopback device: {device_name}")
+                            logger.info(f"Auto-selected loopback device: {device_name}")
                             break
 
             # Store source info for processing
@@ -457,17 +471,17 @@ class AudioCapture:
                     self._stream.start()
                     self._source_sample_rate = try_rate
                     self._emit_device_change(device_name)
-                    print(f"Audio capture started (macOS) - {device_name} at {try_rate}Hz")
+                    logger.info(f"Audio capture started (macOS) - {device_name} at {try_rate}Hz")
                     if device_index is None:
-                        print("Tip: Install BlackHole (brew install blackhole-2ch) for system audio capture")
+                        logger.info("Tip: Install BlackHole (brew install blackhole-2ch) for system audio capture")
                     return
                 except Exception as e:
-                    print(f"Failed to start at {try_rate}Hz: {e}")
+                    logger.warning(f"Failed to start at {try_rate}Hz: {e}")
                     if self._stream:
                         try:
                             self._stream.close()
-                        except:
-                            pass
+                        except (OSError, AttributeError) as e:
+                            logger.debug(f"Stream close during retry: {e}")
                         self._stream = None
                     continue
 
@@ -484,7 +498,7 @@ class AudioCapture:
 
         def callback(indata, frames, time_info, status):
             if status:
-                print(f"Audio status: {status}")
+                logger.debug(f"Audio status: {status}")
             if self._running:
                 # Put raw data in queue - processing thread handles conversion
                 self._buffer_queue.put(indata.copy())
@@ -504,7 +518,7 @@ class AudioCapture:
                     if channels == 0:
                         raise ValueError(f"Device {device_name} has no input channels")
                 except Exception as e:
-                    print(f"Device {device_index} error: {e}, falling back to default")
+                    logger.warning(f"Device {device_index} error: {e}, falling back to default")
                     device_index = None
 
             # If no device specified, try to find PulseAudio monitor
@@ -518,7 +532,7 @@ class AudioCapture:
                             device_name = dev['name']
                             channels = min(int(dev['max_input_channels']), 2)
                             device_sample_rate = int(dev.get('default_samplerate', self.sample_rate))
-                            print(f"Auto-selected monitor device: {device_name}")
+                            logger.info(f"Auto-selected monitor device: {device_name}")
                             break
 
             # Store source info for processing
@@ -543,17 +557,17 @@ class AudioCapture:
                     self._stream.start()
                     self._source_sample_rate = try_rate
                     self._emit_device_change(device_name)
-                    print(f"Audio capture started (Linux) - {device_name} at {try_rate}Hz")
+                    logger.info(f"Audio capture started (Linux) - {device_name} at {try_rate}Hz")
                     if device_index is None:
-                        print("Tip: Select 'Monitor of [speaker]' device for system audio capture")
+                        logger.info("Tip: Select 'Monitor of [speaker]' device for system audio capture")
                     return
                 except Exception as e:
-                    print(f"Failed to start at {try_rate}Hz: {e}")
+                    logger.warning(f"Failed to start at {try_rate}Hz: {e}")
                     if self._stream:
                         try:
                             self._stream.close()
-                        except:
-                            pass
+                        except (OSError, AttributeError) as e:
+                            logger.debug(f"Stream close during retry: {e}")
                         self._stream = None
                     continue
 
@@ -594,11 +608,11 @@ class AudioCapture:
         elif IS_LINUX:
             self._start_linux()
         else:
-            print(f"Unsupported platform: {__import__('sys').platform}")
+            logger.error(f"Unsupported platform: {__import__('sys').platform}")
             self._running = False
 
     def stop(self):
-        """Stop capturing audio."""
+        """Stop capturing audio and release all resources."""
         self._running = False
 
         # Clear the buffer queue before stopping threads
@@ -616,20 +630,26 @@ class AudioCapture:
                 else:
                     self._stream.stop()
                     self._stream.close()
-            except Exception:
-                pass
+            except (OSError, AttributeError) as e:
+                # Stream may already be stopped/closed
+                logger.debug(f"Stream stop warning: {e}")
             self._stream = None
 
         if self._pa:
             try:
                 self._pa.terminate()
-            except Exception:
-                pass
+            except (OSError, AttributeError) as e:
+                # PyAudio may already be terminated
+                logger.debug(f"PyAudio terminate warning: {e}")
             self._pa = None
 
         if self._processor_thread:
             self._processor_thread.join(timeout=2.0)
             self._processor_thread = None
+
+        # Clear audio buffer
+        with self._buffer_lock:
+            self._audio_buffer = np.array([], dtype=np.float32)
 
     def is_running(self) -> bool:
         """Check if audio capture is active."""
@@ -652,11 +672,53 @@ class AudioCapture:
             "error_count": self._error_count,
         }
 
+    def __del__(self):
+        """Cleanup resources on deletion."""
+        self._cleanup_resources()
+
+    def _cleanup_resources(self):
+        """Release all audio resources."""
+        self._running = False
+
+        # Clear the buffer queue
+        while not self._buffer_queue.empty():
+            try:
+                self._buffer_queue.get_nowait()
+            except queue.Empty:
+                break
+
+        # Close audio stream
+        if self._stream:
+            try:
+                if IS_WINDOWS:
+                    self._stream.stop_stream()
+                    self._stream.close()
+                else:
+                    self._stream.stop()
+                    self._stream.close()
+            except (OSError, AttributeError) as e:
+                # Stream may already be stopped/closed
+                logger.debug(f"Cleanup stream warning: {e}")
+            self._stream = None
+
+        # Terminate PyAudio instance
+        if self._pa:
+            try:
+                self._pa.terminate()
+            except (OSError, AttributeError) as e:
+                # PyAudio may already be terminated
+                logger.debug(f"Cleanup PyAudio warning: {e}")
+            self._pa = None
+
+        # Clear audio buffer
+        with self._buffer_lock:
+            self._audio_buffer = np.array([], dtype=np.float32)
+
     @staticmethod
     def list_devices():
         """List available audio devices for debugging."""
         devices = AudioCapture.get_available_devices()
-        print("Available audio input devices:")
+        logger.info("Available audio input devices:")
         for device in devices:
             flags = []
             if device['is_loopback']:
@@ -664,4 +726,4 @@ class AudioCapture:
             if device['is_default']:
                 flags.append("DEFAULT")
             flag_str = f" [{', '.join(flags)}]" if flags else ""
-            print(f"  [{device['index']}] {device['name']} ({device['channels']} ch){flag_str}")
+            logger.info(f"  [{device['index']}] {device['name']} ({device['channels']} ch){flag_str}")

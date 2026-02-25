@@ -166,7 +166,7 @@ OVERLAY_HEIGHT = 300
 OVERLAY_OPACITY = 0.92
 
 # Version info
-APP_VERSION = "1.4.7"
+APP_VERSION = "1.4.8"
 APP_NAME = "ReadIn AI"
 UPDATE_CHECK_URL = "https://www.getreadin.us/api/v1/version"
 GITHUB_RELEASES_URL = "https://github.com/derickjoseph8/readin-ai/releases"
