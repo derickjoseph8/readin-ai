@@ -2,7 +2,10 @@
  * API Client with authentication support and retry logic
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://www.getreadin.us'
+// API URL must be configured via environment variable in production
+const API_URL = process.env.NEXT_PUBLIC_API_URL || (
+  process.env.NODE_ENV === 'production' ? 'https://www.getreadin.us' : 'http://localhost:8000'
+)
 
 // Retry configuration
 const MAX_RETRIES = 3
@@ -87,6 +90,9 @@ const isNetworkError = (err: unknown): boolean => {
 class ApiClient {
   private baseUrl: string
   private token: string | null = null
+  private refreshToken: string | null = null
+  private isRefreshing: boolean = false
+  private refreshPromise: Promise<boolean> | null = null
   // Track pending requests by URL+method to prevent duplicate in-flight requests
   private pendingRequests: Map<string, Promise<any>> = new Map()
 
@@ -94,6 +100,7 @@ class ApiClient {
     this.baseUrl = baseUrl
     if (typeof window !== 'undefined') {
       this.token = localStorage.getItem('readin_token')
+      this.refreshToken = localStorage.getItem('readin_refresh_token')
     }
   }
 
@@ -104,22 +111,71 @@ class ApiClient {
     return `${method}:${endpoint}`
   }
 
-  setToken(token: string) {
+  setToken(token: string, refreshToken?: string) {
     this.token = token
     if (typeof window !== 'undefined') {
       localStorage.setItem('readin_token', token)
+      if (refreshToken) {
+        this.refreshToken = refreshToken
+        localStorage.setItem('readin_refresh_token', refreshToken)
+      }
     }
   }
 
   clearToken() {
     this.token = null
+    this.refreshToken = null
     if (typeof window !== 'undefined') {
       localStorage.removeItem('readin_token')
+      localStorage.removeItem('readin_refresh_token')
     }
   }
 
   getToken(): string | null {
     return this.token
+  }
+
+  /**
+   * Attempt to refresh the access token using the refresh token
+   */
+  private async tryRefreshToken(): Promise<boolean> {
+    // If already refreshing, wait for that to complete
+    if (this.isRefreshing && this.refreshPromise) {
+      return this.refreshPromise
+    }
+
+    if (!this.refreshToken) {
+      return false
+    }
+
+    this.isRefreshing = true
+    this.refreshPromise = (async () => {
+      try {
+        const response = await fetch(`${this.baseUrl}/auth/refresh`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.refreshToken}`,
+          },
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.access_token) {
+            this.setToken(data.access_token, data.refresh_token)
+            return true
+          }
+        }
+        return false
+      } catch {
+        return false
+      } finally {
+        this.isRefreshing = false
+        this.refreshPromise = null
+      }
+    })()
+
+    return this.refreshPromise
   }
 
   private async request<T>(
@@ -181,6 +237,14 @@ class ApiClient {
             error.retryable = false
             break
           case 401:
+            // Try to refresh token before giving up
+            if (this.refreshToken && retryCount === 0) {
+              const refreshed = await this.tryRefreshToken()
+              if (refreshed) {
+                // Retry the original request with new token
+                return this.request<T>(endpoint, options, retryCount + 1, true)
+              }
+            }
             error.message = 'Your session has expired. Please log in again.'
             error.retryable = false
             this.clearToken()

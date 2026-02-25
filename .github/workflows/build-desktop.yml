@@ -44,7 +44,7 @@ jobs:
           } elseif ("${{ github.ref_name }}" -match "^v(.+)$") {
             echo "VERSION=$($matches[1])" >> $env:GITHUB_OUTPUT
           } else {
-            echo "VERSION=1.4.1" >> $env:GITHUB_OUTPUT
+            echo "VERSION=1.4.9" >> $env:GITHUB_OUTPUT
           }
 
       - name: Package artifacts
@@ -91,7 +91,7 @@ jobs:
           elif [[ "${{ github.ref_name }}" =~ ^v(.+)$ ]]; then
             echo "VERSION=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
           else
-            echo "VERSION=1.4.1" >> $GITHUB_OUTPUT
+            echo "VERSION=1.4.9" >> $GITHUB_OUTPUT
           fi
 
       - name: Create DMG
@@ -157,7 +157,7 @@ jobs:
           elif [[ "${{ github.ref_name }}" =~ ^v(.+)$ ]]; then
             echo "VERSION=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
           else
-            echo "VERSION=1.4.1" >> $GITHUB_OUTPUT
+            echo "VERSION=1.4.9" >> $GITHUB_OUTPUT
           fi
 
       - name: Create AppImage

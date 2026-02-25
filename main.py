@@ -271,15 +271,16 @@ class ReadInApp:
 
     def _on_audio_device_changed(self, key: str, device_index, old_value):
         """Handle audio device change."""
+        # Hold lock for the entire operation to prevent race conditions
         with self._listening_lock:
             was_listening = self._listening
-        if was_listening:
-            self.audio_capture.stop()
+            if was_listening:
+                self.audio_capture.stop()
 
-        self.audio_capture.set_device(device_index if device_index and device_index >= 0 else None)
+            self.audio_capture.set_device(device_index if device_index and device_index >= 0 else None)
 
-        if was_listening:
-            self.audio_capture.start()
+            if was_listening:
+                self.audio_capture.start()
 
     def _on_audio_error(self, error_message: str):
         """Handle audio capture errors."""

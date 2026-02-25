@@ -8,6 +8,7 @@ import time
 import hmac
 import hashlib
 import uuid
+import logging
 from typing import Optional, Dict, Any, List, Tuple
 from pathlib import Path
 from datetime import datetime, timezone
@@ -17,6 +18,8 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from functools import wraps
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 # Try to import keyring for secure credential storage
 try:
@@ -367,7 +370,7 @@ class APIClient:
             _set_file_permissions(TOKEN_FILE)
             self._token = token
         except Exception as e:
-            print(f"Failed to save token: {e}")
+            logger.error(f"Failed to save token: {e}")
 
     def _clear_token(self):
         """Clear saved token from all storage locations."""
@@ -447,9 +450,19 @@ class APIClient:
         Returns:
             Base64 encoded HMAC-SHA256 signature
         """
-        # Use token as signing key if available, otherwise use machine key
+        # Derive a signing key using PBKDF2 for security
+        # Never use raw token as signing key
         if self._token:
-            signing_key = self._token.encode('utf-8')
+            # Use a consistent salt derived from the token itself
+            token_bytes = self._token.encode('utf-8')
+            salt = hashlib.sha256(token_bytes[:32] if len(token_bytes) > 32 else token_bytes).digest()[:16]
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=salt,
+                iterations=100000,
+            )
+            signing_key = kdf.derive(token_bytes)
         else:
             signing_key = _get_machine_key()
 

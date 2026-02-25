@@ -1,9 +1,12 @@
 """Meeting Session Manager for tracking and syncing meeting data."""
 
+import logging
 from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime
 from dataclasses import dataclass, field
 import threading
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -75,7 +78,7 @@ class MeetingSession:
             try:
                 self._on_session_change(self)
             except Exception as e:
-                print(f"Session change callback error: {e}")
+                logger.error(f"Session change callback error: {e}")
 
     def start(self, meeting_type: str = "general", title: Optional[str] = None,
               meeting_app: Optional[str] = None) -> bool:
@@ -152,7 +155,7 @@ class MeetingSession:
                 if "error" not in result:
                     exchange.synced = True
             except Exception as e:
-                print(f"Failed to sync conversation: {e}")
+                logger.error(f"Failed to sync conversation: {e}")
 
     def _sync_conversations(self) -> None:
         """Sync all unsynced conversations to backend."""
@@ -172,7 +175,7 @@ class MeetingSession:
                         if "error" not in result:
                             exchange.synced = True
                     except Exception as e:
-                        print(f"Failed to sync conversation: {e}")
+                        logger.error(f"Failed to sync conversation: {e}")
 
     def get_summary(self) -> Optional[Dict]:
         """Get summary for current or last meeting."""

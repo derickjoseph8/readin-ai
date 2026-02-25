@@ -1,5 +1,6 @@
 """Authentication utilities - JWT tokens and password hashing."""
 
+import hashlib
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Set
@@ -10,7 +11,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from config import JWT_SECRET, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_DAYS
+from config import JWT_SECRET, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_DAYS, REDIS_URL
 from database import get_db
 from models import User
 
@@ -19,28 +20,74 @@ logger = logging.getLogger(__name__)
 security = HTTPBearer()
 
 # =============================================================================
-# TOKEN BLACKLIST
+# TOKEN BLACKLIST WITH REDIS PERSISTENCE
 # =============================================================================
-# In-memory token blacklist for immediate token invalidation.
-# Note: In production with multiple instances, use Redis for shared state.
-# Tokens are stored as a set for O(1) lookup.
+# Redis-backed token blacklist for immediate token invalidation.
+# Falls back to in-memory storage if Redis is unavailable.
+# Uses token hash as key to avoid storing actual tokens in Redis.
+
 _token_blacklist: Set[str] = set()
+_redis_client = None
+
+# Initialize Redis connection for token blacklist
+try:
+    if REDIS_URL:
+        import redis
+        _redis_client = redis.from_url(
+            REDIS_URL,
+            encoding="utf-8",
+            decode_responses=True,
+            socket_timeout=2,
+            socket_connect_timeout=2,
+        )
+        _redis_client.ping()
+        logger.info("Token blacklist using Redis storage")
+except Exception as e:
+    logger.warning(f"Token blacklist falling back to memory: {e}")
+    _redis_client = None
+
+# Redis key prefix and TTL for blacklisted tokens
+BLACKLIST_KEY_PREFIX = "readin:token_blacklist:"
+BLACKLIST_TTL = 60 * 60 * 24 * 8  # 8 days (longer than token expiry)
+
+
+def _get_token_hash(token: str) -> str:
+    """Generate a hash of the token for storage (don't store actual tokens)."""
+    return hashlib.sha256(token.encode('utf-8')).hexdigest()[:32]
 
 
 def add_token_to_blacklist(token: str) -> None:
     """
     Add a token to the blacklist, invalidating it immediately.
+    Persists to Redis if available, falls back to in-memory.
 
     Args:
         token: The JWT token to invalidate
     """
-    _token_blacklist.add(token)
-    logger.info("Token added to blacklist")
+    token_hash = _get_token_hash(token)
+
+    # Try Redis first
+    if _redis_client:
+        try:
+            _redis_client.setex(
+                f"{BLACKLIST_KEY_PREFIX}{token_hash}",
+                BLACKLIST_TTL,
+                "1"
+            )
+            logger.info("Token added to Redis blacklist")
+            return
+        except Exception as e:
+            logger.warning(f"Failed to add token to Redis blacklist: {e}")
+
+    # Fallback to in-memory
+    _token_blacklist.add(token_hash)
+    logger.info("Token added to in-memory blacklist")
 
 
 def is_token_blacklisted(token: str) -> bool:
     """
     Check if a token has been blacklisted.
+    Checks Redis first, then in-memory fallback.
 
     Args:
         token: The JWT token to check
@@ -48,34 +95,44 @@ def is_token_blacklisted(token: str) -> bool:
     Returns:
         True if the token is blacklisted, False otherwise
     """
-    return token in _token_blacklist
+    token_hash = _get_token_hash(token)
+
+    # Check Redis first
+    if _redis_client:
+        try:
+            if _redis_client.exists(f"{BLACKLIST_KEY_PREFIX}{token_hash}"):
+                return True
+        except Exception as e:
+            logger.warning(f"Failed to check Redis blacklist: {e}")
+
+    # Check in-memory fallback
+    return token_hash in _token_blacklist
 
 
 def clear_expired_tokens_from_blacklist() -> int:
     """
-    Remove expired tokens from the blacklist to prevent memory growth.
+    Remove expired tokens from the in-memory blacklist to prevent memory growth.
+    Redis entries auto-expire via TTL.
 
     This should be called periodically (e.g., via scheduler).
-    Returns the number of tokens removed.
+    Returns the number of tokens removed from in-memory storage.
     """
     global _token_blacklist
+    # For Redis, tokens auto-expire via TTL - nothing to do
+    # For in-memory, we can't easily check expiry since we store hashes
+    # Just clear old entries periodically to prevent unbounded growth
     initial_count = len(_token_blacklist)
-    valid_tokens = set()
 
-    for token in _token_blacklist:
-        try:
-            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-            # Token is still valid (not expired), keep it in blacklist
-            valid_tokens.add(token)
-        except JWTError:
-            # Token is expired or invalid, don't keep it
-            pass
+    # If we have Redis, we can clear in-memory since Redis is source of truth
+    if _redis_client:
+        _token_blacklist.clear()
+        return initial_count
 
-    _token_blacklist = valid_tokens
-    removed_count = initial_count - len(_token_blacklist)
-    if removed_count > 0:
-        logger.info(f"Cleared {removed_count} expired tokens from blacklist")
-    return removed_count
+    # Without Redis, keep in-memory but log a warning if it's growing large
+    if initial_count > 10000:
+        logger.warning(f"In-memory token blacklist has {initial_count} entries - consider enabling Redis")
+
+    return 0
 
 
 def hash_password(password: str) -> str:

@@ -35,7 +35,7 @@ export default function ChatWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isMountedRef = useRef<boolean>(true)
-  const pollIntervalMs = useRef<number>(1000) // Start at 1 second
+  const pollIntervalMs = useRef<number>(2000) // Start at 2 seconds
   const lastMessageCount = useRef<number>(0)
 
   // Cleanup function to clear polling timeout
@@ -48,7 +48,7 @@ export default function ChatWidget() {
 
   // Reset polling interval to minimum (called when user sends a message)
   const resetPollingInterval = useCallback(() => {
-    pollIntervalMs.current = 1000 // Reset to 1 second
+    pollIntervalMs.current = 2000 // Reset to 2 seconds
   }, [])
 
   // Track component mount state
@@ -84,7 +84,7 @@ export default function ChatWidget() {
 
         // Check if there are new messages - if so, reset the polling interval
         if (data.messages.length > lastMessageCount.current) {
-          pollIntervalMs.current = 1000 // Reset to 1 second on new messages
+          pollIntervalMs.current = 2000 // Reset to 2 seconds on new messages
         } else {
           // No new messages - increase interval with exponential backoff (max 30 seconds)
           pollIntervalMs.current = Math.min(pollIntervalMs.current * 1.5, 30000)
@@ -130,7 +130,7 @@ export default function ChatWidget() {
     clearPolling()
 
     // Reset polling interval when starting a new session
-    pollIntervalMs.current = 1000
+    pollIntervalMs.current = 2000
     lastMessageCount.current = 0
 
     // Initial poll immediately

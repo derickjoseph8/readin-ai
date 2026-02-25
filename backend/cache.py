@@ -9,6 +9,7 @@ Provides caching for frequently accessed data:
 
 import json
 import hashlib
+import logging
 from typing import Any, Optional, Callable, TypeVar
 from functools import wraps
 from datetime import timedelta
@@ -20,6 +21,8 @@ except ImportError:
     REDIS_AVAILABLE = False
 
 from config import REDIS_URL, IS_PRODUCTION
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar('T')
 
@@ -44,12 +47,12 @@ class CacheManager:
     def _initialize(self):
         """Initialize Redis connection."""
         if not REDIS_AVAILABLE:
-            print("  [WARN] Redis library not installed, using memory cache")
+            logger.warning("Redis library not installed, using memory cache")
             return
 
         if not REDIS_URL:
             if IS_PRODUCTION:
-                print("  [WARN] REDIS_URL not configured, using memory cache")
+                logger.warning("REDIS_URL not configured, using memory cache")
             return
 
         try:
@@ -64,9 +67,9 @@ class CacheManager:
             # Test connection
             self._redis_client.ping()
             self._connected = True
-            print("  [OK] Redis cache connected")
+            logger.info("Redis cache connected")
         except Exception as e:
-            print(f"  [WARN] Redis connection failed: {e}, using memory cache")
+            logger.warning(f"Redis connection failed: {e}, using memory cache")
             self._redis_client = None
 
     @property

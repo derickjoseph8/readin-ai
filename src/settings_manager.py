@@ -1,10 +1,13 @@
 """Settings manager for ReadIn AI with JSON persistence."""
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from threading import Lock
+
+logger = logging.getLogger(__name__)
 
 
 class SettingsManager:
@@ -196,7 +199,7 @@ Emphasize strategic thinking and leadership perspective."""
                         if key in self.DEFAULTS:
                             self._settings[key] = value
             except (json.JSONDecodeError, IOError) as e:
-                print(f"Warning: Could not load settings: {e}")
+                logger.warning(f"Could not load settings: {e}")
 
     def _save(self) -> None:
         """Save current settings to file."""
@@ -204,7 +207,7 @@ Emphasize strategic thinking and leadership perspective."""
             with open(self._settings_file, 'w', encoding='utf-8') as f:
                 json.dump(self._settings, f, indent=2)
         except IOError as e:
-            print(f"Warning: Could not save settings: {e}")
+            logger.warning(f"Could not save settings: {e}")
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a setting value."""
@@ -220,7 +223,7 @@ Emphasize strategic thinking and leadership perspective."""
         # Validate and sanitize the value
         validated_value = self._validate_and_sanitize(key, value)
         if validated_value is None and value is not None:
-            print(f"Warning: Invalid value for setting '{key}': {value}")
+            logger.warning(f"Invalid value for setting '{key}': {value}")
             return
 
         old_value = self._settings.get(key)
@@ -235,7 +238,7 @@ Emphasize strategic thinking and leadership perspective."""
                 try:
                     callback(key, validated_value, old_value)
                 except Exception as e:
-                    print(f"Warning: Settings callback error: {e}")
+                    logger.warning(f"Settings callback error: {e}")
 
     def _validate_and_sanitize(self, key: str, value: Any) -> Any:
         """Validate and sanitize a setting value based on its type and constraints.
@@ -268,7 +271,7 @@ Emphasize strategic thinking and leadership perspective."""
                 elif expected_type == str and not isinstance(value, str):
                     value = str(value)
                 else:
-                    print(f"Warning: Type mismatch for '{key}': expected {expected_type.__name__}, got {type(value).__name__}")
+                    logger.warning(f"Type mismatch for '{key}': expected {expected_type.__name__}, got {type(value).__name__}")
                     return None
 
         # Range validation for numeric settings
@@ -305,7 +308,7 @@ Emphasize strategic thinking and leadership perspective."""
             if value < min_val or value > max_val:
                 # Clamp to valid range
                 clamped = max(min_val, min(value, max_val))
-                print(f"Warning: Value for '{key}' clamped from {value} to {clamped} (range: {min_val}-{max_val})")
+                logger.warning(f"Value for '{key}' clamped from {value} to {clamped} (range: {min_val}-{max_val})")
                 return clamped
 
         return value
@@ -336,7 +339,7 @@ Emphasize strategic thinking and leadership perspective."""
 
         if key in max_lengths and len(value) > max_lengths[key]:
             value = value[:max_lengths[key]]
-            print(f"Warning: String value for '{key}' truncated to {max_lengths[key]} characters")
+            logger.warning(f"String value for '{key}' truncated to {max_lengths[key]} characters")
 
         return value
 
