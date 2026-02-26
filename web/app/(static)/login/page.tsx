@@ -186,37 +186,31 @@ export default function LoginPage() {
     setIsError(false)
 
     try {
-      // First do a temporary login to get a short-lived token for 2FA validation
       const apiUrl = 'https://www.getreadin.us'
+
+      // First get the temp token from login
       const loginRes = await fetch(apiUrl + '/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       })
 
-      // Check if component is still mounted before continuing
       if (!isMountedRef.current) return
 
       const loginData = await loginRes.json()
 
-      if (loginData.requires_2fa) {
-        // Temporarily store token for 2FA validation
-        const tempToken = loginData.temp_token || ''
-
-        // Validate 2FA code
-        const res = await fetch(apiUrl + '/api/v1/2fa/validate', {
+      if (loginData.requires_2fa && loginData.temp_token) {
+        // Complete 2FA login with the proper endpoint
+        const res = await fetch(apiUrl + '/api/v1/auth/login/2fa', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${tempToken}`,
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            temp_token: loginData.temp_token,
             code: twoFactorCode,
             is_backup_code: isBackupCode,
           }),
         })
 
-        // Check if component is still mounted before updating state
         if (!isMountedRef.current) return
 
         const data = await res.json()
@@ -224,8 +218,26 @@ export default function LoginPage() {
         if (res.ok && data.access_token) {
           localStorage.setItem('readin_token', data.access_token)
           setMessage('Success! Redirecting...')
-          // Use Next.js router for client-side navigation
-          router.push('/dashboard')
+
+          // Fetch user info to determine redirect destination
+          try {
+            const userRes = await fetch(apiUrl + '/user/me', {
+              headers: {
+                'Authorization': `Bearer ${data.access_token}`,
+                'Content-Type': 'application/json'
+              }
+            })
+            const userData = await userRes.json()
+
+            // Redirect based on user role
+            if (userData.is_staff && (userData.staff_role === 'super_admin' || userData.staff_role === 'admin')) {
+              router.push('/admin')
+            } else {
+              router.push('/dashboard')
+            }
+          } catch {
+            router.push('/dashboard')
+          }
         } else {
           setIsError(true)
           setMessage(data.detail || 'Invalid verification code')
@@ -235,15 +247,31 @@ export default function LoginPage() {
         // No 2FA required after all
         localStorage.setItem('readin_token', loginData.access_token)
         setMessage('Success! Redirecting...')
-        // Use Next.js router for client-side navigation
-        router.push('/dashboard')
+
+        // Fetch user info to determine redirect destination
+        try {
+          const userRes = await fetch(apiUrl + '/user/me', {
+            headers: {
+              'Authorization': `Bearer ${loginData.access_token}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          const userData = await userRes.json()
+
+          if (userData.is_staff && (userData.staff_role === 'super_admin' || userData.staff_role === 'admin')) {
+            router.push('/admin')
+          } else {
+            router.push('/dashboard')
+          }
+        } catch {
+          router.push('/dashboard')
+        }
       } else {
         setIsError(true)
         setMessage(loginData.detail || 'Login failed')
         setLoading(false)
       }
     } catch (err) {
-      // Check if component is still mounted before updating state
       if (!isMountedRef.current) return
       setIsError(true)
       setMessage('Network error - please try again')
