@@ -455,6 +455,40 @@ def _log_payment(db: Session, invoice: dict, status: str):
 
 
 # =============================================================================
+# PAYSTACK WEBHOOK ENDPOINT
+# =============================================================================
+
+from config import PAYSTACK_WEBHOOK_SECRET
+from paystack_handler import verify_webhook_signature, handle_webhook_event
+
+
+@router.post("/paystack/webhook")
+async def paystack_webhook(
+    request: Request,
+    x_paystack_signature: str = Header(None, alias="X-Paystack-Signature"),
+    db: Session = Depends(get_db),
+):
+    """Handle Paystack webhook events."""
+    payload = await request.body()
+
+    # Verify signature if webhook secret is configured
+    if PAYSTACK_WEBHOOK_SECRET:
+        if not x_paystack_signature:
+            raise HTTPException(status_code=400, detail="Missing signature")
+
+        if not verify_webhook_signature(payload, x_paystack_signature):
+            raise HTTPException(status_code=400, detail="Invalid signature")
+
+    try:
+        import json
+        event = json.loads(payload)
+        await handle_webhook_event(event, db)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# =============================================================================
 # PRICING INFO ENDPOINT (Regional pricing based on IP/country)
 # =============================================================================
 
