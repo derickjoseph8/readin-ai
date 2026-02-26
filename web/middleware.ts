@@ -15,6 +15,7 @@ const STATIC_ROUTES = [
   '/dashboard',
   '/download',
   '/pricing',
+  '/global',
   '/about',
   '/terms',
   '/contact',
