@@ -58,10 +58,31 @@ export default function LoginPage() {
             localStorage.setItem('readin_temp_token', data.temp_token);
             router.push('/login/2fa');
           } else {
-            setSuccess('Login successful! Redirecting to dashboard...');
-            setTimeout(() => {
+            // Fetch user info to determine redirect destination
+            try {
+              const userResponse = await fetch(`${API_URL}/user/me`, {
+                headers: {
+                  'Authorization': `Bearer ${data.access_token}`,
+                  'Content-Type': 'application/json'
+                }
+              });
+              const userData = await userResponse.json();
+
+              // Redirect based on user role
+              if (userData.is_staff && (userData.staff_role === 'super_admin' || userData.staff_role === 'admin')) {
+                setSuccess('Login successful! Redirecting to admin dashboard...');
+                router.push('/admin');
+              } else if (userData.is_staff) {
+                setSuccess('Login successful! Redirecting to staff dashboard...');
+                router.push('/dashboard');
+              } else {
+                setSuccess('Login successful! Redirecting to dashboard...');
+                router.push('/dashboard');
+              }
+            } catch {
+              // Fallback to regular dashboard if user info fetch fails
               router.push('/dashboard');
-            }, 500);
+            }
           }
         } else {
           setSuccess('Account created! You can now log in.');

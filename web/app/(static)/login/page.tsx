@@ -52,8 +52,13 @@ export default function LoginPage() {
             headers: { 'Authorization': `Bearer ${token}` }
           })
           if (res.ok && isActive) {
-            // User is authenticated, redirect to dashboard using Next.js router
-            router.replace('/dashboard')
+            const userData = await res.json()
+            // Redirect based on user role
+            if (userData.is_staff && (userData.staff_role === 'super_admin' || userData.staff_role === 'admin')) {
+              router.replace('/admin')
+            } else {
+              router.replace('/dashboard')
+            }
             return
           }
         } catch (err) {
@@ -96,8 +101,27 @@ export default function LoginPage() {
       if (res.ok && data.access_token) {
         localStorage.setItem('readin_token', data.access_token)
         setMessage('Success! Redirecting...')
-        // Use Next.js router for client-side navigation (no setTimeout needed)
-        router.push('/dashboard')
+
+        // Fetch user info to determine redirect destination
+        try {
+          const userRes = await fetch(apiUrl + '/user/me', {
+            headers: {
+              'Authorization': `Bearer ${data.access_token}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          const userData = await userRes.json()
+
+          // Redirect based on user role
+          if (userData.is_staff && (userData.staff_role === 'super_admin' || userData.staff_role === 'admin')) {
+            router.push('/admin')
+          } else {
+            router.push('/dashboard')
+          }
+        } catch {
+          // Fallback to regular dashboard if user info fetch fails
+          router.push('/dashboard')
+        }
       } else if (res.ok && data.requires_2fa) {
         // User has 2FA enabled, show 2FA input
         setRequires2FA(true)
