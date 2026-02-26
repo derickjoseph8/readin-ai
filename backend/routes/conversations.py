@@ -1,8 +1,10 @@
 """Conversation API routes - Store and analyze meeting conversations."""
 
+import asyncio
+import logging
 from datetime import datetime
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 
@@ -11,12 +13,15 @@ from models import Conversation, Meeting, Topic, ConversationTopic, User, UserLe
 from schemas import ConversationCreate, ConversationResponse, TopicResponse, TopicAnalytics
 from auth import get_current_user
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
 
 @router.post("", response_model=ConversationResponse)
-def create_conversation(
+async def create_conversation(
     data: ConversationCreate,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -52,8 +57,24 @@ def create_conversation(
     db.commit()
     db.refresh(conversation)
 
-    # TODO: Trigger async topic extraction
-    # extract_topics.delay(conversation.id, user.id)
+    # Trigger async topic extraction in background
+    async def extract_topics_async(conv_id: int, uid: int):
+        try:
+            from database import SessionLocal
+            from services.topic_extractor import TopicExtractor
+            db_session = SessionLocal()
+            try:
+                extractor = TopicExtractor(db_session)
+                conv = db_session.query(Conversation).filter(Conversation.id == conv_id).first()
+                if conv:
+                    await extractor.process_conversation(conv, uid)
+                    logger.info(f"Topic extraction completed for conversation {conv_id}")
+            finally:
+                db_session.close()
+        except Exception as e:
+            logger.error(f"Topic extraction failed for conversation {conv_id}: {e}")
+
+    background_tasks.add_task(asyncio.create_task, extract_topics_async(conversation.id, user.id))
 
     return ConversationResponse.model_validate(conversation)
 
@@ -119,8 +140,9 @@ def get_user_topics(
 
 
 @router.post("/topics/extract")
-def trigger_topic_extraction(
+async def trigger_topic_extraction(
     meeting_id: Optional[int] = None,
+    background_tasks: BackgroundTasks = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -151,9 +173,25 @@ def trigger_topic_extraction(
             ~Conversation.id.in_(processed_conv_ids)
         ).limit(100).all()
 
-    # TODO: Async topic extraction with Claude
-    # for conv in conversations:
-    #     extract_topics.delay(conv.id, user.id)
+    # Trigger async topic extraction for all conversations
+    async def process_conversations(convs, uid):
+        try:
+            from services.topic_extractor import TopicExtractor
+            extractor = TopicExtractor(db)
+            for conv in convs:
+                try:
+                    await extractor.process_conversation(conv, uid)
+                except Exception as e:
+                    logger.error(f"Topic extraction failed for conv {conv.id}: {e}")
+            await extractor.update_learning_profile_topics(uid)
+            logger.info(f"Topic extraction completed for {len(convs)} conversations")
+        except Exception as e:
+            logger.error(f"Batch topic extraction failed: {e}")
+
+    if background_tasks:
+        background_tasks.add_task(asyncio.create_task, process_conversations(conversations, user.id))
+    else:
+        await process_conversations(conversations, user.id)
 
     return {
         "message": f"Topic extraction queued for {len(conversations)} conversations",
@@ -257,7 +295,7 @@ def get_learning_profile(
 
 
 @router.post("/learning-profile/update")
-def update_learning_profile(
+async def update_learning_profile(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -281,8 +319,39 @@ def update_learning_profile(
 
     profile.total_conversations_analyzed = total_convs
 
-    # TODO: Run ML analysis with Claude
-    # Analyze formality, verbosity, technical depth, patterns, etc.
+    # Run ML analysis with Claude to analyze communication patterns
+    try:
+        from services.topic_extractor import TopicExtractor
+        extractor = TopicExtractor(db)
+        await extractor.update_learning_profile_topics(user.id)
+
+        # Analyze recent conversations for communication style
+        recent_convs = db.query(Conversation).join(Meeting).filter(
+            Meeting.user_id == user.id
+        ).order_by(desc(Conversation.timestamp)).limit(50).all()
+
+        if recent_convs:
+            # Calculate average response length
+            response_lengths = [
+                len(c.response_text) for c in recent_convs
+                if c.response_text
+            ]
+            if response_lengths:
+                avg_length = sum(response_lengths) / len(response_lengths)
+                if avg_length > 500:
+                    profile.verbosity = 0.8
+                    profile.preferred_response_length = "detailed"
+                elif avg_length > 200:
+                    profile.verbosity = 0.5
+                    profile.preferred_response_length = "moderate"
+                else:
+                    profile.verbosity = 0.3
+                    profile.preferred_response_length = "concise"
+
+        profile.confidence_score = min(0.9, total_convs / 100.0)
+        logger.info(f"Updated learning profile for user {user.id}")
+    except Exception as e:
+        logger.error(f"Learning profile ML analysis failed: {e}")
 
     db.commit()
 

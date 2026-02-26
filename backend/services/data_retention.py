@@ -75,10 +75,25 @@ class DataRetentionService:
         for user in inactive_trials:
             # Schedule for deletion (give 30 days notice)
             user.deletion_requested = True
-            user.deletion_scheduled = datetime.utcnow() + timedelta(days=30)
+            deletion_date = datetime.utcnow() + timedelta(days=30)
+            user.deletion_scheduled = deletion_date
             flagged_count += 1
 
-            # TODO: Send notification email
+            # Send notification email
+            try:
+                import asyncio
+                from services.email_service import EmailService
+                email_service = EmailService(self.db)
+                asyncio.create_task(
+                    email_service.send_account_deletion_warning(
+                        user_id=user.id,
+                        deletion_date=deletion_date,
+                        days_remaining=30,
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Failed to send deletion warning email to user {user.id}: {e}")
+
             logger.info(f"Flagged inactive trial for deletion: {user.id}")
 
         self.db.commit()

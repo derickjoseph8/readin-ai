@@ -279,9 +279,45 @@ def get_productivity_score(
             "meeting_efficiency": round(summary_rate * 100, 1),
             "commitment_rate": round(commitment_rate * 100, 1),
         },
-        "trend": "improving",  # TODO: Calculate actual trend
+        "trend": _calculate_productivity_trend(db, user.id, start_date, end_date),
         "period": time_range.value,
     }
+
+
+def _calculate_productivity_trend(db: Session, user_id: int, start_date: datetime, end_date: datetime) -> str:
+    """Calculate whether productivity is improving, declining, or stable."""
+    # Split the period in half to compare
+    mid_date = start_date + (end_date - start_date) / 2
+
+    # First half metrics
+    first_half_items = db.query(ActionItem).filter(
+        ActionItem.user_id == user_id,
+        ActionItem.created_at >= start_date,
+        ActionItem.created_at < mid_date,
+    ).all()
+    first_half_completed = sum(1 for i in first_half_items if i.status == "completed")
+    first_half_rate = first_half_completed / len(first_half_items) if first_half_items else 0
+
+    # Second half metrics
+    second_half_items = db.query(ActionItem).filter(
+        ActionItem.user_id == user_id,
+        ActionItem.created_at >= mid_date,
+        ActionItem.created_at <= end_date,
+    ).all()
+    second_half_completed = sum(1 for i in second_half_items if i.status == "completed")
+    second_half_rate = second_half_completed / len(second_half_items) if second_half_items else 0
+
+    # Compare rates
+    if not first_half_items and not second_half_items:
+        return "stable"
+
+    rate_diff = second_half_rate - first_half_rate
+    if rate_diff > 0.1:
+        return "improving"
+    elif rate_diff < -0.1:
+        return "declining"
+    else:
+        return "stable"
 
 
 @router.get("/export")
@@ -408,12 +444,52 @@ def _get_topic_stats(db: Session, user_id: int, start_date: datetime, end_date: 
         for t in recent_topics
     ]
 
+    # Calculate topic trends over time (weekly topic mentions)
+    topic_trends = _calculate_topic_trends(db, user_id, start_date, end_date, topics[:5])
+
     return TopicStats(
         total_topics=len(topics),
         top_topics=top_topics,
-        topic_trends=[],  # TODO: Calculate topic trends over time
+        topic_trends=topic_trends,
         emerging_topics=emerging,
     )
+
+
+def _calculate_topic_trends(
+    db: Session,
+    user_id: int,
+    start_date: datetime,
+    end_date: datetime,
+    top_topics: list
+) -> List[dict]:
+    """Calculate topic frequency trends over time."""
+    from models import ConversationTopic, Conversation, Meeting
+
+    trends = []
+
+    # Get weekly buckets
+    current = start_date
+    week_num = 1
+    while current < end_date:
+        week_end = min(current + timedelta(days=7), end_date)
+
+        week_data = {"week": week_num, "start_date": current.strftime("%Y-%m-%d"), "topics": {}}
+
+        # Count each top topic's mentions in this week
+        for topic in top_topics:
+            count = db.query(ConversationTopic).join(Conversation).join(Meeting).filter(
+                Meeting.user_id == user_id,
+                ConversationTopic.topic_id == topic.id,
+                Conversation.timestamp >= current,
+                Conversation.timestamp < week_end,
+            ).count()
+            week_data["topics"][topic.name] = count
+
+        trends.append(week_data)
+        current = week_end
+        week_num += 1
+
+    return trends
 
 
 def _get_action_item_stats(db: Session, user_id: int, start_date: datetime, end_date: datetime) -> ActionItemStats:
@@ -438,6 +514,9 @@ def _get_action_item_stats(db: Session, user_id: int, start_date: datetime, end_
         s = i.status or "pending"
         by_status[s] = by_status.get(s, 0) + 1
 
+    # Calculate completion trend (daily/weekly completion counts)
+    completion_trend = _calculate_completion_trend(items, start_date, end_date)
+
     return ActionItemStats(
         total_created=len(items),
         total_completed=len(completed),
@@ -445,8 +524,42 @@ def _get_action_item_stats(db: Session, user_id: int, start_date: datetime, end_
         overdue_count=len(overdue),
         by_priority=by_priority,
         by_status=by_status,
-        completion_trend=[],  # TODO: Calculate completion trend
+        completion_trend=completion_trend,
     )
+
+
+def _calculate_completion_trend(items: list, start_date: datetime, end_date: datetime) -> List[dict]:
+    """Calculate action item completion trend over time."""
+    trend = []
+    current = start_date
+
+    while current <= end_date:
+        day_end = current + timedelta(days=1)
+
+        # Count items completed on this day
+        completed_count = sum(
+            1 for i in items
+            if i.status == "completed"
+            and i.completed_at
+            and current <= i.completed_at < day_end
+        )
+
+        # Count items created on this day
+        created_count = sum(
+            1 for i in items
+            if current <= i.created_at < day_end
+        )
+
+        trend.append({
+            "date": current.strftime("%Y-%m-%d"),
+            "completed": completed_count,
+            "created": created_count,
+        })
+
+        current = day_end
+
+    # Return last 30 days max
+    return trend[-30:]
 
 
 def _get_ai_usage_stats(db: Session, user_id: int, start_date: datetime, end_date: datetime) -> AIUsageStats:
@@ -469,14 +582,36 @@ def _get_ai_usage_stats(db: Session, user_id: int, start_date: datetime, end_dat
         for u in sorted(usage, key=lambda x: x.date)
     ]
 
+    # Calculate usage by model (aggregate from usage records if available)
+    by_model = _calculate_usage_by_model(usage, total_responses)
+
     return AIUsageStats(
         total_responses=total_responses,
         responses_this_period=total_responses,
         daily_average=round(total_responses / days_with_usage if days_with_usage else 0, 1),
         estimated_cost_cents=estimated_cost,
-        by_model={"sonnet": total_responses},  # TODO: Track by model
+        by_model=by_model,
         usage_trend=trend[-30:],
     )
+
+
+def _calculate_usage_by_model(usage: list, total_responses: int) -> dict:
+    """Calculate AI usage breakdown by model."""
+    by_model = {}
+
+    for u in usage:
+        # Check if DailyUsage has model breakdown
+        if hasattr(u, 'model_counts') and u.model_counts:
+            for model, count in u.model_counts.items():
+                by_model[model] = by_model.get(model, 0) + count
+        elif hasattr(u, 'model') and u.model:
+            by_model[u.model] = by_model.get(u.model, 0) + u.response_count
+
+    # If no model breakdown available, default to sonnet
+    if not by_model and total_responses > 0:
+        by_model = {"sonnet": total_responses}
+
+    return by_model
 
 
 def _calculate_engagement_score(db: Session, user_id: int, start_date: datetime, end_date: datetime) -> float:

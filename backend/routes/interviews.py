@@ -1,8 +1,10 @@
 """Interviews API routes - Job application and interview tracking."""
 
+import asyncio
+import logging
 from datetime import datetime
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 
@@ -14,6 +16,8 @@ from schemas import (
     InterviewCreate, InterviewUpdate, InterviewResponse, InterviewLinkMeeting
 )
 from auth import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/interviews", tags=["Interviews"])
 
@@ -367,9 +371,10 @@ def update_interview(
 
 
 @router.post("/interviews/{interview_id}/link-meeting", response_model=InterviewResponse)
-def link_meeting_to_interview(
+async def link_meeting_to_interview(
     interview_id: int,
     data: InterviewLinkMeeting,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -399,8 +404,22 @@ def link_meeting_to_interview(
     interview.meeting_id = meeting.id
     interview.status = "completed"
 
-    # TODO: Trigger async interview analysis
-    # analyze_interview.delay(interview.id)
+    # Trigger async interview analysis
+    async def analyze_interview_async(int_id: int):
+        try:
+            from database import SessionLocal
+            from services.interview_coach import InterviewCoach
+            db_session = SessionLocal()
+            try:
+                coach = InterviewCoach(db_session)
+                await coach.analyze_interview(int_id)
+                logger.info(f"Interview analysis completed for interview {int_id}")
+            finally:
+                db_session.close()
+        except Exception as e:
+            logger.error(f"Interview analysis failed for interview {int_id}: {e}")
+
+    background_tasks.add_task(asyncio.create_task, analyze_interview_async(interview.id))
 
     db.commit()
     db.refresh(interview)
@@ -409,7 +428,7 @@ def link_meeting_to_interview(
 
 
 @router.get("/interviews/{interview_id}/improvement")
-def get_improvement_suggestions(
+async def get_improvement_suggestions(
     interview_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -435,7 +454,27 @@ def get_improvement_suggestions(
             "message": "Link a meeting to this interview first for analysis"
         }
 
-    # TODO: Use AI to analyze and generate suggestions
+    # If no analysis exists yet, run it now
+    if not interview.performance_score:
+        try:
+            from services.interview_coach import InterviewCoach
+            coach = InterviewCoach(db)
+            analysis = await coach.analyze_interview(interview_id)
+
+            return {
+                "has_analysis": True,
+                "performance_score": analysis.get("overall_score"),
+                "summary": analysis.get("summary"),
+                "strengths": analysis.get("strengths", []),
+                "improvements": analysis.get("improvements", []),
+                "question_handling": analysis.get("question_handling", {}),
+                "communication_style": analysis.get("communication_style", {}),
+                "red_flags": analysis.get("red_flags", []),
+                "next_steps": analysis.get("next_steps", []),
+            }
+        except Exception as e:
+            logger.error(f"On-demand interview analysis failed: {e}")
+
     return {
         "has_analysis": True,
         "performance_score": interview.performance_score,
@@ -447,8 +486,9 @@ def get_improvement_suggestions(
 
 
 @router.post("/interviews/{interview_id}/analyze")
-def trigger_interview_analysis(
+async def trigger_interview_analysis(
     interview_id: int,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -473,8 +513,22 @@ def trigger_interview_analysis(
             detail="Link a meeting to this interview first"
         )
 
-    # TODO: Trigger async analysis with Claude
-    # analyze_interview.delay(interview.id)
+    # Trigger async analysis with Claude
+    async def run_analysis(int_id: int):
+        try:
+            from database import SessionLocal
+            from services.interview_coach import InterviewCoach
+            db_session = SessionLocal()
+            try:
+                coach = InterviewCoach(db_session)
+                await coach.analyze_interview(int_id)
+                logger.info(f"Interview analysis completed for interview {int_id}")
+            finally:
+                db_session.close()
+        except Exception as e:
+            logger.error(f"Interview analysis failed: {e}")
+
+    background_tasks.add_task(asyncio.create_task, run_analysis(interview_id))
 
     return {
         "message": "Interview analysis queued",

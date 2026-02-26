@@ -1,9 +1,11 @@
 """Organization API routes - Corporate/Team account management."""
 
+import asyncio
+import logging
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -14,6 +16,8 @@ from schemas import (
     OrganizationMember
 )
 from auth import get_current_user
+
+logger = logging.getLogger(__name__)
 
 # Rate limiting setup
 try:
@@ -225,8 +229,9 @@ def list_members(
 
 
 @router.post("/my/invites", response_model=OrganizationInviteResponse)
-def create_invite(
+async def create_invite(
     data: OrganizationInviteCreate,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -310,7 +315,24 @@ def create_invite(
     db.commit()
     db.refresh(invite)
 
-    # TODO: Send invite email
+    # Send invite email asynchronously
+    async def send_invite_email():
+        try:
+            from services.email_service import EmailService
+            email_service = EmailService(db)
+            inviter_name = user.full_name or user.email
+            await email_service.send_organization_invite(
+                to_email=data.email,
+                organization_name=org.name,
+                inviter_name=inviter_name,
+                invite_token=invite.token,
+                role=data.role,
+            )
+            logger.info(f"Invite email sent to {data.email} for org {org.name}")
+        except Exception as e:
+            logger.error(f"Failed to send invite email to {data.email}: {e}")
+
+    background_tasks.add_task(asyncio.create_task, send_invite_email())
 
     return OrganizationInviteResponse(
         id=invite.id,

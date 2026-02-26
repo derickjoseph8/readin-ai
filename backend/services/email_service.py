@@ -467,3 +467,218 @@ class EmailService:
 
         self.db.commit()
         return user
+
+    async def send_organization_invite(
+        self,
+        to_email: str,
+        organization_name: str,
+        inviter_name: str,
+        invite_token: str,
+        role: str = "member",
+    ) -> Dict[str, Any]:
+        """Send organization invitation email."""
+        invite_url = f"{APP_URL}/join/{invite_token}"
+
+        # Build inline HTML since we may not have a template
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0a0a0a;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #0a0a0a;">
+                <tr>
+                    <td align="center" style="padding: 40px 20px;">
+                        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #1a1a1a; border-radius: 16px; border: 1px solid #333;">
+                            <tr>
+                                <td style="padding: 32px 40px; text-align: center; border-bottom: 1px solid #333;">
+                                    <div style="font-size: 28px; font-weight: 700; color: #ffffff;">
+                                        ReadIn <span style="color: #d4af37;">AI</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 40px;">
+                                    <h1 style="margin: 0 0 20px; color: #ffffff; font-size: 24px;">You're Invited to Join a Team</h1>
+                                    <p style="color: #ffffff; margin-bottom: 16px;">
+                                        <strong>{self._sanitize_string(inviter_name)}</strong> has invited you to join
+                                        <strong style="color: #d4af37;">{self._sanitize_string(organization_name)}</strong> on ReadIn AI.
+                                    </p>
+                                    <p style="color: #a0a0a0;">You'll be joining as a <strong>{self._sanitize_string(role)}</strong>. Team members get full access to ReadIn AI at no additional cost - the organization admin covers all subscription fees.</p>
+                                    <div style="text-align: center; margin: 30px 0;">
+                                        <a href="{invite_url}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #d4af37, #c5a028); color: #1a1a1a; text-decoration: none; border-radius: 8px; font-weight: 600;">
+                                            Accept Invitation
+                                        </a>
+                                    </div>
+                                    <p style="color: #666; font-size: 14px;">This invitation expires in 7 days.</p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 24px 40px; border-top: 1px solid #333; text-align: center;">
+                                    <p style="margin: 0; color: #666; font-size: 12px;">
+                                        If you didn't expect this invitation, you can safely ignore this email.
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+
+        return await self.send_email(
+            to_email=to_email,
+            subject=f"Join {organization_name} on ReadIn AI",
+            html_content=html,
+            email_type="organization_invite",
+        )
+
+    async def send_account_deletion_warning(
+        self,
+        user_id: int,
+        deletion_date: datetime,
+        days_remaining: int,
+    ) -> Dict[str, Any]:
+        """Send warning about upcoming account deletion due to inactivity."""
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return {"success": False, "error": "User not found"}
+
+        login_url = f"{APP_URL}/login"
+        user_name = self._sanitize_string(user.full_name) or "there"
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0a0a0a;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #0a0a0a;">
+                <tr>
+                    <td align="center" style="padding: 40px 20px;">
+                        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #1a1a1a; border-radius: 16px; border: 1px solid #333;">
+                            <tr>
+                                <td style="padding: 32px 40px; text-align: center; border-bottom: 1px solid #333;">
+                                    <div style="font-size: 28px; font-weight: 700; color: #ffffff;">
+                                        ReadIn <span style="color: #d4af37;">AI</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 40px;">
+                                    <h1 style="margin: 0 0 20px; color: #ffffff; font-size: 24px;">Your Account Will Be Deleted Soon</h1>
+                                    <p style="color: #ffffff; margin-bottom: 16px;">Hi {user_name},</p>
+                                    <p style="color: #a0a0a0;">Your ReadIn AI trial account has been inactive for 90 days. To comply with our data retention policy, your account and all associated data will be permanently deleted on <strong style="color: #d4af37;">{deletion_date.strftime('%B %d, %Y')}</strong>.</p>
+                                    <p style="color: #a0a0a0; margin-top: 16px;">That's <strong>{days_remaining} days</strong> from now.</p>
+                                    <p style="color: #a0a0a0; margin-top: 16px;">To keep your account active, simply log in before the deletion date. All your meeting history, insights, and learning profile will be preserved.</p>
+                                    <div style="text-align: center; margin: 30px 0;">
+                                        <a href="{login_url}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #d4af37, #c5a028); color: #1a1a1a; text-decoration: none; border-radius: 8px; font-weight: 600;">
+                                            Log In to Keep Your Account
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 24px 40px; border-top: 1px solid #333; text-align: center;">
+                                    <p style="margin: 0; color: #666; font-size: 12px;">
+                                        Questions? Contact us at support@getreadin.ai
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+
+        return await self.send_email(
+            to_email=user.email,
+            subject="Action Required: Your ReadIn AI Account Will Be Deleted",
+            html_content=html,
+            user_id=user_id,
+            email_type="account_deletion_warning",
+        )
+
+    async def send_trial_expiring(
+        self,
+        user_id: int,
+        days_remaining: int,
+    ) -> Dict[str, Any]:
+        """Send trial expiration warning email."""
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return {"success": False, "error": "User not found"}
+
+        upgrade_url = f"{APP_URL}/pricing"
+        user_name = self._sanitize_string(user.full_name) or "there"
+        day_word = "day" if days_remaining == 1 else "days"
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0a0a0a;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #0a0a0a;">
+                <tr>
+                    <td align="center" style="padding: 40px 20px;">
+                        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #1a1a1a; border-radius: 16px; border: 1px solid #333;">
+                            <tr>
+                                <td style="padding: 32px 40px; text-align: center; border-bottom: 1px solid #333;">
+                                    <div style="font-size: 28px; font-weight: 700; color: #ffffff;">
+                                        ReadIn <span style="color: #d4af37;">AI</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 40px;">
+                                    <h1 style="margin: 0 0 20px; color: #ffffff; font-size: 24px;">Your Trial is Ending Soon</h1>
+                                    <p style="color: #ffffff; margin-bottom: 16px;">Hi {user_name},</p>
+                                    <p style="color: #a0a0a0;">Your free trial of ReadIn AI ends in <strong style="color: #d4af37;">{days_remaining} {day_word}</strong>.</p>
+                                    <p style="color: #a0a0a0; margin-top: 16px;">After your trial ends, you'll be limited to 10 AI responses per day. Upgrade to Premium for unlimited responses and keep excelling in your meetings.</p>
+                                    <p style="color: #d4af37; margin-top: 24px;"><strong>Premium Benefits:</strong></p>
+                                    <ul style="color: #a0a0a0; padding-left: 20px;">
+                                        <li>Unlimited AI responses</li>
+                                        <li>Custom response presets</li>
+                                        <li>Meeting summaries and action items</li>
+                                        <li>Priority support</li>
+                                    </ul>
+                                    <div style="text-align: center; margin: 30px 0;">
+                                        <a href="{upgrade_url}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #d4af37, #c5a028); color: #1a1a1a; text-decoration: none; border-radius: 8px; font-weight: 600;">
+                                            Upgrade to Premium
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 24px 40px; border-top: 1px solid #333; text-align: center;">
+                                    <p style="margin: 0; color: #666; font-size: 12px;">
+                                        Questions? Contact us at support@getreadin.ai
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+
+        return await self.send_email(
+            to_email=user.email,
+            subject=f"Your ReadIn AI Trial Ends in {days_remaining} {day_word.title()}",
+            html_content=html,
+            user_id=user_id,
+            email_type="trial_expiring",
+        )
