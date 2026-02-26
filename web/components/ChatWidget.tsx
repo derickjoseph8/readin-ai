@@ -11,10 +11,13 @@ import {
   Clock,
   AlertCircle,
   Bot,
-  UserCircle
+  UserCircle,
+  Wifi,
+  WifiOff
 } from 'lucide-react'
 import { useMyChat } from '@/lib/hooks/useAdmin'
 import { supportApi, ChatMessage } from '@/lib/api/admin'
+import { useChatWebSocket, ChatWebSocketMessage } from '@/lib/hooks/useChatWebSocket'
 
 type ChatStatus = 'idle' | 'waiting' | 'active' | 'ended'
 
@@ -32,11 +35,72 @@ export default function ChatWidget() {
   const [showLeaveMessage, setShowLeaveMessage] = useState(false)
   const [leaveMessageText, setLeaveMessageText] = useState('')
   const [leaveMessageCategory, setLeaveMessageCategory] = useState<'sales' | 'billing' | 'technical'>('technical')
+  const [isTyping, setIsTyping] = useState(false)
+  const [typingTimeout, setTypingTimeoutState] = useState<ReturnType<typeof setTimeout> | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isMountedRef = useRef<boolean>(true)
-  const pollIntervalMs = useRef<number>(2000) // Start at 2 seconds
+  const pollIntervalMs = useRef<number>(5000) // Slower polling when WebSocket is active
   const lastMessageCount = useRef<number>(0)
+
+  // WebSocket connection for real-time updates
+  const handleWebSocketMessage = useCallback((message: ChatWebSocketMessage) => {
+    switch (message.event) {
+      case 'chat.new_message':
+        // Add new message to the list
+        const newMsg = message.data as unknown as ChatMessage
+        setMessages(prev => {
+          // Avoid duplicates
+          if (prev.some(m => m.id === newMsg.id)) return prev
+          return [...prev, newMsg]
+        })
+        break
+
+      case 'chat.session_status_changed':
+        const status = message.data.status as string
+        if (status === 'active') {
+          setChatStatus('active')
+          setQueuePosition(null)
+        } else if (status === 'ended') {
+          setChatStatus('ended')
+        } else if (status === 'waiting') {
+          setChatStatus('waiting')
+        }
+        break
+
+      case 'chat.agent_joined':
+        setIsAiHandled(false)
+        setChatStatus('active')
+        break
+
+      case 'chat.queue_position_update':
+        setQueuePosition(message.data.position as number)
+        break
+
+      case 'chat.session_ended':
+        setChatStatus('ended')
+        break
+
+      case 'chat.typing_start':
+        setIsTyping(true)
+        break
+
+      case 'chat.typing_stop':
+        setIsTyping(false)
+        break
+    }
+  }, [])
+
+  const {
+    isConnected: wsConnected,
+    sendMessage: wsSendMessage,
+    sendTypingStart,
+    sendTypingStop,
+  } = useChatWebSocket({
+    sessionId,
+    onMessage: handleWebSocketMessage,
+    enabled: isOpen && chatStatus !== 'idle' && chatStatus !== 'ended',
+  })
 
   // Cleanup function to clear polling timeout
   const clearPolling = useCallback(() => {
@@ -62,6 +126,7 @@ export default function ChatWidget() {
   }, [clearPolling])
 
   // Poll for messages and status updates with exponential backoff
+  // When WebSocket is connected, poll less frequently as a fallback
   useEffect(() => {
     // Early return if no session or chat ended - also cleanup any existing timeout
     if (!sessionId || chatStatus === 'ended') {
@@ -82,12 +147,18 @@ export default function ChatWidget() {
 
         setMessages(data.messages)
 
-        // Check if there are new messages - if so, reset the polling interval
-        if (data.messages.length > lastMessageCount.current) {
-          pollIntervalMs.current = 2000 // Reset to 2 seconds on new messages
-        } else {
-          // No new messages - increase interval with exponential backoff (max 30 seconds)
+        // Adjust polling based on WebSocket connection
+        if (wsConnected) {
+          // WebSocket active - poll slowly as backup (every 10-30 seconds)
           pollIntervalMs.current = Math.min(pollIntervalMs.current * 1.5, 30000)
+          if (pollIntervalMs.current < 10000) pollIntervalMs.current = 10000
+        } else {
+          // No WebSocket - use faster polling
+          if (data.messages.length > lastMessageCount.current) {
+            pollIntervalMs.current = 2000 // Reset to 2 seconds on new messages
+          } else {
+            pollIntervalMs.current = Math.min(pollIntervalMs.current * 1.5, 30000)
+          }
         }
         lastMessageCount.current = data.messages.length
 
@@ -129,8 +200,8 @@ export default function ChatWidget() {
     // Clear any existing timeout before starting new one (prevents race condition)
     clearPolling()
 
-    // Reset polling interval when starting a new session
-    pollIntervalMs.current = 2000
+    // Set initial polling interval based on WebSocket status
+    pollIntervalMs.current = wsConnected ? 10000 : 2000
     lastMessageCount.current = 0
 
     // Initial poll immediately
@@ -140,7 +211,7 @@ export default function ChatWidget() {
     return () => {
       clearPolling()
     }
-  }, [sessionId, chatStatus, clearPolling])
+  }, [sessionId, chatStatus, wsConnected, clearPolling])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -189,27 +260,38 @@ export default function ChatWidget() {
     // Reset polling interval when user sends a message
     resetPollingInterval()
 
-    try {
-      await supportApi.sendChatMessage(sessionId, newMessage.trim())
-      setNewMessage('')
-      // Immediately fetch new messages and check status
-      const data = await supportApi.getChatMessages(sessionId)
-      setMessages(data.messages)
+    // Stop typing indicator
+    sendTypingStop(sessionId)
 
-      // Always sync status with backend response
-      // This handles Novah transfers and any other status changes
-      if (data.status === 'waiting') {
-        setChatStatus('waiting')
-        setQueuePosition(data.queue_position || null)
-      } else if (data.status === 'ended') {
-        setChatStatus('ended')
-      } else if (data.status === 'active') {
-        setChatStatus('active')
+    try {
+      // Try WebSocket first for real-time delivery
+      if (wsConnected) {
+        wsSendMessage(sessionId, newMessage.trim())
       }
 
-      // Update AI handled state
-      if (data.is_ai_handled !== undefined) {
-        setIsAiHandled(data.is_ai_handled)
+      // Always send via REST API to ensure delivery and get AI response
+      await supportApi.sendChatMessage(sessionId, newMessage.trim())
+      setNewMessage('')
+
+      // Fetch messages to get AI response (if not using WebSocket)
+      if (!wsConnected) {
+        const data = await supportApi.getChatMessages(sessionId)
+        setMessages(data.messages)
+
+        // Always sync status with backend response
+        if (data.status === 'waiting') {
+          setChatStatus('waiting')
+          setQueuePosition(data.queue_position || null)
+        } else if (data.status === 'ended') {
+          setChatStatus('ended')
+        } else if (data.status === 'active') {
+          setChatStatus('active')
+        }
+
+        // Update AI handled state
+        if (data.is_ai_handled !== undefined) {
+          setIsAiHandled(data.is_ai_handled)
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to send message')
@@ -217,6 +299,25 @@ export default function ChatWidget() {
       setIsSending(false)
     }
   }
+
+  // Handle typing indicator
+  const handleTyping = useCallback(() => {
+    if (!sessionId) return
+
+    sendTypingStart(sessionId)
+
+    // Clear existing timeout
+    if (typingTimeout) {
+      clearTimeout(typingTimeout)
+    }
+
+    // Stop typing after 2 seconds of no input
+    const timeout = setTimeout(() => {
+      sendTypingStop(sessionId)
+    }, 2000)
+
+    setTypingTimeoutState(timeout)
+  }, [sessionId, sendTypingStart, sendTypingStop, typingTimeout])
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -469,7 +570,10 @@ export default function ChatWidget() {
                       <input
                         type="text"
                         value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
+                        onChange={(e) => {
+                          setNewMessage(e.target.value)
+                          handleTyping()
+                        }}
                         onKeyPress={handleKeyPress}
                         placeholder="Type a message..."
                         className="flex-1 px-4 py-3 bg-premium-surface border border-premium-border rounded-xl sm:rounded-lg text-white text-base sm:text-sm focus:outline-none focus:border-gold-500 min-h-[48px]"
@@ -484,7 +588,22 @@ export default function ChatWidget() {
                       </button>
                     </div>
                     <div className="flex justify-between items-center mt-3 px-1">
-                      <p className="text-xs text-gray-500 hidden sm:block">Press Enter to send</p>
+                      <div className="flex items-center space-x-2">
+                        <p className="text-xs text-gray-500 hidden sm:block">Press Enter to send</p>
+                        {wsConnected ? (
+                          <span className="flex items-center text-xs text-green-400" title="Real-time connection active">
+                            <Wifi className="h-3 w-3 mr-1" />
+                            <span className="hidden sm:inline">Live</span>
+                          </span>
+                        ) : (
+                          <span className="flex items-center text-xs text-gray-500" title="Using polling">
+                            <WifiOff className="h-3 w-3 mr-1" />
+                          </span>
+                        )}
+                        {isTyping && (
+                          <span className="text-xs text-gray-400 animate-pulse">typing...</span>
+                        )}
+                      </div>
                       <button
                         onClick={handleEndChat}
                         className="text-sm sm:text-xs text-red-400 hover:text-red-300 min-h-[44px] touch-manipulation px-2"

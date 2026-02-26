@@ -52,4 +52,10 @@ nul
 release-artifacts/
 release-files/
 release-v140/
-*.db
+
+# Build artifacts and downloads (large binaries)
+artifacts/
+downloads-*/
+*.AppImage
+*.dmg
+*.exe

@@ -30,12 +30,18 @@ export const localeFlags: Record<Locale, string> = {
   ja: '🇯🇵'
 };
 
-export default getRequestConfig(async ({ locale }) => {
-  // Validate the locale from the request (middleware sets this)
+export default getRequestConfig(async ({ requestLocale }) => {
+  // Get the locale from the request (middleware sets this)
   // For routes where middleware doesn't run (static routes), use default locale
-  const validLocale = locale && locales.includes(locale as Locale) ? locale : defaultLocale;
+  let locale = await requestLocale;
+
+  // Fallback to default locale if no locale is set or invalid
+  if (!locale || !locales.includes(locale as Locale)) {
+    locale = defaultLocale;
+  }
+
   return {
-    locale: validLocale,
-    messages: (await import(`./messages/${validLocale}.json`)).default
+    locale,
+    messages: (await import(`./messages/${locale}.json`)).default
   };
 });

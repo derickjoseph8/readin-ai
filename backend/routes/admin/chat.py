@@ -21,6 +21,7 @@ from schemas import (
 )
 from services.ticket_service import ChatService
 from services.novah_service import novah_service
+from services.chat_websocket_manager import chat_manager, ChatWebSocketMessage, ChatEventType
 
 router = APIRouter(prefix="/admin/chat", tags=["Admin - Chat"])
 
@@ -155,6 +156,22 @@ async def accept_chat(
 
     try:
         session = chat_service.accept_chat(session_id, member.id)
+
+        # Notify customer via WebSocket that agent has joined
+        await chat_manager.notify_agent_joined(
+            session_id,
+            member.id,
+            current_user.full_name or "Support Agent",
+            session.user_id,
+        )
+
+        # Notify session status change
+        await chat_manager.notify_session_status_changed(
+            session_id,
+            "active",
+            {"agent_name": current_user.full_name or "Support Agent"}
+        )
+
         return enrich_session_response(db, session)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -192,6 +209,14 @@ async def end_chat_session(
             create_ticket=create_ticket,
             ticket_subject=ticket_subject
         )
+
+        # Notify all participants via WebSocket that the session has ended
+        await chat_manager.notify_session_ended(
+            session_id,
+            ended_by="agent",
+            reason="Chat ended by agent"
+        )
+
         return {"message": "Chat ended successfully"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -331,6 +356,21 @@ async def send_chat_message(
     db.add(msg)
     db.commit()
     db.refresh(msg)
+
+    # Broadcast message via WebSocket to session participants
+    message_response = {
+        "id": msg.id,
+        "session_id": msg.session_id,
+        "sender_type": msg.sender_type,
+        "sender_id": msg.sender_id,
+        "sender_name": current_user.full_name or "Agent",
+        "message": msg.message,
+        "message_type": msg.message_type,
+        "created_at": msg.created_at.isoformat(),
+    }
+    await chat_manager.notify_new_message(
+        session_id, message_response, current_user.id
+    )
 
     return ChatMessageResponse(
         id=msg.id,
@@ -614,6 +654,21 @@ async def send_customer_message(
     db.commit()
     db.refresh(msg)
 
+    # Broadcast customer message via WebSocket to session participants (agent)
+    customer_message_data = {
+        "id": msg.id,
+        "session_id": msg.session_id,
+        "sender_type": msg.sender_type,
+        "sender_id": msg.sender_id,
+        "sender_name": current_user.full_name or "Customer",
+        "message": msg.message,
+        "message_type": msg.message_type,
+        "created_at": msg.created_at.isoformat(),
+    }
+    await chat_manager.notify_new_message(
+        session.id, customer_message_data, current_user.id
+    )
+
     # If chat is AI-handled, generate Novah response
     if session.is_ai_handled:
         # Get conversation history
@@ -660,6 +715,43 @@ async def send_customer_message(
                 message_type="text"
             )
             db.add(transfer_msg)
+            db.commit()
+            db.refresh(transfer_msg)
+
+            # Notify customer of status change via WebSocket
+            await chat_manager.notify_session_status_changed(
+                session.id,
+                "waiting",
+                {"queue_position": session.queue_position}
+            )
+
+            # Notify agents about new chat in queue
+            await chat_manager.notify_new_chat_in_queue(
+                session.team_id,
+                {
+                    "session_id": session.id,
+                    "user_name": current_user.full_name or "Customer",
+                    "queue_position": session.queue_position,
+                }
+            )
+
+            # Broadcast transfer message to customer via WebSocket
+            transfer_msg_data = {
+                "id": transfer_msg.id,
+                "session_id": transfer_msg.session_id,
+                "sender_type": transfer_msg.sender_type,
+                "sender_name": "Novah (AI)",
+                "message": transfer_msg.message,
+                "message_type": transfer_msg.message_type,
+                "created_at": transfer_msg.created_at.isoformat(),
+            }
+            await chat_manager.send_to_user(
+                current_user.id,
+                ChatWebSocketMessage(
+                    event=ChatEventType.NEW_MESSAGE,
+                    data=transfer_msg_data,
+                )
+            )
         else:
             # Send Novah's response
             bot_msg = ChatMessage(
@@ -670,8 +762,26 @@ async def send_customer_message(
                 message_type="text"
             )
             db.add(bot_msg)
+            db.commit()
+            db.refresh(bot_msg)
 
-        db.commit()
+            # Broadcast bot response to customer via WebSocket
+            bot_msg_data = {
+                "id": bot_msg.id,
+                "session_id": bot_msg.session_id,
+                "sender_type": bot_msg.sender_type,
+                "sender_name": "Novah (AI)",
+                "message": bot_msg.message,
+                "message_type": bot_msg.message_type,
+                "created_at": bot_msg.created_at.isoformat(),
+            }
+            await chat_manager.send_to_user(
+                current_user.id,
+                ChatWebSocketMessage(
+                    event=ChatEventType.NEW_MESSAGE,
+                    data=bot_msg_data,
+                )
+            )
 
     return ChatMessageResponse(
         id=msg.id,
@@ -729,6 +839,42 @@ async def request_human_agent(
     )
     db.add(transfer_msg)
     db.commit()
+    db.refresh(transfer_msg)
+
+    # Notify customer via WebSocket about status change
+    await chat_manager.notify_session_status_changed(
+        session.id,
+        "waiting",
+        {"queue_position": session.queue_position}
+    )
+
+    # Notify agents about new chat in queue
+    await chat_manager.notify_new_chat_in_queue(
+        session.team_id,
+        {
+            "session_id": session.id,
+            "user_name": current_user.full_name or "Customer",
+            "queue_position": session.queue_position,
+        }
+    )
+
+    # Send system message via WebSocket
+    transfer_msg_data = {
+        "id": transfer_msg.id,
+        "session_id": transfer_msg.session_id,
+        "sender_type": transfer_msg.sender_type,
+        "sender_name": "System",
+        "message": transfer_msg.message,
+        "message_type": transfer_msg.message_type,
+        "created_at": transfer_msg.created_at.isoformat(),
+    }
+    await chat_manager.send_to_user(
+        current_user.id,
+        ChatWebSocketMessage(
+            event=ChatEventType.NEW_MESSAGE,
+            data=transfer_msg_data,
+        )
+    )
 
     return {
         "message": "Transferred to agent queue",
@@ -792,10 +938,19 @@ async def end_my_chat(
     if not session:
         raise HTTPException(status_code=404, detail="No active chat session")
 
+    session_id = session.id
+
     # Mark AI resolution status if ended during AI handling
     if session.is_ai_handled:
         session.ai_resolution_status = "resolved_by_ai"
 
     chat_service.end_chat(session.id)
+
+    # Notify all participants via WebSocket that the session has ended
+    await chat_manager.notify_session_ended(
+        session_id,
+        ended_by="customer",
+        reason="Chat ended by customer"
+    )
 
     return {"message": "Chat ended"}

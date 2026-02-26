@@ -60,6 +60,7 @@ from routes.ai_preferences import router as ai_preferences_router
 from routes.exports import router as exports_router
 from routes.integrations import router as integrations_router
 from routes.payments import router as payments_router
+from routes.chat_websocket import router as chat_websocket_router
 
 # Import scheduler
 from services.scheduler import start_scheduler, stop_scheduler
@@ -215,6 +216,9 @@ app.include_router(admin_chat_router, prefix=API_V1_PREFIX)
 # Customer-facing support routes
 app.include_router(customer_tickets_router, prefix=API_V1_PREFIX)
 app.include_router(customer_chat_router, prefix=API_V1_PREFIX)
+
+# Chat WebSocket routes (real-time messaging)
+app.include_router(chat_websocket_router, prefix=API_V1_PREFIX)
 
 # Also include at root for backward compatibility (deprecated)
 app.include_router(professions_router, tags=["Deprecated - Use /api/v1"])
