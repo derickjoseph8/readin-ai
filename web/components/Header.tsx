@@ -56,7 +56,7 @@ export default function Header() {
           <div className="hidden md:flex items-center space-x-8">
             <Link href={getSectionHref('features')} className="text-gray-400 hover:text-gold-400 transition-colors">{t('features')}</Link>
             <Link href={getSectionHref('how-it-works')} className="text-gray-400 hover:text-gold-400 transition-colors">How It Works</Link>
-            <Link href={getSectionHref('pricing')} className="text-gray-400 hover:text-gold-400 transition-colors">{t('pricing')}</Link>
+            <Link href="/pricing" className="text-gray-400 hover:text-gold-400 transition-colors">{t('pricing')}</Link>
             <Link href={getSectionHref('faq')} className="text-gray-400 hover:text-gold-400 transition-colors">FAQ</Link>
           </div>
 
@@ -108,7 +108,7 @@ export default function Header() {
                 How It Works
               </Link>
               <Link
-                href={getSectionHref('pricing')}
+                href="/pricing"
                 className="py-3 px-2 text-gray-400 hover:text-gold-400 transition-colors min-h-[44px] flex items-center"
                 onClick={() => setMobileMenuOpen(false)}
               >
