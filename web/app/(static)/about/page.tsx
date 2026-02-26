@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import Header from '@/components/Header'
+import StaticHeader from '@/components/StaticHeader'
 import Footer from '@/components/Footer'
 import { Target, Users, Shield, Sparkles, Globe, Heart } from 'lucide-react'
 
@@ -39,7 +39,7 @@ const team = [
 export default function AboutPage() {
   return (
     <>
-      <Header />
+      <StaticHeader />
       <main className="pt-24 pb-16 px-4 min-h-screen bg-premium-bg">
         <div className="max-w-5xl mx-auto">
           {/* Hero Section */}

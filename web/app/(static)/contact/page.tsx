@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import Header from '@/components/Header'
+import StaticHeader from '@/components/StaticHeader'
 import Footer from '@/components/Footer'
 import { Mail, MessageSquare, Building2, Clock, Send, CheckCircle, Loader2 } from 'lucide-react'
 
@@ -46,7 +46,7 @@ export default function Contact() {
 
   return (
     <>
-      <Header />
+      <StaticHeader />
       <main className="pt-24 pb-16 px-4 min-h-screen bg-premium-bg">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">

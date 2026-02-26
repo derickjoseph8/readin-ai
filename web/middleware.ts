@@ -44,20 +44,14 @@ export default function middleware(request: NextRequest) {
     pathname === route || pathname.startsWith(route + '/')
   );
 
-  // Run intl middleware for all routes to provide locale context
-  // For static routes, we still need locale context for components using useTranslations
-  const response = intlMiddleware(request);
-
-  // For static routes, ensure we don't redirect to locale-prefixed URLs
   if (isStaticRoute) {
-    const redirectLocation = response.headers.get('location');
-    // If intl middleware is trying to redirect to a locale-prefixed URL, don't allow it
-    if (redirectLocation && locales.some(loc => redirectLocation.includes(`/${loc}/`))) {
-      return NextResponse.next();
-    }
+    // For static routes, pass through without locale handling
+    // Static pages use StaticHeader component with hardcoded English text
+    return NextResponse.next();
   }
 
-  return response;
+  // For all other routes, use the next-intl middleware
+  return intlMiddleware(request);
 }
 
 export const config = {

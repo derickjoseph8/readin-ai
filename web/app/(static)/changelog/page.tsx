@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import Header from '@/components/Header'
+import StaticHeader from '@/components/StaticHeader'
 import Footer from '@/components/Footer'
 import { Sparkles, Zap, Bug, Shield, ArrowUpCircle } from 'lucide-react'
 
@@ -158,7 +158,7 @@ const getChangeLabel = (type: string) => {
 export default function Changelog() {
   return (
     <>
-      <Header />
+      <StaticHeader />
       <main className="pt-24 pb-16 px-4 min-h-screen bg-premium-bg">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">

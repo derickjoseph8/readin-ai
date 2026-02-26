@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import Header from '@/components/Header'
+import StaticHeader from '@/components/StaticHeader'
 import Footer from '@/components/Footer'
 import { Book, Download, Settings, Mic, Brain, Mail, Shield, Users, Briefcase, HelpCircle } from 'lucide-react'
 
@@ -107,7 +107,7 @@ const docSections = [
 export default function Documentation() {
   return (
     <>
-      <Header />
+      <StaticHeader />
       <main className="pt-24 pb-16 px-4 min-h-screen bg-premium-bg">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">

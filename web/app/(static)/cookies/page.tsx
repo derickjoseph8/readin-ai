@@ -1,13 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import Header from '@/components/Header'
+import StaticHeader from '@/components/StaticHeader'
 import Footer from '@/components/Footer'
 
 export default function CookiePolicy() {
   return (
     <>
-      <Header />
+      <StaticHeader />
       <main className="pt-24 pb-16 px-4 min-h-screen bg-premium-bg">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-4xl font-bold mb-2 text-white">Cookie Policy</h1>
