@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import '../globals.css';
-import { JsonLd, organizationSchema, softwareApplicationSchema } from '@/components/seo/JsonLd';
+import { organizationSchema, softwareApplicationSchema, generateJsonLd } from '@/components/seo/schemas';
 
 const BASE_URL = 'https://www.getreadin.us';
 
@@ -32,6 +33,8 @@ export default function StaticLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const jsonLdData = [organizationSchema, softwareApplicationSchema];
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -46,7 +49,12 @@ export default function StaticLayout({
           Skip to main content
         </a>
         {children}
-        <JsonLd data={[organizationSchema, softwareApplicationSchema]} />
+        <Script
+          id="static-json-ld"
+          type="application/ld+json"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{ __html: generateJsonLd(jsonLdData) }}
+        />
       </body>
     </html>
   );

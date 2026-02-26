@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import { JsonLd, softwareApplicationSchema, createWebPageSchema } from '@/components/seo/JsonLd'
+import Script from 'next/script'
+import { softwareApplicationSchema, createWebPageSchema, generateJsonLd } from '@/components/seo/schemas'
 
 const BASE_URL = 'https://www.getreadin.us'
 
@@ -34,18 +35,23 @@ export default function DownloadLayout({
 }: {
   children: React.ReactNode
 }) {
+  const jsonLdData = [
+    softwareApplicationSchema,
+    createWebPageSchema(
+      'Download ReadIn AI',
+      'Download ReadIn AI for Windows, macOS, or Linux',
+      `${BASE_URL}/download`
+    ),
+  ]
+
   return (
     <>
       {children}
-      <JsonLd
-        data={[
-          softwareApplicationSchema,
-          createWebPageSchema(
-            'Download ReadIn AI',
-            'Download ReadIn AI for Windows, macOS, or Linux',
-            `${BASE_URL}/download`
-          ),
-        ]}
+      <Script
+        id="download-json-ld"
+        type="application/ld+json"
+        strategy="afterInteractive"
+        dangerouslySetInnerHTML={{ __html: generateJsonLd(jsonLdData) }}
       />
     </>
   )

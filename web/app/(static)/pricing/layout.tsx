@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import { JsonLd, createWebPageSchema, createFAQSchema } from '@/components/seo/JsonLd'
+import Script from 'next/script'
+import { createWebPageSchema, createFAQSchema, generateJsonLd } from '@/components/seo/schemas'
 
 const BASE_URL = 'https://www.getreadin.us'
 
@@ -48,18 +49,23 @@ export default function PricingLayout({
 }: {
   children: React.ReactNode
 }) {
+  const jsonLdData = [
+    createWebPageSchema(
+      'ReadIn AI Pricing',
+      'Affordable pricing plans for AI-powered meeting assistance',
+      `${BASE_URL}/pricing`
+    ),
+    createFAQSchema(pricingFAQs),
+  ]
+
   return (
     <>
       {children}
-      <JsonLd
-        data={[
-          createWebPageSchema(
-            'ReadIn AI Pricing',
-            'Affordable pricing plans for AI-powered meeting assistance',
-            `${BASE_URL}/pricing`
-          ),
-          createFAQSchema(pricingFAQs),
-        ]}
+      <Script
+        id="pricing-json-ld"
+        type="application/ld+json"
+        strategy="afterInteractive"
+        dangerouslySetInnerHTML={{ __html: generateJsonLd(jsonLdData) }}
       />
     </>
   )

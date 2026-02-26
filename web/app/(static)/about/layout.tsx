@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import { JsonLd, organizationSchema, createWebPageSchema } from '@/components/seo/JsonLd'
+import Script from 'next/script'
+import { organizationSchema, createWebPageSchema, generateJsonLd } from '@/components/seo/schemas'
 
 const BASE_URL = 'https://www.getreadin.us'
 
@@ -33,18 +34,23 @@ export default function AboutLayout({
 }: {
   children: React.ReactNode
 }) {
+  const jsonLdData = [
+    organizationSchema,
+    createWebPageSchema(
+      'About ReadIn AI',
+      'Learn about ReadIn AI and our mission to help professionals communicate with confidence',
+      `${BASE_URL}/about`
+    ),
+  ]
+
   return (
     <>
       {children}
-      <JsonLd
-        data={[
-          organizationSchema,
-          createWebPageSchema(
-            'About ReadIn AI',
-            'Learn about ReadIn AI and our mission to help professionals communicate with confidence',
-            `${BASE_URL}/about`
-          ),
-        ]}
+      <Script
+        id="about-json-ld"
+        type="application/ld+json"
+        strategy="afterInteractive"
+        dangerouslySetInnerHTML={{ __html: generateJsonLd(jsonLdData) }}
       />
     </>
   )
