@@ -48,6 +48,25 @@ const plans = [
 
 const corporatePlans = [
   {
+    name: 'Starter',
+    price: '$16.99',
+    annualPrice: '$169.90',
+    period: '/user/month',
+    annualPeriod: '/user/year',
+    users: '2-9 users',
+    minSeats: '2 seats minimum',
+    description: 'Perfect for small teams',
+    annualSavings: '2 months free',
+    features: [
+      'Everything in Premium',
+      'Team admin dashboard',
+      'Shared meeting insights',
+      'Centralized billing',
+    ],
+    cta: 'Sign Up',
+    href: '/login',
+  },
+  {
     name: 'Team',
     price: '$14.99',
     annualPrice: '$149.90',
@@ -55,18 +74,17 @@ const corporatePlans = [
     annualPeriod: '/user/year',
     users: '10-50 users',
     minSeats: '10 seats minimum',
-    description: 'Perfect for growing teams',
+    description: 'Best value for growing teams',
     annualSavings: '2 months free',
     features: [
-      'Everything in Premium',
-      '10 mandatory seats included',
-      'Team admin dashboard',
-      'Shared meeting insights',
-      'Centralized billing',
-      'Usage analytics',
+      'Everything in Starter',
+      'Usage analytics & reports',
+      'Custom profession profiles',
+      'Priority support',
     ],
     cta: 'Sign Up',
     href: '/login',
+    popular: true,
   },
   {
     name: 'Enterprise',
@@ -78,16 +96,13 @@ const corporatePlans = [
     annualSavings: '2 months free on annual',
     features: [
       'Everything in Team',
-      'Unlimited team members',
       'Single Sign-On (SSO)',
-      'On-premise deployment option',
+      'On-premise deployment',
       'SLA & compliance support',
       'Dedicated success team',
-      'Custom AI training',
     ],
     cta: 'Contact Sales',
     href: 'mailto:sales@getreadin.ai?subject=Enterprise Plan Inquiry',
-    popular: true,
   },
 ]
 
@@ -97,23 +112,14 @@ export default function GlobalPricing() {
   return (
     <section id="pricing" className="py-24 px-4 bg-premium-surface/50">
       <div className="max-w-7xl mx-auto">
-        {/* Region Badge */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-            <Globe className="h-4 w-4 text-emerald-400 mr-2" />
-            <span className="text-sm text-emerald-300">Special pricing for Africa, UAE & Asia</span>
-          </div>
-        </div>
-
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-12">
           <h2 className="text-4xl md:text-5xl font-bold mb-6">
-            Accessible{' '}
-            <span className="text-gradient-gold">AI Meeting Assistant</span>
+            Simple,{' '}
+            <span className="text-gradient-gold">Transparent Pricing</span>
           </h2>
           <p className="text-xl text-gray-400 mb-8">
-            Professional meeting intelligence at prices that work for your region.
-            Start free, upgrade when you're ready.
+            Start free, upgrade when you're ready. No hidden fees, cancel anytime.
           </p>
 
           {/* Billing Toggle */}
@@ -261,7 +267,7 @@ export default function GlobalPricing() {
           </div>
 
           {/* Corporate Cards */}
-          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {corporatePlans.map((plan, index) => (
               <div
                 key={index}
@@ -339,14 +345,14 @@ export default function GlobalPricing() {
           {/* Enterprise CTA */}
           <div className="text-center mt-12">
             <p className="text-gray-400 mb-4">
-              Looking for custom solutions? We partner with organizations across Africa, UAE, and Asia.
+              Need a custom solution? We work with organizations of all sizes across every industry.
             </p>
             <a
-              href="mailto:enterprise@getreadin.ai?subject=Enterprise Inquiry - Global Markets"
+              href="mailto:enterprise@getreadin.ai?subject=Enterprise Inquiry"
               className="inline-flex items-center px-6 py-3 bg-premium-surface border border-premium-border rounded-xl text-white hover:border-gold-500/30 transition-all duration-300"
             >
               <Globe className="h-4 w-4 mr-2 text-gold-400" />
-              Talk to our Regional Team
+              Talk to our Enterprise Team
             </a>
           </div>
         </div>
