@@ -42,7 +42,7 @@ export default function TermsOfService() {
               <h2 className="text-2xl font-semibold text-gold-400 mb-4">4. Subscription and Payments</h2>
               <h3 className="text-xl font-medium text-white mb-2">4.1 Free Trial</h3>
               <p className="text-gray-300 mb-4">
-                New users receive a 14-day free trial with 10 AI responses per day. No credit card is required for the trial.
+                New users receive a 7-day free trial with 10 AI responses per day. No credit card is required for the trial.
               </p>
 
               <h3 className="text-xl font-medium text-white mb-2">4.2 Premium Subscription</h3>

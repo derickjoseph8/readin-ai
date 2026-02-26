@@ -22,7 +22,7 @@ export default function DownloadPage() {
   const downloadUrls: Record<string, string> = {
     windows: 'https://www.getreadin.us/downloads/ReadInAI-Windows-1.4.9.exe',
     mac: 'https://www.getreadin.us/downloads/ReadInAI-macOS-1.4.9.dmg',
-    linux: 'https://www.getreadin.us/downloads/ReadInAI-Linux-1.4.9',
+    linux: 'https://www.getreadin.us/downloads/ReadInAI-Linux-1.4.9.AppImage',
   }
 
   const handleDownloadClick = (os: string) => {
@@ -159,7 +159,7 @@ export default function DownloadPage() {
                 <span className="w-8 h-8 bg-gold-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0">2</span>
                 <div>
                   <p className="font-medium">Create Your Account</p>
-                  <p className="text-gray-400 text-sm">Sign up for free to start your 14-day trial</p>
+                  <p className="text-gray-400 text-sm">Sign up for free to start your 7-day trial</p>
                 </div>
               </li>
               <li className="flex items-start">

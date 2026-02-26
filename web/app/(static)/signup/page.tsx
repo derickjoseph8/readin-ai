@@ -118,7 +118,7 @@ export default function SignupPage() {
               <span className="text-premium-bg font-bold text-xl">R</span>
             </div>
             <h1 className="text-2xl font-bold">Create Account</h1>
-            <p className="text-gray-400 mt-2">Start your 14-day free trial</p>
+            <p className="text-gray-400 mt-2">Start your 7-day free trial</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

@@ -18,7 +18,7 @@ const faqs = [
   },
   {
     question: 'Does it work on Mac and Linux?',
-    answer: 'Yes! ReadIn AI v1.4.0 is cross-platform and works on Windows, macOS, and Linux. On macOS, you may need to install a virtual audio driver (like BlackHole) to capture system audio.',
+    answer: 'Yes! ReadIn AI v1.4.9 is cross-platform and works on Windows, macOS, and Linux. On macOS, you may need to install a virtual audio driver (like BlackHole) to capture system audio.',
   },
   {
     question: 'What happens after my free trial?',
@@ -37,8 +37,8 @@ const faqs = [
     answer: 'Yes! Premium users can customize system prompts with presets like Interview Coach, Technical Expert, Sales, and Executive modes, or create their own custom prompts. The AI also learns your communication style over time.',
   },
   {
-    question: 'What\'s new in version 1.4.0?',
-    answer: 'Version 1.4.0 includes comprehensive security enhancements: secure credential storage, improved API rate limiting, better multi-monitor support, and numerous performance fixes. Check our changelog for full details.',
+    question: 'What\'s new in version 1.4.9?',
+    answer: 'Version 1.4.9 includes security hardening with PBKDF2 token signing, Redis token blacklist, CSP headers, token refresh mechanism, and race condition fixes. Check our changelog for full details.',
   },
 ]
 
