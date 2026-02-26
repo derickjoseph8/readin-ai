@@ -2,14 +2,14 @@
 
 import StaticHeader from '@/components/StaticHeader'
 import Footer from '@/components/Footer'
-import PricingWithGeo from '@/components/PricingWithGeo'
+import GlobalPricing from '@/components/GlobalPricing'
 
-export default function PricingPage() {
+export default function GlobalPricingPage() {
   return (
     <>
       <StaticHeader />
       <main className="pt-16 min-h-screen bg-premium-bg">
-        <PricingWithGeo />
+        <GlobalPricing />
       </main>
       <Footer />
     </>
