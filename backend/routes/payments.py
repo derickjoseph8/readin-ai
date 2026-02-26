@@ -455,42 +455,143 @@ def _log_payment(db: Session, invoice: dict, status: str):
 
 
 # =============================================================================
-# PRICING INFO ENDPOINT
+# PRICING INFO ENDPOINT (Regional pricing based on IP/country)
 # =============================================================================
 
+from pricing_config import (
+    Region, PlanType, PRICING, get_region_from_country,
+    calculate_billing, get_enterprise_quote
+)
+
+
+class RegionalPricingRequest(BaseModel):
+    country_code: Optional[str] = None
+
+
+class BillingCalculationRequest(BaseModel):
+    country_code: Optional[str] = None
+    seats: int = 1
+    is_annual: bool = False
+
+
 @router.get("/pricing")
-def get_pricing():
-    """Get current pricing information."""
+@router.post("/pricing")
+def get_pricing(
+    request: Optional[RegionalPricingRequest] = None,
+    x_country_code: Optional[str] = Header(None, alias="X-Country-Code"),
+):
+    """
+    Get regional pricing information.
+
+    Pricing is determined by country code (from header or request body).
+    Enterprise pricing is shown as 'Custom' but actual rates are hardcoded.
+    """
+    # Determine region from country code
+    country_code = (
+        (request.country_code if request else None) or
+        x_country_code or
+        "US"  # Default to US/Western pricing
+    )
+    region = get_region_from_country(country_code)
+    pricing = PRICING[region]
+
     return {
-        "plans": [
-            {
-                "id": "free",
-                "name": "Free Trial",
-                "price": 0,
-                "currency": "usd",
-                "interval": None,
-                "features": [
-                    "7-day free trial",
-                    f"Up to 10 AI responses per day",
-                    "Basic meeting summaries",
-                    "Email support",
-                ],
-            },
-            {
-                "id": "premium",
+        "region": region.value,
+        "country_code": country_code,
+        "currency": "USD",
+        "plans": {
+            "individual": {
                 "name": "Premium",
-                "price": 1000,  # $10.00 in cents
-                "currency": "usd",
-                "interval": "month",
+                "monthly": pricing[PlanType.INDIVIDUAL].monthly,
+                "annual": pricing[PlanType.INDIVIDUAL].annual,
+                "annual_savings": pricing[PlanType.INDIVIDUAL].annual_savings,
                 "features": [
                     "Unlimited AI responses",
-                    "Advanced meeting summaries",
+                    "Profession-specific knowledge base",
+                    "Smart meeting notes",
                     "Action item tracking",
-                    "Calendar integration",
-                    "Team collaboration",
                     "Priority support",
-                    "Export reports (PDF/CSV)",
                 ],
             },
-        ]
+            "starter": {
+                "name": "Starter",
+                "monthly": pricing[PlanType.STARTER].monthly,
+                "annual": pricing[PlanType.STARTER].annual,
+                "min_seats": pricing[PlanType.STARTER].min_seats,
+                "max_seats": pricing[PlanType.STARTER].max_seats,
+                "features": [
+                    "Everything in Premium",
+                    "Team admin dashboard",
+                    "Shared meeting insights",
+                    "Centralized billing",
+                ],
+            },
+            "team": {
+                "name": "Team",
+                "monthly": pricing[PlanType.TEAM].monthly,
+                "annual": pricing[PlanType.TEAM].annual,
+                "min_seats": pricing[PlanType.TEAM].min_seats,
+                "max_seats": pricing[PlanType.TEAM].max_seats,
+                "features": [
+                    "Everything in Starter",
+                    "Usage analytics",
+                    "Custom profession profiles",
+                    "Priority support",
+                ],
+            },
+            "enterprise": {
+                "name": "Enterprise",
+                "monthly": "Custom",  # Hidden from UI
+                "annual": "Custom",
+                "min_seats": 50,
+                "contact": "sales@getreadin.ai",
+                "features": [
+                    "Everything in Team",
+                    "Single Sign-On (SSO)",
+                    "On-premise deployment",
+                    "SLA & compliance",
+                    "Dedicated success team",
+                ],
+            },
+        },
+        "annual_discount": "2 months free",
     }
+
+
+@router.post("/pricing/calculate")
+def calculate_team_billing(request: BillingCalculationRequest):
+    """
+    Calculate billing for a team based on seats and region.
+
+    Used by billing dashboard to show accurate pricing.
+    """
+    region = get_region_from_country(request.country_code or "US")
+    billing = calculate_billing(region, request.seats, request.is_annual)
+
+    return billing
+
+
+@router.get("/pricing/enterprise-quote/{seats}")
+def get_enterprise_pricing_quote(
+    seats: int,
+    country_code: str = "US",
+    is_annual: bool = True,
+    user: User = Depends(get_current_user),
+):
+    """
+    Get enterprise pricing quote (admin/sales only).
+
+    This endpoint returns the actual enterprise pricing that is
+    hidden from the public pricing page.
+    """
+    # Only allow admins to see actual enterprise pricing
+    if not user.is_admin and not user.is_sales:
+        raise HTTPException(
+            status_code=403,
+            detail="Enterprise quotes are available through sales team"
+        )
+
+    region = get_region_from_country(country_code)
+    quote = get_enterprise_quote(region, seats, is_annual)
+
+    return quote

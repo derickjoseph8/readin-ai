@@ -2,7 +2,7 @@
 
 export type Region = 'global' | 'western';
 
-// Countries that get $19.99 pricing (Africa, UAE, Asia)
+// Countries that get global pricing (Africa, UAE, Asia)
 const GLOBAL_REGIONS = [
   // Africa
   'KE', 'NG', 'ZA', 'GH', 'TZ', 'UG', 'RW', 'ET', 'EG', 'MA', 'DZ', 'TN', 'SN', 'CI', 'CM', 'AO', 'MZ', 'ZW', 'BW', 'NA', 'MW', 'ZM', 'MU',
@@ -12,60 +12,64 @@ const GLOBAL_REGIONS = [
   'IN', 'BD', 'LK', 'NP', 'MM', 'TH', 'VN', 'ID', 'MY', 'PH', 'SG', 'CN', 'JP', 'KR', 'TW', 'HK',
 ];
 
-// Countries that get $29.99 pricing (Europe, North America)
-const WESTERN_REGIONS = [
-  // North America
-  'US', 'CA', 'MX',
-  // Europe
-  'GB', 'DE', 'FR', 'IT', 'ES', 'NL', 'BE', 'AT', 'CH', 'SE', 'NO', 'DK', 'FI', 'IE', 'PT', 'PL', 'CZ', 'HU', 'RO', 'BG', 'GR', 'HR', 'SK', 'SI', 'LT', 'LV', 'EE',
-  // Oceania
-  'AU', 'NZ',
-];
-
 export interface GeoData {
   country: string;
   countryCode: string;
   region: Region;
-  currency: string;
-  price: number;
-  annualPrice: number;
 }
 
 export async function detectRegion(): Promise<GeoData> {
   try {
-    // Use ip-api.com (free, no API key required, 45 requests/minute)
-    const response = await fetch('http://ip-api.com/json/?fields=countryCode,country', {
+    // Try multiple geo APIs for reliability
+    const apis = [
+      'https://ipapi.co/json/',
+      'https://api.ipify.org?format=json',
+    ];
+
+    // Try ipapi.co first (more reliable, includes country)
+    const response = await fetch('https://ipapi.co/json/', {
       cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
     });
 
-    if (!response.ok) {
-      throw new Error('Geo API failed');
+    if (response.ok) {
+      const data = await response.json();
+      const countryCode = data.country_code || data.country || 'US';
+      const country = data.country_name || 'United States';
+      const isGlobalRegion = GLOBAL_REGIONS.includes(countryCode);
+
+      return {
+        country,
+        countryCode,
+        region: isGlobalRegion ? 'global' : 'western',
+      };
     }
 
-    const data = await response.json();
-    const countryCode = data.countryCode || 'US';
-    const country = data.country || 'United States';
-
-    const isGlobalRegion = GLOBAL_REGIONS.includes(countryCode);
-
-    return {
-      country,
-      countryCode,
-      region: isGlobalRegion ? 'global' : 'western',
-      currency: isGlobalRegion ? 'USD' : 'USD',
-      price: isGlobalRegion ? 19.99 : 29.99,
-      annualPrice: isGlobalRegion ? 199.90 : 299.90,
-    };
+    throw new Error('Primary geo API failed');
   } catch (error) {
-    // Default to western pricing if geo detection fails
-    return {
-      country: 'United States',
-      countryCode: 'US',
-      region: 'western',
-      currency: 'USD',
-      price: 29.99,
-      annualPrice: 299.90,
-    };
+    // Fallback: try to detect from timezone
+    try {
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const isAfricaOrAsia = timezone.startsWith('Africa/') ||
+                             timezone.startsWith('Asia/') ||
+                             timezone.includes('Dubai') ||
+                             timezone.includes('Nairobi') ||
+                             timezone.includes('Lagos') ||
+                             timezone.includes('Johannesburg');
+
+      return {
+        country: 'Unknown',
+        countryCode: 'XX',
+        region: isAfricaOrAsia ? 'global' : 'western',
+      };
+    } catch {
+      // Default to western pricing if all detection fails
+      return {
+        country: 'United States',
+        countryCode: 'US',
+        region: 'western',
+      };
+    }
   }
 }
 
@@ -73,19 +77,49 @@ export function getRegionFromCountryCode(countryCode: string): Region {
   return GLOBAL_REGIONS.includes(countryCode) ? 'global' : 'western';
 }
 
-export function getPricing(region: Region) {
-  if (region === 'global') {
-    return {
-      individual: { monthly: 19.99, annual: 199.90 },
-      team: { monthly: 14.99, annual: 149.90 },
-      growth: { monthly: 9.99, annual: 99.90 },
-      savings: 'Save $40 (2 months free)',
-    };
-  }
-  return {
+// Pricing configuration - used by frontend and synced with backend
+export const PRICING_CONFIG = {
+  global: {
+    individual: { monthly: 19.99, annual: 199.90 },
+    starter: { monthly: 14.99, annual: 149.90, minSeats: 2, maxSeats: 9 },
+    team: { monthly: 12.99, annual: 129.90, minSeats: 10, maxSeats: 50 },
+    enterprise: { monthly: 9.99, annual: 99.90, minSeats: 50 }, // Hidden from UI
+  },
+  western: {
     individual: { monthly: 29.99, annual: 299.90 },
-    team: { monthly: 19.99, annual: 199.90 },
-    growth: { monthly: 14.99, annual: 149.90 },
-    savings: 'Save $60 (2 months free)',
+    starter: { monthly: 24.99, annual: 249.90, minSeats: 2, maxSeats: 9 },
+    team: { monthly: 19.99, annual: 199.90, minSeats: 10, maxSeats: 50 },
+    enterprise: { monthly: 14.99, annual: 149.90, minSeats: 50 }, // Hidden from UI
+  },
+};
+
+export function getPricing(region: Region, plan: keyof typeof PRICING_CONFIG.global, isAnnual: boolean = false) {
+  const regionPricing = PRICING_CONFIG[region];
+  const planPricing = regionPricing[plan];
+  return isAnnual ? planPricing.annual : planPricing.monthly;
+}
+
+export function calculateTeamBilling(region: Region, seats: number, isAnnual: boolean = false) {
+  let plan: 'starter' | 'team' | 'enterprise';
+
+  if (seats >= 50) {
+    plan = 'enterprise';
+  } else if (seats >= 10) {
+    plan = 'team';
+  } else {
+    plan = 'starter';
+  }
+
+  const pricePerUser = getPricing(region, plan, isAnnual);
+  const totalMonthly = pricePerUser * seats;
+  const totalAnnual = isAnnual ? totalMonthly : totalMonthly * 10; // 2 months free
+
+  return {
+    plan,
+    seats,
+    pricePerUser,
+    totalMonthly: isAnnual ? totalMonthly / 10 : totalMonthly,
+    totalAnnual,
+    isEnterprise: seats >= 50,
   };
 }

@@ -98,6 +98,17 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_PRICE_MONTHLY = os.getenv("STRIPE_PRICE_MONTHLY", "")
 
 # =============================================================================
+# PAYSTACK CONFIGURATION (Primary payment provider)
+# =============================================================================
+
+PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY", "")
+PAYSTACK_PUBLIC_KEY = os.getenv("PAYSTACK_PUBLIC_KEY", "")
+PAYSTACK_WEBHOOK_SECRET = os.getenv("PAYSTACK_WEBHOOK_SECRET", "")
+
+# Sales team email for enterprise alerts
+SALES_TEAM_EMAIL = os.getenv("SALES_TEAM_EMAIL", "sales@getreadin.ai")
+
+# =============================================================================
 # EMAIL CONFIGURATION
 # =============================================================================
 

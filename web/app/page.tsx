@@ -11,7 +11,6 @@ import UseCases from '@/components/UseCases';
 import SecuritySection from '@/components/SecuritySection';
 import Testimonials from '@/components/Testimonials';
 import ComparisonTable from '@/components/ComparisonTable';
-import Pricing from '@/components/Pricing';
 import FAQ from '@/components/FAQ';
 import CTA from '@/components/CTA';
 import Footer from '@/components/Footer';
@@ -30,7 +29,6 @@ export default function Home() {
       <SecuritySection />
       <Testimonials />
       <ComparisonTable />
-      <Pricing />
       <FAQ />
       <CTA />
       <Footer />

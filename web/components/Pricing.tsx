@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Check, Sparkles, Shield, Building2, Users, Globe } from 'lucide-react'
+import { Check, Sparkles, Shield, Building2, Users, Globe, CreditCard } from 'lucide-react'
 
 const plans = [
   {
@@ -163,7 +163,6 @@ export default function Pricing() {
                   : 'bg-premium-card border-premium-border hover:border-gold-500/30'
               }`}
             >
-              {/* Popular Badge */}
               {plan.popular && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                   <div className="flex items-center px-4 py-1.5 bg-gradient-to-r from-gold-600 to-gold-500 rounded-full text-sm font-semibold text-premium-bg">
@@ -173,7 +172,6 @@ export default function Pricing() {
                 </div>
               )}
 
-              {/* Plan Header */}
               <div className="text-center mb-8">
                 <h3 className="text-xl font-semibold mb-2 text-white">{plan.name}</h3>
                 <div className="flex items-baseline justify-center mb-2">
@@ -190,7 +188,6 @@ export default function Pricing() {
                 <p className="text-gray-400">{plan.description}</p>
               </div>
 
-              {/* Features */}
               <ul className="space-y-4 mb-8">
                 {plan.features.map((feature, featureIndex) => (
                   <li key={featureIndex} className="flex items-center">
@@ -204,7 +201,6 @@ export default function Pricing() {
                 ))}
               </ul>
 
-              {/* CTA Button */}
               <Link
                 href="/download"
                 className={`block w-full py-4 rounded-xl font-semibold text-center transition-all duration-300 ${
@@ -219,8 +215,21 @@ export default function Pricing() {
           ))}
         </div>
 
-        {/* Money-back guarantee */}
+        {/* Payment Methods - Paystack */}
         <div className="text-center mt-12">
+          <div className="inline-flex flex-wrap items-center justify-center gap-4 px-6 py-4 bg-premium-card rounded-xl border border-premium-border">
+            <div className="flex items-center text-gray-400">
+              <CreditCard className="h-4 w-4 mr-2" />
+              <span className="text-sm">Visa/Mastercard</span>
+            </div>
+            <div className="flex items-center text-emerald-400">
+              <span className="text-sm font-semibold">Paystack</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Money-back guarantee */}
+        <div className="text-center mt-8">
           <div className="inline-flex items-center px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
             <Shield className="h-4 w-4 text-emerald-400 mr-2" />
             <span className="text-sm text-emerald-300">30-day money-back guarantee on Premium</span>
@@ -257,7 +266,6 @@ export default function Pricing() {
                     : 'bg-premium-card border-premium-border hover:border-gold-500/30'
                 }`}
               >
-                {/* Popular Badge */}
                 {plan.popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <div className="flex items-center px-3 py-1 bg-gradient-to-r from-gold-600 to-gold-500 rounded-full text-xs font-semibold text-premium-bg">
@@ -267,7 +275,6 @@ export default function Pricing() {
                   </div>
                 )}
 
-                {/* Plan Header */}
                 <div className="text-center mb-6">
                   <div className="inline-flex items-center px-3 py-1 bg-premium-surface rounded-full text-xs text-gray-400 mb-3">
                     <Users className="h-3 w-3 mr-1" />
@@ -293,7 +300,6 @@ export default function Pricing() {
                   <p className="text-gray-400 text-sm">{plan.description}</p>
                 </div>
 
-                {/* Features */}
                 <ul className="space-y-3 mb-6">
                   {plan.features.map((feature, featureIndex) => (
                     <li key={featureIndex} className="flex items-start">
@@ -307,7 +313,6 @@ export default function Pricing() {
                   ))}
                 </ul>
 
-                {/* CTA Button */}
                 <a
                   href={plan.href}
                   className={`block w-full py-3 rounded-xl font-semibold text-center text-sm transition-all duration-300 ${
