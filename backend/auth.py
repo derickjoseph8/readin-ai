@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from config import JWT_SECRET, JWT_ALGORITHM, ACCESS_TOKEN_EXPIRE_DAYS, REDIS_URL
 from database import get_db
-from models import User
+from models import User, StaffRole
 
 logger = logging.getLogger(__name__)
 
@@ -239,5 +239,16 @@ async def get_current_user(
             }
         )
         raise credentials_exception
+
+    # CRITICAL: Auto-restore super admin status for protected accounts
+    # This ensures derick@getreadin.ai and derick@getreadin.us ALWAYS have super admin
+    if StaffRole.is_protected_super_admin(user.email):
+        if user.staff_role != StaffRole.SUPER_ADMIN or not user.is_staff:
+            logger.warning(
+                f"Restoring super admin status for protected account: {user.email}"
+            )
+            user.is_staff = True
+            user.staff_role = StaffRole.SUPER_ADMIN
+            db.commit()
 
     return user

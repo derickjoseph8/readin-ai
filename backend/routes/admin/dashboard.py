@@ -373,6 +373,14 @@ async def update_user_staff_status(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # CRITICAL: Protected super admin accounts cannot be demoted
+    if StaffRole.is_protected_super_admin(user.email):
+        if not is_staff or staff_role != StaffRole.SUPER_ADMIN:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot modify protected super admin account (derick@getreadin.ai/us)"
+            )
+
     user.is_staff = is_staff
     if is_staff and staff_role:
         user.staff_role = staff_role

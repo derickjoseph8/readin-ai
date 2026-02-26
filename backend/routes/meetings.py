@@ -1,12 +1,16 @@
 """Meeting API routes - Meeting lifecycle and summary management."""
 
+import asyncio
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 
 from database import get_db
+
+logger = logging.getLogger(__name__)
 from models import Meeting, Conversation, MeetingSummary, ActionItem, Commitment, User
 from schemas import (
     MeetingCreate, MeetingEnd, MeetingResponse, MeetingDetail, MeetingList,
@@ -354,9 +358,10 @@ def get_meeting_summary(
 
 
 @router.post("/{meeting_id}/summary", response_model=MeetingSummaryResponse)
-def generate_summary(
+async def generate_summary(
     meeting_id: int,
     data: MeetingSummaryRequest,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -416,9 +421,21 @@ def generate_summary(
     db.commit()
     db.refresh(summary)
 
-    # TODO: Send email if requested
-    # if data.send_email and user.email_summary_enabled:
-    #     send_summary_email.delay(user.id, summary.id)
+    # Send email if requested and user has email summaries enabled
+    if data.send_email and getattr(user, 'email_summary_enabled', True):
+        async def send_summary_email():
+            try:
+                from services.email_service import EmailService
+                email_service = EmailService(db)
+                await email_service.send_meeting_summary_email(
+                    user_id=user.id,
+                    summary_id=summary.id,
+                )
+                logger.info(f"Meeting summary email sent to user {user.id} for meeting {meeting_id}")
+            except Exception as e:
+                logger.error(f"Failed to send meeting summary email: {e}")
+
+        background_tasks.add_task(asyncio.create_task, send_summary_email())
 
     return MeetingSummaryResponse.model_validate(summary)
 

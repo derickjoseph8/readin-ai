@@ -3,12 +3,16 @@ Admin routes for team management.
 Super admin can add/remove admins, admins can manage other roles.
 """
 
+import asyncio
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 import secrets
+
+logger = logging.getLogger(__name__)
 
 from database import get_db
 from auth import get_current_user
@@ -351,12 +355,20 @@ async def remove_team_member(
     ).count()
 
     if other_teams == 0:
-        # Remove staff status
+        # Remove staff status - BUT NEVER for protected super admins
         user = db.query(User).filter(User.id == member.user_id).first()
         if user:
-            user.is_staff = False
-            user.staff_role = None
-            db.commit()
+            # Check if this is a protected super admin account
+            if StaffRole.is_protected_super_admin(user.email):
+                # Protected super admins retain their status even when removed from all teams
+                logger.warning(
+                    f"Protected super admin {user.email} removed from team {team_id}, "
+                    f"but retaining super_admin status"
+                )
+            else:
+                user.is_staff = False
+                user.staff_role = None
+                db.commit()
 
     log_activity(db, current_user.id, "remove_team_member", "team_member", member_id,
                  {"user_id": member.user_id, "team_id": team_id})
@@ -394,19 +406,31 @@ async def update_member_role(
     # Update user's staff role if this is their highest role
     user = db.query(User).filter(User.id == member.user_id).first()
     if user:
-        # Get highest role across all teams
-        all_roles = db.query(TeamMember.role).filter(
-            and_(TeamMember.user_id == user.id, TeamMember.is_active == True)
-        ).all()
-        roles = [r[0] for r in all_roles]
-
-        if StaffRole.ADMIN in roles:
-            user.staff_role = StaffRole.ADMIN
-        elif StaffRole.MANAGER in roles:
-            user.staff_role = StaffRole.MANAGER
+        # CRITICAL: Protected super admins can NEVER be demoted
+        if StaffRole.is_protected_super_admin(user.email):
+            # Ensure super admin status is always maintained
+            if user.staff_role != StaffRole.SUPER_ADMIN:
+                user.staff_role = StaffRole.SUPER_ADMIN
+                user.is_staff = True
+                db.commit()
+                logger.info(f"Restored super_admin status for protected account {user.email}")
         else:
-            user.staff_role = StaffRole.AGENT
-        db.commit()
+            # Get highest role across all teams
+            all_roles = db.query(TeamMember.role).filter(
+                and_(TeamMember.user_id == user.id, TeamMember.is_active == True)
+            ).all()
+            roles = [r[0] for r in all_roles]
+
+            # Check for all roles in the hierarchy (including SUPER_ADMIN)
+            if StaffRole.SUPER_ADMIN in roles:
+                user.staff_role = StaffRole.SUPER_ADMIN
+            elif StaffRole.ADMIN in roles:
+                user.staff_role = StaffRole.ADMIN
+            elif StaffRole.MANAGER in roles:
+                user.staff_role = StaffRole.MANAGER
+            else:
+                user.staff_role = StaffRole.AGENT
+            db.commit()
 
     log_activity(db, current_user.id, "update_member_role", "team_member", member_id,
                  {"old_role": old_role, "new_role": role})
@@ -421,6 +445,7 @@ async def update_member_role(
 @router.post("/invite", response_model=TeamInviteResponse, status_code=201)
 async def invite_team_member(
     invite_data: TeamMemberInvite,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -475,7 +500,24 @@ async def invite_team_member(
     log_activity(db, current_user.id, "create_invite", "team_invite", invite.id,
                  {"email": invite_data.email, "team_id": invite_data.team_id})
 
-    # TODO: Send invitation email
+    # Send invitation email asynchronously
+    async def send_invite_email():
+        try:
+            from services.email_service import EmailService
+            email_service = EmailService(db)
+            inviter_name = current_user.full_name or current_user.email
+            await email_service.send_team_invite(
+                to_email=invite_data.email,
+                team_name=team.name,
+                inviter_name=inviter_name,
+                invite_token=invite.token,
+                role=invite_data.role.value if hasattr(invite_data.role, 'value') else str(invite_data.role),
+            )
+            logger.info(f"Team invite email sent to {invite_data.email} for team {team.name}")
+        except Exception as e:
+            logger.error(f"Failed to send team invite email to {invite_data.email}: {e}")
+
+    background_tasks.add_task(asyncio.create_task, send_invite_email())
 
     return TeamInviteResponse(
         id=invite.id,

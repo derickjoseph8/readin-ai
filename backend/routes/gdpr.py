@@ -7,12 +7,16 @@ Provides data subject rights:
 - Consent management
 """
 
+import asyncio
+import logging
 from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import json
+
+logger = logging.getLogger(__name__)
 
 from database import get_db
 from models import (
@@ -331,8 +335,20 @@ def request_account_deletion(
         "scheduled_for": scheduled_date.isoformat()
     })
 
-    # TODO: Send confirmation email
-    # background_tasks.add_task(send_deletion_confirmation_email, user.id)
+    # Send deletion confirmation email
+    async def send_deletion_email():
+        try:
+            from services.email_service import EmailService
+            email_service = EmailService(db)
+            await email_service.send_deletion_confirmation(
+                user_id=user.id,
+                scheduled_date=scheduled_date,
+            )
+            logger.info(f"Deletion confirmation email sent to user {user.id}")
+        except Exception as e:
+            logger.error(f"Failed to send deletion confirmation email to user {user.id}: {e}")
+
+    background_tasks.add_task(asyncio.create_task, send_deletion_email())
 
     return DeleteResponse(
         status="scheduled",

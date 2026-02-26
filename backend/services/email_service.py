@@ -682,3 +682,256 @@ class EmailService:
             user_id=user_id,
             email_type="trial_expiring",
         )
+
+    async def send_team_invite(
+        self,
+        to_email: str,
+        team_name: str,
+        inviter_name: str,
+        invite_token: str,
+        role: str = "member",
+    ) -> Dict[str, Any]:
+        """Send team invitation email (admin portal)."""
+        invite_url = f"{APP_URL}/admin/teams/join?token={invite_token}"
+        role_display = role.replace("_", " ").title()
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0a0a0a;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #0a0a0a;">
+                <tr>
+                    <td align="center" style="padding: 40px 20px;">
+                        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #1a1a1a; border-radius: 16px; border: 1px solid #333;">
+                            <tr>
+                                <td style="padding: 32px 40px; text-align: center; border-bottom: 1px solid #333;">
+                                    <div style="font-size: 28px; font-weight: 700; color: #ffffff;">
+                                        ReadIn <span style="color: #d4af37;">AI</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 40px;">
+                                    <h1 style="margin: 0 0 20px; color: #ffffff; font-size: 24px;">You're Invited to Join a Team</h1>
+                                    <p style="color: #a0a0a0; margin-bottom: 16px;">
+                                        <strong style="color: #d4af37;">{self._sanitize_string(inviter_name)}</strong> has invited you to join the
+                                        <strong style="color: #ffffff;">{self._sanitize_string(team_name)}</strong> team as a <strong style="color: #d4af37;">{role_display}</strong>.
+                                    </p>
+                                    <p style="color: #a0a0a0;">Click the button below to accept your invitation and join the team.</p>
+                                    <div style="text-align: center; margin: 30px 0;">
+                                        <a href="{invite_url}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #d4af37, #c5a028); color: #1a1a1a; text-decoration: none; border-radius: 8px; font-weight: 600;">
+                                            Accept Invitation
+                                        </a>
+                                    </div>
+                                    <p style="color: #666; font-size: 12px; margin-top: 24px;">
+                                        This invitation expires in 7 days. If you didn't expect this email, you can safely ignore it.
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 24px 40px; border-top: 1px solid #333; text-align: center;">
+                                    <p style="margin: 0; color: #666; font-size: 12px;">
+                                        Questions? Contact us at support@getreadin.ai
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+
+        return await self.send_email(
+            to_email=to_email,
+            subject=f"You're invited to join {team_name} on ReadIn AI",
+            html_content=html,
+            email_type="team_invite",
+        )
+
+    async def send_deletion_confirmation(
+        self,
+        user_id: int,
+        scheduled_date: datetime,
+    ) -> Dict[str, Any]:
+        """Send account deletion confirmation email."""
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return {"success": False, "error": "User not found"}
+
+        cancel_url = f"{APP_URL}/dashboard/settings"
+        user_name = self._sanitize_string(user.full_name) or "there"
+        date_str = scheduled_date.strftime("%B %d, %Y")
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0a0a0a;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #0a0a0a;">
+                <tr>
+                    <td align="center" style="padding: 40px 20px;">
+                        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #1a1a1a; border-radius: 16px; border: 1px solid #333;">
+                            <tr>
+                                <td style="padding: 32px 40px; text-align: center; border-bottom: 1px solid #333;">
+                                    <div style="font-size: 28px; font-weight: 700; color: #ffffff;">
+                                        ReadIn <span style="color: #d4af37;">AI</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 40px;">
+                                    <h1 style="margin: 0 0 20px; color: #ffffff; font-size: 24px;">Account Deletion Request Confirmed</h1>
+                                    <p style="color: #ffffff; margin-bottom: 16px;">Hi {user_name},</p>
+                                    <p style="color: #a0a0a0;">
+                                        We've received your request to delete your ReadIn AI account. Your account and all associated data will be permanently deleted on <strong style="color: #e74c3c;">{date_str}</strong>.
+                                    </p>
+                                    <p style="color: #a0a0a0; margin-top: 16px;"><strong style="color: #ffffff;">What will be deleted:</strong></p>
+                                    <ul style="color: #a0a0a0; padding-left: 20px;">
+                                        <li>Your profile and settings</li>
+                                        <li>Meeting history and transcriptions</li>
+                                        <li>Conversation data and AI responses</li>
+                                        <li>Learning profile and preferences</li>
+                                        <li>All associated analytics data</li>
+                                    </ul>
+                                    <p style="color: #a0a0a0; margin-top: 20px;">
+                                        <strong style="color: #d4af37;">Changed your mind?</strong> You can cancel this request by logging in to your account before the deletion date.
+                                    </p>
+                                    <div style="text-align: center; margin: 30px 0;">
+                                        <a href="{cancel_url}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #d4af37, #c5a028); color: #1a1a1a; text-decoration: none; border-radius: 8px; font-weight: 600;">
+                                            Cancel Deletion Request
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 24px 40px; border-top: 1px solid #333; text-align: center;">
+                                    <p style="margin: 0; color: #666; font-size: 12px;">
+                                        If you didn't request this, please contact us immediately at support@getreadin.ai
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+
+        return await self.send_email(
+            to_email=user.email,
+            subject="ReadIn AI Account Deletion Request Confirmed",
+            html_content=html,
+            user_id=user_id,
+            email_type="deletion_confirmation",
+        )
+
+    async def send_meeting_summary_email(
+        self,
+        user_id: int,
+        summary_id: int,
+    ) -> Dict[str, Any]:
+        """Send meeting summary email to user."""
+        from models import MeetingSummary, Meeting
+
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return {"success": False, "error": "User not found"}
+
+        summary = self.db.query(MeetingSummary).filter(MeetingSummary.id == summary_id).first()
+        if not summary:
+            return {"success": False, "error": "Summary not found"}
+
+        meeting = self.db.query(Meeting).filter(Meeting.id == summary.meeting_id).first()
+        meeting_title = self._sanitize_string(meeting.title) if meeting and meeting.title else "Your Meeting"
+        user_name = self._sanitize_string(user.full_name) or "there"
+        dashboard_url = f"{APP_URL}/dashboard/meetings/{summary.meeting_id}"
+
+        # Format key points
+        key_points_html = ""
+        if summary.key_points:
+            for point in summary.key_points[:5]:
+                key_points_html += f'<li style="color: #a0a0a0; margin-bottom: 8px;">{self._sanitize_string(point)}</li>'
+
+        # Format action items if available
+        action_items_html = ""
+        if summary.action_items:
+            action_items_html = '<p style="color: #d4af37; margin-top: 24px;"><strong>Action Items:</strong></p><ul style="padding-left: 20px;">'
+            for item in summary.action_items[:5]:
+                action_items_html += f'<li style="color: #a0a0a0; margin-bottom: 8px;">{self._sanitize_string(item)}</li>'
+            action_items_html += '</ul>'
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0a0a0a;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #0a0a0a;">
+                <tr>
+                    <td align="center" style="padding: 40px 20px;">
+                        <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #1a1a1a; border-radius: 16px; border: 1px solid #333;">
+                            <tr>
+                                <td style="padding: 32px 40px; text-align: center; border-bottom: 1px solid #333;">
+                                    <div style="font-size: 28px; font-weight: 700; color: #ffffff;">
+                                        ReadIn <span style="color: #d4af37;">AI</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 40px;">
+                                    <h1 style="margin: 0 0 20px; color: #ffffff; font-size: 24px;">Meeting Summary: {meeting_title}</h1>
+                                    <p style="color: #ffffff; margin-bottom: 16px;">Hi {user_name},</p>
+                                    <p style="color: #a0a0a0;">Here's your AI-generated summary from your recent meeting.</p>
+
+                                    <div style="background-color: #252525; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                                        <p style="color: #a0a0a0; margin: 0;">{self._sanitize_string(summary.summary_text)}</p>
+                                    </div>
+
+                                    <p style="color: #d4af37; margin-top: 24px;"><strong>Key Points:</strong></p>
+                                    <ul style="padding-left: 20px;">
+                                        {key_points_html}
+                                    </ul>
+
+                                    {action_items_html}
+
+                                    <div style="text-align: center; margin: 30px 0;">
+                                        <a href="{dashboard_url}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #d4af37, #c5a028); color: #1a1a1a; text-decoration: none; border-radius: 8px; font-weight: 600;">
+                                            View Full Summary
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 24px 40px; border-top: 1px solid #333; text-align: center;">
+                                    <p style="margin: 0; color: #666; font-size: 12px;">
+                                        You received this because email summaries are enabled in your settings.
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+
+        return await self.send_email(
+            to_email=user.email,
+            subject=f"Meeting Summary: {meeting_title}",
+            html_content=html,
+            user_id=user_id,
+            email_type="meeting_summary",
+        )

@@ -2052,11 +2052,57 @@ class ChatQARecord(Base):
 # =============================================================================
 
 class StaffRole:
-    """Staff role constants."""
+    """
+    Staff role constants for GetReadIn internal team.
+
+    IMPORTANT: There are 3 different dashboard/user types:
+
+    1. GETREADIN STAFF (Internal Company Team):
+       - Super Admin: Only derick@getreadin.ai and derick@getreadin.us
+       - Admin: Can manage all staff except other admins
+       - Manager: Team leads for Billing, Tech Support, Sales
+       - Agent: Support staff members
+
+    2. ORGANIZATION TEAMS (Subscription Customers):
+       - Team owners who pay for multiple seats
+       - Their own admin/member hierarchy
+       - Completely separate from GetReadIn staff
+
+    3. INDIVIDUAL USERS:
+       - Regular subscribers with no team
+       - Personal dashboard only
+
+    Role Hierarchy (highest to lowest):
+    SUPER_ADMIN > ADMIN > MANAGER > AGENT
+    """
     SUPER_ADMIN = "super_admin"  # Only owner - can add/remove admins
     ADMIN = "admin"  # Same as super admin except cannot manage other admins
-    MANAGER = "manager"  # Team manager
+    MANAGER = "manager"  # Team manager (Billing, Tech Support, Sales leads)
     AGENT = "agent"  # Support agent
+
+    # Protected super admin accounts - these can NEVER be demoted
+    PROTECTED_SUPER_ADMINS = [
+        "derick@getreadin.ai",
+        "derick@getreadin.us",
+    ]
+
+    @classmethod
+    def is_protected_super_admin(cls, email: str) -> bool:
+        """Check if email belongs to a protected super admin account."""
+        if not email:
+            return False
+        return email.lower() in [e.lower() for e in cls.PROTECTED_SUPER_ADMINS]
+
+    @classmethod
+    def get_role_priority(cls, role: str) -> int:
+        """Get role priority for comparison (higher = more privileged)."""
+        priority = {
+            cls.SUPER_ADMIN: 100,
+            cls.ADMIN: 75,
+            cls.MANAGER: 50,
+            cls.AGENT: 25,
+        }
+        return priority.get(role, 0)
 
 
 class TicketCategory:

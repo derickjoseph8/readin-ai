@@ -7,6 +7,49 @@ import { Sparkles, Zap, Bug, Shield, ArrowUpCircle } from 'lucide-react'
 
 const releases = [
   {
+    version: '1.4.9',
+    date: 'February 25, 2026',
+    type: 'minor',
+    title: 'Comprehensive SEO & Email Notifications',
+    description: 'Enhanced email notifications, analytics calculations, ML features, and comprehensive SEO improvements.',
+    changes: [
+      { type: 'feature', text: 'Organization invite emails with branded templates' },
+      { type: 'feature', text: 'Account retention warning emails for inactive users' },
+      { type: 'feature', text: 'Trial expiration reminder emails' },
+      { type: 'feature', text: 'ML-powered topic extraction for conversations' },
+      { type: 'feature', text: 'AI-powered interview analysis and coaching' },
+      { type: 'improvement', text: 'Productivity trend calculations in analytics dashboard' },
+      { type: 'improvement', text: 'Topic frequency trends over time' },
+      { type: 'improvement', text: 'Action item completion trend tracking' },
+      { type: 'improvement', text: 'AI usage breakdown by model statistics' },
+      { type: 'improvement', text: 'Comprehensive SEO improvements for web pages' },
+      { type: 'fix', text: 'Fixed trial duration inconsistencies (now consistently 7 days)' },
+      { type: 'fix', text: 'Fixed Linux download file extension (.AppImage)' },
+      { type: 'fix', text: 'Updated FAQ version references' },
+    ]
+  },
+  {
+    version: '1.4.7',
+    date: 'February 23, 2026',
+    type: 'minor',
+    title: 'Update Notification Enhancement',
+    description: 'Improved update notifications with direct download capability.',
+    changes: [
+      { type: 'feature', text: 'Download button added to update notification dialog' },
+      { type: 'improvement', text: 'Update checker now uses /api/v1/version endpoint' },
+    ]
+  },
+  {
+    version: '1.4.6',
+    date: 'February 22, 2026',
+    type: 'minor',
+    title: 'Desktop App Icon Fix',
+    description: 'Fixed desktop application icon display issues.',
+    changes: [
+      { type: 'fix', text: 'Fixed desktop app icon not displaying correctly' },
+    ]
+  },
+  {
     version: '1.4.0',
     date: 'February 19, 2026',
     type: 'major',
@@ -76,7 +119,7 @@ const releases = [
       { type: 'feature', text: 'Floating overlay interface' },
       { type: 'feature', text: 'Support for 30+ video conferencing apps' },
       { type: 'feature', text: 'Desktop audio capture' },
-      { type: 'feature', text: '14-day free trial with 10 responses/day' },
+      { type: 'feature', text: '7-day free trial with 10 responses/day' },
       { type: 'feature', text: 'Stripe payment integration' },
     ]
   },
