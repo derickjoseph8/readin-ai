@@ -841,7 +841,7 @@ class EmailService:
         summary_id: int,
     ) -> Dict[str, Any]:
         """Send meeting summary email to user."""
-        from models import MeetingSummary, Meeting
+        from models import MeetingSummary, Meeting, ActionItem
 
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -862,12 +862,15 @@ class EmailService:
             for point in summary.key_points[:5]:
                 key_points_html += f'<li style="color: #a0a0a0; margin-bottom: 8px;">{self._sanitize_string(point)}</li>'
 
-        # Format action items if available
+        # Format action items from ActionItem table
         action_items_html = ""
-        if summary.action_items:
+        action_items = self.db.query(ActionItem).filter(ActionItem.meeting_id == summary.meeting_id).all()
+        if action_items:
             action_items_html = '<p style="color: #d4af37; margin-top: 24px;"><strong>Action Items:</strong></p><ul style="padding-left: 20px;">'
-            for item in summary.action_items[:5]:
-                action_items_html += f'<li style="color: #a0a0a0; margin-bottom: 8px;">{self._sanitize_string(item)}</li>'
+            for item in action_items[:5]:
+                assignee = self._sanitize_string(item.assignee) or "Unassigned"
+                description = self._sanitize_string(item.description)
+                action_items_html += f'<li style="color: #a0a0a0; margin-bottom: 8px;"><strong>{assignee}:</strong> {description}</li>'
             action_items_html += '</ul>'
 
         html = f"""

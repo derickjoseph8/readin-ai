@@ -43,7 +43,7 @@ class SummaryGenerator:
         conversations = (
             self.db.query(Conversation)
             .filter(Conversation.meeting_id == meeting_id)
-            .order_by(Conversation.created_at)
+            .order_by(Conversation.timestamp)
             .all()
         )
 
@@ -69,15 +69,18 @@ class SummaryGenerator:
             existing.summary_text = summary_data["summary"]
             existing.key_points = summary_data["key_points"]
             existing.sentiment = summary_data.get("sentiment", "neutral")
-            existing.generated_at = datetime.utcnow()
+            existing.topics_discussed = summary_data.get("topics_discussed", [])
+            existing.decisions_made = summary_data.get("decisions_made", [])
             summary = existing
         else:
             summary = MeetingSummary(
                 meeting_id=meeting_id,
+                user_id=meeting.user_id,
                 summary_text=summary_data["summary"],
                 key_points=summary_data["key_points"],
                 sentiment=summary_data.get("sentiment", "neutral"),
-                generated_at=datetime.utcnow(),
+                topics_discussed=summary_data.get("topics_discussed", []),
+                decisions_made=summary_data.get("decisions_made", []),
             )
             self.db.add(summary)
 
@@ -98,11 +101,11 @@ class SummaryGenerator:
         """Build transcript from conversations."""
         lines = []
         for conv in conversations:
-            timestamp = conv.created_at.strftime("%H:%M") if conv.created_at else ""
+            time_str = conv.timestamp.strftime("%H:%M") if conv.timestamp else ""
             speaker = conv.speaker or "Unknown"
-            lines.append(f"[{timestamp}] {speaker}: {conv.heard_text}")
+            lines.append(f"[{time_str}] {speaker}: {conv.heard_text}")
             if conv.response_text:
-                lines.append(f"[{timestamp}] AI Response: {conv.response_text}")
+                lines.append(f"[{time_str}] AI Response: {conv.response_text}")
         return "\n".join(lines)
 
     async def _generate_with_claude(
