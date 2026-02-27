@@ -9,6 +9,7 @@ Provides API endpoints for:
 - Invoice history
 """
 
+import os
 import stripe
 from datetime import datetime
 from typing import Optional, List
