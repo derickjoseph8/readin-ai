@@ -52,6 +52,17 @@ def send_email(
         raise self.retry(exc=e, countdown=60 * (self.request.retries + 1))
 
 
+def run_async(coro):
+    """Helper to run async functions in sync context."""
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(coro)
+
+
 @celery_app.task(bind=True, max_retries=2)
 def send_summary_email(
     self,
@@ -65,38 +76,32 @@ def send_summary_email(
     try:
         from database import SessionLocal
         from models import User, Meeting, MeetingSummary
-        from services.email_service import email_service
+        from services.email_service import EmailService
 
         db = SessionLocal()
 
         try:
             user = db.query(User).filter(User.id == user_id).first()
-            meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
             summary = db.query(MeetingSummary).filter(MeetingSummary.id == summary_id).first()
 
-            if not all([user, meeting, summary]):
+            if not user or not summary:
                 return {"success": False, "error": "Data not found"}
 
             if not user.email:
                 return {"success": False, "error": "User has no email"}
 
-            # Send email
-            success = email_service.send_meeting_summary(
-                to_email=user.email,
-                user_name=user.full_name or user.email,
-                meeting_title=meeting.title or "Your Meeting",
-                summary_text=summary.summary_text,
-                key_points=summary.key_points or [],
-                action_items=[],
-                meeting_date=meeting.started_at,
-                duration_minutes=(meeting.duration_seconds or 0) // 60
-            )
+            # Use the simpler send_meeting_summary_email which handles everything
+            email_service = EmailService(db)
+            result = run_async(email_service.send_meeting_summary_email(
+                user_id=user_id,
+                summary_id=summary_id
+            ))
 
-            if success:
+            if result.get("success"):
                 logger.info(f"Summary email sent for meeting {meeting_id} to {user.email}")
                 return {"success": True, "meeting_id": meeting_id}
             else:
-                return {"success": False, "error": "Send failed"}
+                return {"success": False, "error": result.get("error", "Send failed")}
 
         finally:
             db.close()

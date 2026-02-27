@@ -4,6 +4,22 @@
 version: '3.8'
 
 services:
+  # Redis - Required for Celery task queue and caching
+  redis:
+    image: redis:7-alpine
+    container_name: readin-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # PostgreSQL Database
   db:
     image: postgres:15-alpine
@@ -31,14 +47,21 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://readin:${DB_PASSWORD}@db:5432/readin_ai
+      REDIS_URL: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET}
       JWT_ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_DAYS: 30
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
       STRIPE_PRICE_MONTHLY: ${STRIPE_PRICE_MONTHLY}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY}
+      PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
       TRIAL_DAYS: 7
       TRIAL_DAILY_LIMIT: 10
       APP_NAME: ReadIn AI
@@ -55,6 +78,45 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  # Celery Worker - Background task processing (summaries, emails)
+  celery-worker:
+    build: .
+    container_name: readin-celery-worker
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://readin:${DB_PASSWORD}@db:5432/readin_ai
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      APP_NAME: ReadIn AI
+    command: celery -A workers.celery_app worker --loglevel=info --concurrency=2
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  # Celery Beat - Scheduled tasks (optional)
+  celery-beat:
+    build: .
+    container_name: readin-celery-beat
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - celery-worker
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+    command: celery -A workers.celery_app beat --loglevel=info
+    profiles:
+      - production
 
   # Nginx Reverse Proxy (optional, for production)
   nginx:
@@ -74,3 +136,4 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
