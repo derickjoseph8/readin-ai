@@ -629,3 +629,87 @@ def get_enterprise_pricing_quote(
     quote = get_enterprise_quote(region, seats, is_annual)
 
     return quote
+
+
+# =============================================================================
+# PAYSTACK TEST TRANSACTION ($1 for testing)
+# =============================================================================
+
+from config import PAYSTACK_SECRET_KEY, PAYSTACK_PUBLIC_KEY
+
+# Allowed test emails
+TEST_UPGRADE_EMAILS = ["mzalendo47@gmail.com"]
+
+
+class TestUpgradeRequest(BaseModel):
+    success_url: Optional[str] = None
+    cancel_url: Optional[str] = None
+
+
+@router.post("/paystack/test-upgrade")
+async def create_test_upgrade(
+    request: TestUpgradeRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Create a $1 test transaction for Paystack testing.
+    Only allowed for specific test emails.
+    """
+    if user.email.lower() not in [e.lower() for e in TEST_UPGRADE_EMAILS]:
+        raise HTTPException(
+            status_code=403,
+            detail="Test upgrade only available for authorized test accounts"
+        )
+
+    if not PAYSTACK_SECRET_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Paystack not configured"
+        )
+
+    import httpx
+
+    # Create $1 test transaction (100 kobo = $1)
+    success_url = request.success_url or f"{APP_URL}/dashboard/settings/billing?success=true"
+    cancel_url = request.cancel_url or f"{APP_URL}/dashboard/settings/billing?cancelled=true"
+
+    payload = {
+        "email": user.email,
+        "amount": 100,  # $1 in cents/kobo
+        "currency": "USD",
+        "callback_url": success_url,
+        "metadata": {
+            "user_id": str(user.id),
+            "test_transaction": True,
+            "plan": "premium_test",
+            "cancel_url": cancel_url,
+        },
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://api.paystack.co/transaction/initialize",
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}",
+                "Content-Type": "application/json",
+            },
+        )
+
+        result = response.json()
+
+        if not result.get("status"):
+            raise HTTPException(
+                status_code=400,
+                detail=result.get("message", "Failed to create test transaction")
+            )
+
+        data = result.get("data", {})
+
+        return {
+            "authorization_url": data.get("authorization_url"),
+            "access_code": data.get("access_code"),
+            "reference": data.get("reference"),
+            "amount": "$1.00 (test)",
+        }

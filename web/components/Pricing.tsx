@@ -53,7 +53,7 @@ const corporatePlans = [
     annualPrice: '$249.90',
     period: '/user/month',
     annualPeriod: '/user/year',
-    users: '2-9 users',
+    users: '3-9 users',
     minSeats: '2 seats minimum',
     description: 'Perfect for small teams',
     annualSavings: '2 months free',

@@ -62,7 +62,7 @@ PRICING = {
     Region.GLOBAL: {
         PlanType.FREE: PlanPricing(monthly=0, annual=0, min_seats=1, max_seats=1),
         PlanType.INDIVIDUAL: PlanPricing(monthly=19.99, annual=199.90, min_seats=1, max_seats=1),
-        PlanType.STARTER: PlanPricing(monthly=14.99, annual=149.90, min_seats=2, max_seats=9),
+        PlanType.STARTER: PlanPricing(monthly=14.99, annual=149.90, min_seats=3, max_seats=9),
         PlanType.TEAM: PlanPricing(monthly=12.99, annual=129.90, min_seats=10, max_seats=50),
         # Enterprise pricing - HIDDEN FROM UI but hardcoded for sales
         PlanType.ENTERPRISE: PlanPricing(monthly=9.99, annual=99.90, min_seats=50, max_seats=None),
@@ -70,7 +70,7 @@ PRICING = {
     Region.WESTERN: {
         PlanType.FREE: PlanPricing(monthly=0, annual=0, min_seats=1, max_seats=1),
         PlanType.INDIVIDUAL: PlanPricing(monthly=29.99, annual=299.90, min_seats=1, max_seats=1),
-        PlanType.STARTER: PlanPricing(monthly=24.99, annual=249.90, min_seats=2, max_seats=9),
+        PlanType.STARTER: PlanPricing(monthly=24.99, annual=249.90, min_seats=3, max_seats=9),
         PlanType.TEAM: PlanPricing(monthly=19.99, annual=199.90, min_seats=10, max_seats=50),
         # Enterprise pricing - HIDDEN FROM UI but hardcoded for sales
         PlanType.ENTERPRISE: PlanPricing(monthly=14.99, annual=149.90, min_seats=50, max_seats=None),
