@@ -392,13 +392,17 @@ def delete_payment_method(
 # WEBHOOK ENDPOINT
 # =============================================================================
 
+from middleware.rate_limiter import limiter
+
+
 @router.post("/webhook")
+@limiter.exempt
 async def stripe_webhook(
     request: Request,
     stripe_signature: str = Header(None, alias="Stripe-Signature"),
     db: Session = Depends(get_db),
 ):
-    """Handle Stripe webhook events."""
+    """Handle Stripe webhook events. Exempt from rate limiting - uses signature verification."""
     if not STRIPE_WEBHOOK_SECRET:
         raise HTTPException(status_code=503, detail="Webhook not configured")
 
@@ -464,12 +468,13 @@ from paystack_handler import verify_webhook_signature, handle_webhook_event
 
 
 @router.post("/paystack/webhook")
+@limiter.exempt
 async def paystack_webhook(
     request: Request,
     x_paystack_signature: str = Header(None, alias="X-Paystack-Signature"),
     db: Session = Depends(get_db),
 ):
-    """Handle Paystack webhook events."""
+    """Handle Paystack webhook events. Exempt from rate limiting - uses signature verification."""
     payload = await request.body()
 
     # Verify signature if webhook secret is configured

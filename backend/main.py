@@ -483,6 +483,28 @@ async def logout(
     return {"message": "Successfully logged out"}
 
 
+@app.post("/api/v1/auth/refresh", response_model=Token)
+async def refresh_token(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Refresh the access token.
+
+    Use this endpoint to get a new access token before the current one expires.
+    The old token remains valid until its original expiration time.
+
+    Requires a valid (non-expired, non-blacklisted) access token.
+    """
+    # Create a new token for the user
+    new_token = create_access_token(data={"sub": str(user.id)})
+
+    logger.info(f"Token refreshed for user {user.id}")
+
+    return {"access_token": new_token, "token_type": "bearer"}
+
+
 from pydantic import BaseModel as PydanticBaseModel
 
 

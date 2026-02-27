@@ -5,7 +5,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 from typing import Callable
 
-from config import IS_PRODUCTION, APP_URL
+from config import IS_PRODUCTION, APP_URL, API_VERSION
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -54,6 +54,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers["Strict-Transport-Security"] = (
                 "max-age=31536000; includeSubDomains; preload"
             )
+
+        # API Version header for client compatibility checks
+        response.headers["X-API-Version"] = API_VERSION
 
         # Content Security Policy
         # Note: 'unsafe-inline' removed from script-src for better XSS protection

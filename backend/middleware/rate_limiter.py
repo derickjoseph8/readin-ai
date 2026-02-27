@@ -149,5 +149,15 @@ def rate_limit_premium(default: str = "100/minute", premium: str = "1000/minute"
     return limiter.limit(dynamic_limit)
 
 
+def rate_limit_exempt():
+    """
+    Exempt endpoint from rate limiting.
+
+    Use for trusted endpoints like webhooks from payment providers
+    that have their own signature verification.
+    """
+    return limiter.exempt
+
+
 # Export the exception handler
 rate_limit_exceeded_handler = _rate_limit_exceeded_handler
