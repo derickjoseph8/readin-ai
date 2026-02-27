@@ -5,9 +5,12 @@ Regional pricing with automatic geo-detection.
 Enterprise pricing is hardcoded but hidden from public UI.
 """
 
+import os
+import json
 from enum import Enum
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 
 class Region(str, Enum):
@@ -21,6 +24,38 @@ class PlanType(str, Enum):
     STARTER = "starter"
     TEAM = "team"
     ENTERPRISE = "enterprise"
+
+
+# =============================================================================
+# TEST PRICING OVERRIDES (for testing payment flows)
+# =============================================================================
+
+# Load test pricing emails from environment variable (JSON format)
+# Example: TEST_PRICING_EMAILS='{"email@example.com": {"individual_monthly": 0.99, "individual_annual": 9.90}}'
+TEST_PRICING_EMAILS: Dict[str, Dict[str, float]] = {}
+_test_pricing_env = os.getenv("TEST_PRICING_EMAILS", "")
+if _test_pricing_env:
+    try:
+        TEST_PRICING_EMAILS = json.loads(_test_pricing_env)
+    except json.JSONDecodeError:
+        pass  # Invalid JSON, use empty dict
+
+
+def get_test_pricing(email: str) -> Optional[Dict[str, float]]:
+    """Get test pricing override for specific email."""
+    return TEST_PRICING_EMAILS.get(email.lower())
+
+
+# =============================================================================
+# BILLING RULES
+# =============================================================================
+
+# Plans that have NO trial period - billed instantly
+NO_TRIAL_PLANS = {PlanType.STARTER, PlanType.TEAM, PlanType.ENTERPRISE}
+
+# Plans that get a trial period
+TRIAL_PLANS = {PlanType.INDIVIDUAL}
+TRIAL_DAYS = 7
 
 
 # Countries in global pricing region
@@ -244,3 +279,160 @@ def get_paystack_plan_code(region: Region, plan: PlanType, is_annual: bool) -> s
     """Get Paystack plan code for subscription."""
     interval = "annual" if is_annual else "monthly"
     return PAYSTACK_PLANS[region][plan][interval]
+
+
+# =============================================================================
+# BILLING CYCLE & PRORATION
+# =============================================================================
+
+def has_trial_period(plan: PlanType) -> bool:
+    """Check if plan type has a trial period."""
+    return plan in TRIAL_PLANS
+
+
+def get_billing_start_date(plan: PlanType) -> datetime:
+    """
+    Get billing start date based on plan type.
+
+    - Team/Starter/Enterprise: Billed instantly, today is billing cycle start
+    - Individual: After trial period ends
+    """
+    now = datetime.utcnow()
+
+    if plan in NO_TRIAL_PLANS:
+        # No trial - billing starts immediately
+        return now
+    else:
+        # Individual gets trial period
+        return now + timedelta(days=TRIAL_DAYS)
+
+
+def calculate_proration(
+    region: Region,
+    plan: PlanType,
+    current_seats: int,
+    new_seats: int,
+    days_remaining_in_cycle: int,
+    total_days_in_cycle: int = 30,
+    is_annual: bool = False,
+) -> Dict[str, Any]:
+    """
+    Calculate prorated amount when adding seats mid-cycle.
+
+    Args:
+        region: Pricing region
+        plan: Plan type
+        current_seats: Current number of seats
+        new_seats: New total seats (must be > current_seats)
+        days_remaining_in_cycle: Days left until next billing date
+        total_days_in_cycle: Total days in billing cycle (30 for monthly, 365 for annual)
+        is_annual: Whether annual billing
+
+    Returns:
+        Dict with proration details
+    """
+    if new_seats <= current_seats:
+        return {
+            "prorated_amount": 0,
+            "additional_seats": 0,
+            "message": "No additional seats to prorate",
+        }
+
+    pricing = get_pricing(region, plan)
+    additional_seats = new_seats - current_seats
+
+    # Get price per seat per cycle
+    if is_annual:
+        price_per_seat = pricing.annual
+        total_days_in_cycle = 365
+    else:
+        price_per_seat = pricing.monthly
+        total_days_in_cycle = 30
+
+    # Calculate daily rate per seat
+    daily_rate = price_per_seat / total_days_in_cycle
+
+    # Prorated amount for additional seats
+    prorated_amount = daily_rate * additional_seats * days_remaining_in_cycle
+
+    return {
+        "additional_seats": additional_seats,
+        "days_remaining": days_remaining_in_cycle,
+        "daily_rate_per_seat": round(daily_rate, 4),
+        "prorated_amount": round(prorated_amount, 2),
+        "next_cycle_amount": round(price_per_seat * new_seats, 2),
+        "message": f"Prorated charge for {additional_seats} additional seat(s) for {days_remaining_in_cycle} days",
+    }
+
+
+def enforce_minimum_seats(plan: PlanType, requested_seats: int, region: Region) -> int:
+    """
+    Enforce minimum seats for billing.
+
+    Returns the billable seat count (at least the plan minimum).
+    """
+    pricing = get_pricing(region, plan)
+    return max(requested_seats, pricing.min_seats)
+
+
+def calculate_billing_with_enforcement(
+    region: Region,
+    seats: int,
+    is_annual: bool = False,
+    plan_override: Optional[PlanType] = None,
+    user_email: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Calculate billing with minimum seat enforcement and test pricing.
+
+    Args:
+        region: Pricing region
+        seats: Requested number of seats
+        is_annual: Whether annual billing
+        plan_override: Override auto-detected plan
+        user_email: User email for test pricing override
+
+    Returns:
+        Dict with billing details including enforced minimums
+    """
+    plan = plan_override or get_plan_for_seats(seats)
+    pricing = get_pricing(region, plan)
+
+    # Enforce minimum seats for billing
+    billable_seats = enforce_minimum_seats(plan, seats, region)
+
+    # Check for test pricing override
+    test_pricing = get_test_pricing(user_email) if user_email else None
+
+    if test_pricing and plan == PlanType.INDIVIDUAL:
+        # Use test pricing for individual plan
+        price_per_user = test_pricing.get("individual_annual" if is_annual else "individual_monthly", pricing.monthly)
+        total_monthly = price_per_user
+        total_annual = test_pricing.get("individual_annual", pricing.annual)
+        is_test_pricing = True
+    else:
+        price_per_user = pricing.annual_monthly if is_annual else pricing.monthly
+        is_test_pricing = False
+
+        if plan == PlanType.INDIVIDUAL:
+            total_monthly = pricing.monthly
+            total_annual = pricing.annual
+        else:
+            total_monthly = price_per_user * billable_seats
+            total_annual = pricing.annual * billable_seats if is_annual else total_monthly * 10
+
+    return {
+        "plan": plan.value,
+        "region": region.value,
+        "requested_seats": seats,
+        "billable_seats": billable_seats,
+        "minimum_seats": pricing.min_seats,
+        "price_per_user": round(price_per_user, 2),
+        "total_monthly": round(total_monthly, 2),
+        "total_annual": round(total_annual, 2),
+        "is_annual": is_annual,
+        "is_enterprise": plan == PlanType.ENTERPRISE,
+        "has_trial": has_trial_period(plan),
+        "billing_starts": get_billing_start_date(plan).isoformat(),
+        "is_test_pricing": is_test_pricing,
+    }

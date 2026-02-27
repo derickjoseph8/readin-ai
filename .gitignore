@@ -1,5 +1,10 @@
-# Environment
+# Environment (all .env files in any directory)
 .env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
 venv/
 .venv/
 env/
@@ -47,8 +52,12 @@ nul
 # Production env files
 .env.production
 
-# Database files
+# Database files (SQLite)
 *.db
+*.db-journal
+*.sqlite
+*.sqlite3
+**/readin_ai.db
 release-artifacts/
 release-files/
 release-v140/

@@ -632,13 +632,137 @@ def get_enterprise_pricing_quote(
 
 
 # =============================================================================
-# PAYSTACK TEST TRANSACTION ($1 for testing)
+# PAYSTACK CHECKOUT ENDPOINT
 # =============================================================================
 
 from config import PAYSTACK_SECRET_KEY, PAYSTACK_PUBLIC_KEY
+from paystack_handler import initialize_transaction
+from pricing_config import get_test_pricing, NO_TRIAL_PLANS
 
-# Allowed test emails
-TEST_UPGRADE_EMAILS = ["mzalendo47@gmail.com"]
+
+class PaystackCheckoutRequest(BaseModel):
+    plan: Optional[str] = "individual"  # individual, starter, team
+    seats: int = 1
+    is_annual: bool = False
+    success_url: Optional[str] = None
+    cancel_url: Optional[str] = None
+
+
+@router.post("/paystack/checkout")
+async def create_paystack_checkout(
+    request: PaystackCheckoutRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    x_country_code: Optional[str] = Header(None, alias="X-Country-Code"),
+):
+    """
+    Create a Paystack checkout session for subscription.
+
+    - Uses geo-detected or provided country code for regional pricing
+    - Enforces minimum seats for team plans
+    - Applies test pricing for authorized test emails
+    """
+    if not PAYSTACK_SECRET_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Payment system not configured"
+        )
+
+    # Determine region from country code
+    country_code = x_country_code or user.country_code or "US"
+    region = get_region_from_country(country_code)
+
+    # Map plan string to PlanType
+    plan_map = {
+        "individual": PlanType.INDIVIDUAL,
+        "premium": PlanType.INDIVIDUAL,
+        "starter": PlanType.STARTER,
+        "team": PlanType.TEAM,
+        "enterprise": PlanType.ENTERPRISE,
+    }
+    plan = plan_map.get(request.plan.lower(), PlanType.INDIVIDUAL)
+
+    # Check for test pricing (for mzalendo47@gmail.com)
+    test_pricing = get_test_pricing(user.email)
+    if test_pricing and plan == PlanType.INDIVIDUAL:
+        # Use test pricing - $0.99 for testing
+        import httpx
+
+        amount = int(test_pricing.get("individual_monthly", 0.99) * 100)
+        success_url = request.success_url or f"{APP_URL}/dashboard/settings/billing?success=true"
+
+        payload = {
+            "email": user.email,
+            "amount": amount,
+            "currency": "USD",
+            "callback_url": success_url,
+            "metadata": {
+                "user_id": str(user.id),
+                "plan": plan.value,
+                "region": region.value,
+                "seats": 1,
+                "is_annual": request.is_annual,
+                "is_test_pricing": True,
+            },
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.paystack.co/transaction/initialize",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}",
+                    "Content-Type": "application/json",
+                },
+            )
+
+            result = response.json()
+            if not result.get("status"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=result.get("message", "Failed to create checkout")
+                )
+
+            data = result.get("data", {})
+            return {
+                "authorization_url": data.get("authorization_url"),
+                "access_code": data.get("access_code"),
+                "reference": data.get("reference"),
+                "amount": amount / 100,
+                "is_test_pricing": True,
+            }
+
+    # Regular pricing flow
+    try:
+        result = await initialize_transaction(
+            user=user,
+            plan=plan,
+            region=region,
+            is_annual=request.is_annual,
+            seats=request.seats,
+            db=db,
+            success_url=request.success_url,
+            cancel_url=request.cancel_url,
+        )
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+
+# =============================================================================
+# PAYSTACK TEST TRANSACTION ($1 for testing)
+# =============================================================================
+
+# Load test upgrade emails from environment variable (comma-separated)
+# Example: TEST_UPGRADE_EMAILS=email1@example.com,email2@example.com
+TEST_UPGRADE_EMAILS = [
+    e.strip() for e in os.getenv("TEST_UPGRADE_EMAILS", "").split(",") if e.strip()
+]
 
 
 class TestUpgradeRequest(BaseModel):

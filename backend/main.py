@@ -78,6 +78,7 @@ from middleware.request_context import RequestContextMiddleware, get_request_id
 from middleware.error_handler import ErrorHandlerMiddleware, create_error_response, ErrorTypes
 from middleware.compression import GZipMiddleware
 from middleware.slow_query_logger import setup_slow_query_logging
+from middleware.csrf import CSRFMiddleware
 
 # Initialize Sentry for error tracking (production)
 if SENTRY_DSN:
@@ -134,7 +135,10 @@ app.add_middleware(SecurityHeadersMiddleware)
 # 4. GZip compression for responses > 500 bytes
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
-# 4. CORS - configured based on environment
+# 5. CSRF protection (API endpoints with JWT are exempt)
+app.add_middleware(CSRFMiddleware)
+
+# 6. CORS - configured based on environment
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOWED_ORIGINS if CORS_ALLOWED_ORIGINS else ["*"],
