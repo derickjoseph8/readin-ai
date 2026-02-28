@@ -2064,6 +2064,11 @@ class ChatQARecord(Base):
     # Tags
     tags = Column(JSON, default=list)  # ["escalated", "resolved_first_contact", "novah_handled"]
 
+    # AI Review Fields
+    is_ai_review = Column(Boolean, default=False)  # True if reviewed by AI
+    ai_analysis = Column(JSON, nullable=True)  # Detailed AI analysis results
+    ai_confidence = Column(Float, nullable=True)  # AI confidence score (0-1)
+
     # Timestamps
     reviewed_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)

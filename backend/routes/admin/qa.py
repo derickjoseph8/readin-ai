@@ -79,6 +79,10 @@ class QAReviewResponse(BaseModel):
     notes: Optional[str]
     tags: List[str]
     reviewed_at: datetime
+    # AI review fields
+    is_ai_review: bool = False
+    ai_confidence: Optional[float] = None
+    ai_analysis: Optional[dict] = None
 
 
 class QAMetrics(BaseModel):
@@ -338,7 +342,10 @@ async def submit_qa_review(
         professionalism_score=review.professionalism_score,
         notes=review.notes,
         tags=review.tags or [],
-        reviewed_at=review.reviewed_at
+        reviewed_at=review.reviewed_at,
+        is_ai_review=False,
+        ai_confidence=None,
+        ai_analysis=None
     )
 
 
@@ -361,14 +368,17 @@ async def get_qa_review(
         id=review.id,
         session_id=review.session_id,
         reviewer_id=review.reviewer_id,
-        reviewer_name=reviewer.full_name if reviewer else None,
+        reviewer_name=reviewer.full_name if reviewer else ("AI Analysis" if review.is_ai_review else None),
         overall_score=review.overall_score,
         response_time_score=review.response_time_score,
         resolution_score=review.resolution_score,
         professionalism_score=review.professionalism_score,
         notes=review.notes,
         tags=review.tags or [],
-        reviewed_at=review.reviewed_at
+        reviewed_at=review.reviewed_at,
+        is_ai_review=review.is_ai_review or False,
+        ai_confidence=review.ai_confidence,
+        ai_analysis=review.ai_analysis
     )
 
 
@@ -440,3 +450,223 @@ async def get_qa_metrics(
         ai_transferred_count=ai_transferred,
         agent_handled_count=agent_handled
     )
+
+
+# =============================================================================
+# AI-POWERED QA
+# =============================================================================
+
+class AIAnalysisRequest(BaseModel):
+    """Request for AI analysis."""
+    session_ids: Optional[List[int]] = None  # If None, analyze unreviewed sessions
+    limit: int = 10  # Max sessions for batch analysis
+
+
+class AIAnalysisResponse(BaseModel):
+    """Response from AI analysis."""
+    session_id: int
+    overall_score: int
+    response_time_score: Optional[int]
+    resolution_score: Optional[int]
+    professionalism_score: Optional[int]
+    confidence: float
+    summary: str
+    strengths: List[str]
+    weaknesses: List[str]
+    suggestions: List[str]
+    tags: List[str]
+
+
+class AgentRating(BaseModel):
+    """Agent rating summary."""
+    agent_id: int
+    agent_name: str
+    total_reviews: int
+    ai_reviews: int
+    human_reviews: int
+    avg_overall: float
+    avg_response_time: float
+    avg_resolution: float
+    avg_professionalism: float
+
+
+@router.post("/ai/analyze/{session_id}")
+async def ai_analyze_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Analyze a single chat session using AI.
+    Creates a QA review with AI-generated scores and analysis.
+    """
+    require_admin(current_user)
+
+    from services.ai_qa_service import AIQAService
+
+    ai_service = AIQAService(db)
+
+    if not ai_service.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="AI QA service not available. ANTHROPIC_API_KEY not configured."
+        )
+
+    # Check if session exists
+    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Check if already reviewed
+    existing = db.query(ChatQARecord).filter(ChatQARecord.session_id == session_id).first()
+    if existing:
+        if existing.is_ai_review:
+            # Return existing AI review
+            return {
+                "status": "already_analyzed",
+                "review_id": existing.id,
+                "overall_score": existing.overall_score,
+                "ai_analysis": existing.ai_analysis
+            }
+        raise HTTPException(
+            status_code=400,
+            detail="Session already has a human review"
+        )
+
+    # Analyze with AI
+    record = await ai_service.analyze_session(session_id, current_user.id)
+
+    if not record:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to analyze session"
+        )
+
+    return {
+        "status": "success",
+        "review_id": record.id,
+        "overall_score": record.overall_score,
+        "response_time_score": record.response_time_score,
+        "resolution_score": record.resolution_score,
+        "professionalism_score": record.professionalism_score,
+        "confidence": record.ai_confidence,
+        "summary": record.notes,
+        "ai_analysis": record.ai_analysis
+    }
+
+
+@router.post("/ai/analyze-batch")
+async def ai_analyze_batch(
+    request: AIAnalysisRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Analyze multiple unreviewed sessions using AI.
+    Great for processing backlog of unreviewed chats.
+    """
+    require_admin(current_user)
+
+    from services.ai_qa_service import AIQAService
+
+    ai_service = AIQAService(db)
+
+    if not ai_service.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="AI QA service not available. ANTHROPIC_API_KEY not configured."
+        )
+
+    if request.session_ids:
+        # Analyze specific sessions
+        results = {
+            "analyzed": 0,
+            "failed": 0,
+            "already_reviewed": 0,
+            "sessions": []
+        }
+
+        for session_id in request.session_ids[:request.limit]:
+            existing = db.query(ChatQARecord).filter(
+                ChatQARecord.session_id == session_id
+            ).first()
+            if existing:
+                results["already_reviewed"] += 1
+                continue
+
+            try:
+                record = await ai_service.analyze_session(session_id, current_user.id)
+                if record:
+                    results["analyzed"] += 1
+                    results["sessions"].append({
+                        "session_id": session_id,
+                        "score": record.overall_score
+                    })
+                else:
+                    results["failed"] += 1
+            except Exception as e:
+                results["failed"] += 1
+
+        return results
+    else:
+        # Analyze unreviewed sessions
+        return await ai_service.batch_analyze(
+            reviewer_id=current_user.id,
+            limit=request.limit
+        )
+
+
+@router.get("/ai/status")
+async def get_ai_qa_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Check AI QA service status and get statistics."""
+    require_admin(current_user)
+
+    from services.ai_qa_service import AIQAService
+
+    ai_service = AIQAService(db)
+
+    # Count reviews by type
+    total_reviews = db.query(func.count(ChatQARecord.id)).scalar() or 0
+    ai_reviews = db.query(func.count(ChatQARecord.id)).filter(
+        ChatQARecord.is_ai_review == True
+    ).scalar() or 0
+
+    # Count unreviewed sessions
+    reviewed_ids = db.query(ChatQARecord.session_id).subquery()
+    unreviewed_count = db.query(func.count(ChatSession.id)).filter(
+        ChatSession.status == "ended",
+        ~ChatSession.id.in_(reviewed_ids)
+    ).scalar() or 0
+
+    return {
+        "ai_available": ai_service.is_available(),
+        "total_reviews": total_reviews,
+        "ai_reviews": ai_reviews,
+        "human_reviews": total_reviews - ai_reviews,
+        "ai_review_percentage": round(ai_reviews / total_reviews * 100, 1) if total_reviews > 0 else 0,
+        "unreviewed_sessions": unreviewed_count
+    }
+
+
+@router.get("/agents/ratings", response_model=List[AgentRating])
+async def get_agent_ratings(
+    days: int = Query(30, ge=1, le=365),
+    agent_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get aggregated agent ratings from both AI and human reviews.
+    Includes breakdown of review types and all score categories.
+    """
+    require_admin(current_user)
+
+    from services.ai_qa_service import AIQAService
+
+    ai_service = AIQAService(db)
+    ratings = ai_service.get_agent_ratings(agent_id=agent_id, days=days)
+
+    return ratings
