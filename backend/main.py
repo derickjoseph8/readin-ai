@@ -464,6 +464,10 @@ def login(request: Request, credentials: UserLogin, db: Session = Depends(get_db
             "message": "Two-factor authentication required"
         }
 
+    # Update last login timestamp
+    user.last_login = datetime.utcnow()
+    db.commit()
+
     token = create_access_token(user.id)
 
     # Track session for security
@@ -600,6 +604,10 @@ def login_2fa(request: Request, data: TwoFactorLoginVerify, db: Session = Depend
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid verification code"
             )
+
+    # Update last login timestamp
+    user.last_login = datetime.utcnow()
+    db.commit()
 
     # Issue final access token
     token = create_access_token(user.id)
