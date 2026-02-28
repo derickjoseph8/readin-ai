@@ -258,7 +258,9 @@ async def get_dashboard_trends(
 async def list_users(
     search: Optional[str] = None,
     subscription_status: Optional[str] = None,
+    subscription_tier: Optional[str] = None,
     is_staff: Optional[bool] = None,
+    is_active: Optional[bool] = None,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -276,14 +278,35 @@ async def list_users(
         )
         query = query.filter(search_filter)
 
-    if subscription_status:
-        query = query.filter(User.subscription_status == subscription_status)
+    # Support both subscription_status and subscription_tier (frontend uses tier)
+    sub_filter = subscription_tier or subscription_status
+    if sub_filter:
+        query = query.filter(User.subscription_status == sub_filter)
 
     if is_staff is not None:
         query = query.filter(User.is_staff == is_staff)
 
+    if is_active is not None:
+        query = query.filter(User.email_verified == is_active)
+
     total = query.count()
     users = query.order_by(User.created_at.desc()).offset(offset).limit(limit).all()
+
+    def get_user_status(u):
+        """Determine user account status."""
+        if not u.email_verified:
+            return "pending"
+        if u.is_staff:
+            return "active"
+        if u.subscription_status == "active":
+            return "active"
+        if u.subscription_status == "trial":
+            if u.trial_end_date and u.trial_end_date > datetime.utcnow():
+                return "active"
+            return "expired"
+        if u.subscription_status == "cancelled":
+            return "inactive"
+        return "inactive"
 
     return {
         "users": [
@@ -292,10 +315,16 @@ async def list_users(
                 "email": u.email,
                 "full_name": u.full_name,
                 "subscription_status": u.subscription_status,
+                "subscription_tier": u.subscription_status,  # Alias for frontend
+                "subscription_ends_at": u.subscription_end_date,
                 "is_staff": u.is_staff,
                 "staff_role": u.staff_role,
+                "is_active": u.email_verified and (u.is_staff or u.subscription_status in ["active", "trial"]),
+                "status": get_user_status(u),
+                "email_verified": u.email_verified,
                 "created_at": u.created_at,
-                "last_login": u.last_login
+                "last_login": u.last_login,
+                "last_active": u.last_login  # Alias for frontend
             }
             for u in users
         ],
