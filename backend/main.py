@@ -47,7 +47,8 @@ from routes import (
     two_factor_router, webauthn_router,
     # Admin routes
     admin_dashboard_router, admin_teams_router, admin_tickets_router,
-    customer_tickets_router, admin_chat_router, customer_chat_router
+    customer_tickets_router, admin_chat_router, customer_chat_router,
+    admin_qa_router
 )
 from routes.contact import router as contact_router
 from routes.sessions import router as sessions_router
@@ -220,6 +221,7 @@ app.include_router(admin_dashboard_router, prefix=API_V1_PREFIX)
 app.include_router(admin_teams_router, prefix=API_V1_PREFIX)
 app.include_router(admin_tickets_router, prefix=API_V1_PREFIX)
 app.include_router(admin_chat_router, prefix=API_V1_PREFIX)
+app.include_router(admin_qa_router, prefix=API_V1_PREFIX)
 
 # Customer-facing support routes
 app.include_router(customer_tickets_router, prefix=API_V1_PREFIX)

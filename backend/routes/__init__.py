@@ -25,6 +25,7 @@ from .admin.tickets import router as admin_tickets_router
 from .admin.tickets import customer_router as customer_tickets_router
 from .admin.chat import router as admin_chat_router
 from .admin.chat import customer_chat_router
+from .admin.qa import router as admin_qa_router
 
 __all__ = [
     "professions_router",
@@ -51,4 +52,5 @@ __all__ = [
     "customer_tickets_router",
     "admin_chat_router",
     "customer_chat_router",
+    "admin_qa_router",
 ]
