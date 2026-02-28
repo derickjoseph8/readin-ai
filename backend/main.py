@@ -498,7 +498,7 @@ async def refresh_token(
     Requires a valid (non-expired, non-blacklisted) access token.
     """
     # Create a new token for the user
-    new_token = create_access_token(data={"sub": str(user.id)})
+    new_token = create_access_token(user.id)
 
     logger.info(f"Token refreshed for user {user.id}")
 
