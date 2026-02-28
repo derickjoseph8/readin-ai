@@ -1044,17 +1044,78 @@ class ReadInApp:
             webbrowser.open(url)
 
     def _quit(self):
-        self._stop_listening()
+        """Completely quit the application and all background processes."""
+        logger.info("Quitting ReadIn AI...")
+
+        try:
+            self._stop_listening()
+        except Exception as e:
+            logger.debug(f"Error stopping listening: {e}")
 
         # End any active meeting session
-        if self.meeting_session.is_active:
-            self.meeting_session.end()
+        try:
+            if self.meeting_session.is_active:
+                self.meeting_session.end()
+        except Exception as e:
+            logger.debug(f"Error ending meeting session: {e}")
 
-        self.process_monitor.stop()
-        self.browser_bridge.stop()
-        self.hotkey_manager.stop()
-        self.tray.hide()
+        # Stop all background services
+        try:
+            self.process_monitor.stop()
+        except Exception as e:
+            logger.debug(f"Error stopping process monitor: {e}")
+
+        try:
+            self.browser_bridge.stop()
+        except Exception as e:
+            logger.debug(f"Error stopping browser bridge: {e}")
+
+        try:
+            self.hotkey_manager.stop()
+        except Exception as e:
+            logger.debug(f"Error stopping hotkey manager: {e}")
+
+        # Stop audio capture completely
+        try:
+            self.audio_capture.stop()
+        except Exception as e:
+            logger.debug(f"Error stopping audio capture: {e}")
+
+        # Stop transcriber
+        try:
+            self.transcriber.stop()
+        except Exception as e:
+            logger.debug(f"Error stopping transcriber: {e}")
+
+        # Hide tray icon
+        try:
+            self.tray.hide()
+        except Exception as e:
+            logger.debug(f"Error hiding tray: {e}")
+
+        # Close any open windows
+        try:
+            if self.overlay:
+                self.overlay.close()
+            if self.login_window:
+                self.login_window.close()
+            if self.settings_window:
+                self.settings_window.close()
+            if self.briefing_panel:
+                self.briefing_panel.close()
+            if self.summary_panel:
+                self.summary_panel.close()
+        except Exception as e:
+            logger.debug(f"Error closing windows: {e}")
+
+        logger.info("ReadIn AI quit complete")
+
+        # Quit the Qt application
         self.app.quit()
+
+        # Force exit to ensure all threads are terminated
+        import os
+        os._exit(0)
 
     def run(self):
         if not ANTHROPIC_API_KEY:
@@ -1167,7 +1228,147 @@ class ReadInApp:
         self.settings.set("audio_setup_completed", True)
 
 
+def kill_previous_instances():
+    """Kill any previous instances of ReadIn AI running in the background."""
+    import psutil
+
+    current_pid = os.getpid()
+    current_exe = sys.executable.lower()
+    killed_count = 0
+
+    # Get the name patterns to look for
+    app_names = ['readin', 'readinai', 'readin-ai', 'readin_ai']
+
+    for proc in psutil.process_iter(['pid', 'name', 'exe', 'cmdline']):
+        try:
+            # Skip current process
+            if proc.pid == current_pid:
+                continue
+
+            proc_name = (proc.info.get('name') or '').lower()
+            proc_exe = (proc.info.get('exe') or '').lower()
+            proc_cmdline = ' '.join(proc.info.get('cmdline') or []).lower()
+
+            # Check if it's a ReadIn AI process
+            is_readin = False
+
+            # Check process name
+            for app_name in app_names:
+                if app_name in proc_name:
+                    is_readin = True
+                    break
+
+            # Check executable path
+            if not is_readin:
+                for app_name in app_names:
+                    if app_name in proc_exe:
+                        is_readin = True
+                        break
+
+            # Check command line (for python scripts)
+            if not is_readin and 'python' in proc_name:
+                if 'main.py' in proc_cmdline and any(app_name in proc_cmdline for app_name in app_names):
+                    is_readin = True
+
+            if is_readin:
+                logger.info(f"Killing previous instance: PID {proc.pid} ({proc_name})")
+                proc.kill()
+                proc.wait(timeout=5)
+                killed_count += 1
+
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired) as e:
+            logger.debug(f"Could not kill process {proc.pid}: {e}")
+        except Exception as e:
+            logger.debug(f"Error checking process: {e}")
+
+    if killed_count > 0:
+        logger.info(f"Killed {killed_count} previous instance(s)")
+        # Brief pause to ensure processes are fully terminated
+        import time
+        time.sleep(0.5)
+
+    return killed_count
+
+
+def ensure_single_instance():
+    """Ensure only one instance of the app is running using a lock file."""
+    import tempfile
+    import atexit
+
+    lock_file = os.path.join(tempfile.gettempdir(), 'readin_ai.lock')
+
+    # Try to create/acquire lock file
+    try:
+        # On Windows, use msvcrt for file locking
+        if sys.platform == 'win32':
+            import msvcrt
+
+            # Open file for writing (creates if doesn't exist)
+            lock_handle = open(lock_file, 'w')
+
+            try:
+                # Try to lock the file (non-blocking)
+                msvcrt.locking(lock_handle.fileno(), msvcrt.LK_NBLCK, 1)
+
+                # Write our PID
+                lock_handle.write(str(os.getpid()))
+                lock_handle.flush()
+
+                # Register cleanup on exit
+                def cleanup():
+                    try:
+                        msvcrt.locking(lock_handle.fileno(), msvcrt.LK_UNLCK, 1)
+                        lock_handle.close()
+                        os.remove(lock_file)
+                    except:
+                        pass
+
+                atexit.register(cleanup)
+                return True
+
+            except IOError:
+                # Lock failed - another instance might be running
+                lock_handle.close()
+                return False
+        else:
+            # Unix-like systems
+            import fcntl
+
+            lock_handle = open(lock_file, 'w')
+
+            try:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                lock_handle.write(str(os.getpid()))
+                lock_handle.flush()
+
+                def cleanup():
+                    try:
+                        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+                        lock_handle.close()
+                        os.remove(lock_file)
+                    except:
+                        pass
+
+                atexit.register(cleanup)
+                return True
+
+            except IOError:
+                lock_handle.close()
+                return False
+
+    except Exception as e:
+        logger.warning(f"Could not create lock file: {e}")
+        return True  # Allow running if lock mechanism fails
+
+
 def main():
+    # First, kill any previous instances
+    kill_previous_instances()
+
+    # Then ensure single instance via lock file
+    if not ensure_single_instance():
+        logger.warning("Another instance appears to be running, but we killed previous instances. Continuing...")
+
     app = ReadInApp()
     sys.exit(app.run())
 
