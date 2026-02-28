@@ -33,11 +33,15 @@ class AIQAService:
 
     def __init__(self, db: Session):
         self.db = db
+        self.client = None
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if api_key:
-            self.client = anthropic.Anthropic(api_key=api_key)
+            try:
+                self.client = anthropic.Anthropic(api_key=api_key)
+            except Exception as e:
+                logger.error(f"Failed to initialize Anthropic client: {e}")
+                self.client = None
         else:
-            self.client = None
             logger.warning("ANTHROPIC_API_KEY not configured. AI QA features disabled.")
 
     def is_available(self) -> bool:
