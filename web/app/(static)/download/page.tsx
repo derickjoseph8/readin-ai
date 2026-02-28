@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Download, Apple, Monitor, ArrowLeft, Check, X } from 'lucide-react'
+import { Download, Apple, Monitor, ArrowLeft, Check, X, Sparkles } from 'lucide-react'
 
 export default function DownloadPage() {
   const [platform, setPlatform] = useState<'windows' | 'mac' | 'linux' | null>(null)
@@ -34,44 +34,53 @@ export default function DownloadPage() {
   }
 
   return (
-    <main className="min-h-screen bg-dark-950 text-white">
+    <main className="min-h-screen bg-premium-bg text-white">
       {/* Download Notification Toast */}
       {downloadMessage?.show && (
         <div className="fixed top-20 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 animate-fade-in">
-          <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl shadow-2xl shadow-green-900/30 px-4 sm:px-6 py-4 flex items-center gap-3 sm:gap-4 border border-green-500/30">
-            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-              <Download className="h-5 w-5 text-white" />
+          <div className="bg-gradient-to-r from-gold-600 to-gold-500 rounded-xl shadow-2xl shadow-gold-900/30 px-4 sm:px-6 py-4 flex items-center gap-3 sm:gap-4 border border-gold-400/30">
+            <div className="w-10 h-10 bg-premium-bg/20 rounded-full flex items-center justify-center flex-shrink-0">
+              <Download className="h-5 w-5 text-premium-bg" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-white text-sm sm:text-base">
+              <p className="font-semibold text-premium-bg text-sm sm:text-base">
                 Download started for {downloadMessage.os.charAt(0).toUpperCase() + downloadMessage.os.slice(1)}
               </p>
-              <p className="text-green-100 text-xs sm:text-sm">
+              <p className="text-premium-bg/80 text-xs sm:text-sm">
                 Check your downloads folder.
               </p>
             </div>
             <button
               onClick={() => setDownloadMessage(null)}
-              className="p-1.5 hover:bg-white/20 rounded-full transition flex-shrink-0"
+              className="p-1.5 hover:bg-premium-bg/20 rounded-full transition flex-shrink-0"
               aria-label="Dismiss notification"
             >
-              <X className="h-4 w-4 text-white" />
+              <X className="h-4 w-4 text-premium-bg" />
             </button>
           </div>
         </div>
       )}
 
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-dark-950/80 backdrop-blur-lg border-b border-white/10">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-premium-bg/80 backdrop-blur-xl border-b border-premium-border">
+        {/* Announcement bar */}
+        <div className="bg-gradient-to-r from-gold-600/20 via-gold-500/20 to-gold-600/20 border-b border-gold-500/20">
+          <div className="max-w-7xl mx-auto px-4 py-2">
+            <p className="text-center text-sm text-gold-300">
+              <Sparkles className="inline h-4 w-4 mr-1" />
+              <span className="font-medium">Limited Time:</span> 7-day free trial for new users
+            </p>
+          </div>
+        </div>
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-sm">R</span>
+            <Link href="/" className="flex items-center space-x-2 group">
+              <div className="w-9 h-9 bg-gradient-to-br from-gold-400 to-gold-600 rounded-lg flex items-center justify-center shadow-gold-sm group-hover:shadow-gold transition-shadow">
+                <span className="text-premium-bg font-bold text-lg">R</span>
               </div>
-              <span className="text-xl font-bold text-white">ReadIn AI</span>
+              <span className="text-xl font-bold text-white">ReadIn <span className="text-gold-400">AI</span></span>
             </Link>
-            <Link href="/" className="flex items-center text-gray-300 hover:text-white transition">
+            <Link href="/" className="flex items-center text-gray-400 hover:text-gold-400 transition">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Home
             </Link>
@@ -80,11 +89,11 @@ export default function DownloadPage() {
       </header>
 
       {/* Main Content */}
-      <section className="pt-32 pb-20 px-4">
+      <section className="pt-40 pb-20 px-4">
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-4xl md:text-5xl font-bold mb-6">
             Download{' '}
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-400">
+            <span className="bg-clip-text text-transparent bg-gradient-to-r from-gold-400 to-gold-600">
               ReadIn AI
             </span>
           </h1>
@@ -98,23 +107,23 @@ export default function DownloadPage() {
             <div
               className={`p-6 rounded-2xl border transition-all ${
                 platform === 'windows'
-                  ? 'bg-blue-600/20 border-blue-500/50'
-                  : 'bg-dark-900/50 border-white/10 hover:border-white/20'
+                  ? 'bg-gold-600/20 border-gold-500/50'
+                  : 'bg-premium-surface border-premium-border hover:border-gold-500/30'
               }`}
             >
-              <Monitor className="h-12 w-12 mx-auto mb-4 text-blue-400" />
+              <Monitor className="h-12 w-12 mx-auto mb-4 text-gold-400" />
               <h3 className="text-xl font-semibold mb-2">Windows</h3>
               <p className="text-gray-400 text-sm mb-4">Windows 10 or later</p>
               <a
                 href={downloadUrls.windows}
                 onClick={() => handleDownloadClick('windows')}
-                className="w-full py-3 bg-gradient-to-r from-blue-600 to-cyan-500 rounded-lg font-medium hover:opacity-90 transition flex items-center justify-center"
+                className="w-full py-3 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg rounded-lg font-medium hover:shadow-gold transition-all flex items-center justify-center"
               >
                 <Download className="h-5 w-5 mr-2" />
                 Download .zip
               </a>
               {platform === 'windows' && (
-                <p className="text-green-400 text-xs mt-2 flex items-center justify-center">
+                <p className="text-gold-400 text-xs mt-2 flex items-center justify-center">
                   <Check className="h-3 w-3 mr-1" /> Recommended for your system
                 </p>
               )}
@@ -124,8 +133,8 @@ export default function DownloadPage() {
             <div
               className={`p-6 rounded-2xl border transition-all ${
                 platform === 'mac'
-                  ? 'bg-blue-600/20 border-blue-500/50'
-                  : 'bg-dark-900/50 border-white/10 hover:border-white/20'
+                  ? 'bg-gold-600/20 border-gold-500/50'
+                  : 'bg-premium-surface border-premium-border hover:border-gold-500/30'
               }`}
             >
               <Apple className="h-12 w-12 mx-auto mb-4 text-gray-300" />
@@ -134,13 +143,13 @@ export default function DownloadPage() {
               <a
                 href={downloadUrls.mac}
                 onClick={() => handleDownloadClick('mac')}
-                className="w-full py-3 bg-white/10 border border-white/20 rounded-lg font-medium hover:bg-white/20 transition flex items-center justify-center"
+                className="w-full py-3 bg-premium-surface border border-premium-border rounded-lg font-medium hover:border-gold-500/50 hover:bg-gold-600/10 transition-all flex items-center justify-center"
               >
                 <Download className="h-5 w-5 mr-2" />
                 Download .dmg
               </a>
               {platform === 'mac' && (
-                <p className="text-green-400 text-xs mt-2 flex items-center justify-center">
+                <p className="text-gold-400 text-xs mt-2 flex items-center justify-center">
                   <Check className="h-3 w-3 mr-1" /> Recommended for your system
                 </p>
               )}
@@ -150,11 +159,11 @@ export default function DownloadPage() {
             <div
               className={`p-6 rounded-2xl border transition-all ${
                 platform === 'linux'
-                  ? 'bg-blue-600/20 border-blue-500/50'
-                  : 'bg-dark-900/50 border-white/10 hover:border-white/20'
+                  ? 'bg-gold-600/20 border-gold-500/50'
+                  : 'bg-premium-surface border-premium-border hover:border-gold-500/30'
               }`}
             >
-              <svg className="h-12 w-12 mx-auto mb-4 text-orange-400" viewBox="0 0 24 24" fill="currentColor">
+              <svg className="h-12 w-12 mx-auto mb-4 text-gold-500" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12.503 18.668s-.055-.044-.19-.152c0 0-.335-.273-.474-.378-.1-.071-.155-.125-.155-.125s.044-.027.12-.066c.077-.04.17-.086.263-.136.15-.08.29-.166.29-.166s.13.102.266.213c.175.143.35.295.35.295-.17.165-.34.336-.47.515zm-1.006-6.668c0-.55.45-1 1-1s1 .45 1 1-.45 1-1 1-1-.45-1-1z"/>
               </svg>
               <h3 className="text-xl font-semibold mb-2">Linux</h3>
@@ -162,13 +171,13 @@ export default function DownloadPage() {
               <a
                 href={downloadUrls.linux}
                 onClick={() => handleDownloadClick('linux')}
-                className="w-full py-3 bg-white/10 border border-white/20 rounded-lg font-medium hover:bg-white/20 transition flex items-center justify-center"
+                className="w-full py-3 bg-premium-surface border border-premium-border rounded-lg font-medium hover:border-gold-500/50 hover:bg-gold-600/10 transition-all flex items-center justify-center"
               >
                 <Download className="h-5 w-5 mr-2" />
                 Download AppImage
               </a>
               {platform === 'linux' && (
-                <p className="text-green-400 text-xs mt-2 flex items-center justify-center">
+                <p className="text-gold-400 text-xs mt-2 flex items-center justify-center">
                   <Check className="h-3 w-3 mr-1" /> Recommended for your system
                 </p>
               )}
@@ -176,39 +185,39 @@ export default function DownloadPage() {
           </div>
 
           {/* Installation Steps */}
-          <div className="bg-dark-900/50 rounded-2xl border border-white/10 p-8 text-left max-w-2xl mx-auto">
+          <div className="bg-premium-surface rounded-2xl border border-premium-border p-8 text-left max-w-2xl mx-auto">
             <h3 className="text-xl font-semibold mb-6 text-center">Quick Setup Guide</h3>
             <ol className="space-y-4">
               <li className="flex items-start">
-                <span className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0">1</span>
+                <span className="w-8 h-8 bg-gradient-to-br from-gold-500 to-gold-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0 text-premium-bg">1</span>
                 <div>
                   <p className="font-medium">Download & Run</p>
                   <p className="text-gray-400 text-sm">This is a portable app - just double-click to run, no installation needed!</p>
                 </div>
               </li>
               <li className="flex items-start">
-                <span className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0">2</span>
+                <span className="w-8 h-8 bg-gradient-to-br from-gold-500 to-gold-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0 text-premium-bg">2</span>
                 <div>
                   <p className="font-medium">Configure Audio (Important!)</p>
                   <p className="text-gray-400 text-sm">Select your audio device on first run. To capture meeting audio, enable "Stereo Mix" in Windows Sound Settings or use VB-Cable.</p>
                 </div>
               </li>
               <li className="flex items-start">
-                <span className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0">3</span>
+                <span className="w-8 h-8 bg-gradient-to-br from-gold-500 to-gold-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0 text-premium-bg">3</span>
                 <div>
                   <p className="font-medium">Create Your Account</p>
                   <p className="text-gray-400 text-sm">Sign up for free to start your 7-day trial</p>
                 </div>
               </li>
               <li className="flex items-start">
-                <span className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0">4</span>
+                <span className="w-8 h-8 bg-gradient-to-br from-gold-500 to-gold-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0 text-premium-bg">4</span>
                 <div>
                   <p className="font-medium">Start a Meeting</p>
                   <p className="text-gray-400 text-sm">Open Teams, Zoom, or any video call - ReadIn AI activates automatically</p>
                 </div>
               </li>
               <li className="flex items-start">
-                <span className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0">✓</span>
+                <span className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center text-sm font-bold mr-4 flex-shrink-0 text-white">✓</span>
                 <div>
                   <p className="font-medium">Sound Brilliant!</p>
                   <p className="text-gray-400 text-sm">Get AI-powered talking points in real-time</p>
@@ -218,16 +227,16 @@ export default function DownloadPage() {
           </div>
 
           {/* Audio Setup Info */}
-          <div className="mt-8 bg-yellow-900/20 border border-yellow-600/30 rounded-xl p-6 text-left max-w-2xl mx-auto">
-            <h4 className="text-yellow-400 font-semibold mb-2">Important: Audio Setup for Meeting Capture</h4>
-            <p className="text-yellow-200/80 text-sm mb-3">
+          <div className="mt-8 bg-gold-900/20 border border-gold-600/30 rounded-xl p-6 text-left max-w-2xl mx-auto">
+            <h4 className="text-gold-400 font-semibold mb-2">Important: Audio Setup for Meeting Capture</h4>
+            <p className="text-gold-200/80 text-sm mb-3">
               To capture what others say in meetings, you need a "loopback" audio device enabled:
             </p>
-            <ul className="text-yellow-200/70 text-sm space-y-1 ml-4 list-disc">
+            <ul className="text-gold-200/70 text-sm space-y-1 ml-4 list-disc">
               <li><strong>Windows:</strong> Enable "Stereo Mix" in Sound Settings → Recording devices (right-click → Show Disabled Devices)</li>
-              <li><strong>Alternative:</strong> Install free <a href="https://vb-audio.com/Cable/" target="_blank" rel="noopener noreferrer" className="text-yellow-400 underline hover:text-yellow-300">VB-Cable</a> virtual audio device</li>
+              <li><strong>Alternative:</strong> Install free <a href="https://vb-audio.com/Cable/" target="_blank" rel="noopener noreferrer" className="text-gold-400 underline hover:text-gold-300">VB-Cable</a> virtual audio device</li>
             </ul>
-            <p className="text-yellow-200/60 text-xs mt-3">
+            <p className="text-gold-200/60 text-xs mt-3">
               The app will guide you through this setup on first run.
             </p>
           </div>
