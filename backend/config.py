@@ -3,9 +3,12 @@
 import os
 import secrets
 import sys
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env from the backend directory
+env_path = Path(__file__).parent / '.env'
+load_dotenv(env_path)
 
 # =============================================================================
 # ENVIRONMENT CONFIGURATION
