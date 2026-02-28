@@ -1360,7 +1360,7 @@ def get_app_version():
     return {
         "version": APP_VERSION,
         "download_url": "https://www.getreadin.us/download",
-        "changelog": "v1.4.9: Security hardening - PBKDF2 token signing, Redis token blacklist, CSP headers, token refresh, race condition fixes",
+        "changelog": "v1.5.0: Screen capture protection enabled by default, security improvements from comprehensive system audit",
         "required": False
     }
 
