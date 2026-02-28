@@ -12,7 +12,7 @@ from database import get_db
 from auth import get_current_user
 from models import (
     User, SupportTeam, TeamMember, SupportTicket, ChatSession,
-    AgentStatus, AdminActivityLog, StaffRole, Organization
+    AgentStatus, AdminActivityLog, StaffRole, Organization, UserSession
 )
 from schemas import (
     AdminDashboardStats, AdminTrends, TicketTrend, SubscriptionTrend,
@@ -292,6 +292,21 @@ async def list_users(
     total = query.count()
     users = query.order_by(User.created_at.desc()).offset(offset).limit(limit).all()
 
+    # Get last activity from user_sessions for all users
+    user_ids = [u.id for u in users]
+    last_activities = {}
+    if user_ids:
+        # Subquery to get max last_activity per user
+        from sqlalchemy import func as sql_func
+        activity_query = db.query(
+            UserSession.user_id,
+            sql_func.max(UserSession.last_activity).label('last_activity')
+        ).filter(
+            UserSession.user_id.in_(user_ids)
+        ).group_by(UserSession.user_id).all()
+
+        last_activities = {row.user_id: row.last_activity for row in activity_query}
+
     def get_user_status(u):
         """Determine user account status."""
         if not u.email_verified:
@@ -307,6 +322,13 @@ async def list_users(
         if u.subscription_status == "cancelled":
             return "inactive"
         return "inactive"
+
+    def get_last_active(u):
+        """Get last activity time from sessions or last_login."""
+        session_activity = last_activities.get(u.id)
+        if session_activity:
+            return session_activity
+        return u.last_login
 
     return {
         "users": [
@@ -324,7 +346,7 @@ async def list_users(
                 "email_verified": u.email_verified,
                 "created_at": u.created_at,
                 "last_login": u.last_login,
-                "last_active": u.last_login  # Alias for frontend
+                "last_active": get_last_active(u)
             }
             for u in users
         ],
