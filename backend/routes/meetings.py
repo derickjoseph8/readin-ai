@@ -67,7 +67,7 @@ def end_meeting(
 ):
     """
     End a meeting session.
-    Optionally triggers summary generation and email.
+    Always triggers AI summary generation for competitive advantage.
     """
     meeting = db.query(Meeting).filter(
         Meeting.id == meeting_id,
@@ -100,14 +100,14 @@ def end_meeting(
     db.commit()
     db.refresh(meeting)
 
-    # Trigger async summary generation if requested and there are conversations
-    if data.generate_summary and conv_count > 0:
+    # Always generate AI summary when there are conversations (key differentiator)
+    if conv_count > 0:
         try:
             from workers.tasks.summary_generation import generate_meeting_summary
-            # Check user's email preference
+            # Check user's email preference for notifications
             send_email = data.send_email and getattr(user, 'email_summary_enabled', True)
             generate_meeting_summary.delay(meeting_id, user.id, send_email)
-            logger.info(f"Triggered summary generation for meeting {meeting_id}")
+            logger.info(f"Triggered AI summary generation for meeting {meeting_id}")
         except Exception as e:
             # Don't fail the request if async task fails to queue
             logger.error(f"Failed to queue summary generation: {e}")
