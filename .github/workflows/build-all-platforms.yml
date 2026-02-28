@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (e.g., 1.6.0)'
+        description: 'Version number (e.g., 1.5.1)'
         required: false
         default: '1.5.1'
 
@@ -16,7 +16,7 @@ permissions:
   contents: write
 
 env:
-  VERSION: ${{ github.event.inputs.version || '1.6.0' }}
+  VERSION: ${{ github.event.inputs.version || '1.5.1' }}
 
 jobs:
   build-windows:
@@ -226,6 +226,111 @@ jobs:
 
           # List uploaded files
           ssh -o StrictHostKeyChecking=no ubuntu@$SERVER_HOST "ls -la /home/ubuntu/readin-ai/downloads/"
+
+  notify-success:
+    needs: [build-windows, build-macos, build-linux, deploy-to-server]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Send success email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.sendgrid.net
+          server_port: 587
+          username: apikey
+          password: ${{ secrets.SENDGRID_API_KEY }}
+          subject: "✅ ReadIn AI Build Successful - v${{ env.VERSION }}"
+          to: ${{ secrets.NOTIFICATION_EMAIL }}
+          from: "ReadIn AI CI <noreply@getreadin.ai>"
+          html_body: |
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #d4a853;">✅ ReadIn AI Build Successful</h2>
+
+              <p><strong>Version:</strong> ${{ env.VERSION }}</p>
+              <p><strong>Branch:</strong> ${{ github.ref_name }}</p>
+              <p><strong>Commit:</strong> ${{ github.sha }}</p>
+              <p><strong>Triggered by:</strong> ${{ github.actor }}</p>
+
+              <h3 style="color: #333;">Build Results:</h3>
+              <table style="border-collapse: collapse; width: 100%;">
+                <tr style="background: #f5f5f5;">
+                  <td style="padding: 10px; border: 1px solid #ddd;">🪟 Windows</td>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: green;">✓ Success</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px; border: 1px solid #ddd;">🍎 macOS</td>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: green;">✓ Success</td>
+                </tr>
+                <tr style="background: #f5f5f5;">
+                  <td style="padding: 10px; border: 1px solid #ddd;">🐧 Linux</td>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: green;">✓ Success</td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px; border: 1px solid #ddd;">🚀 Deploy</td>
+                  <td style="padding: 10px; border: 1px solid #ddd; color: green;">✓ Deployed to server</td>
+                </tr>
+              </table>
+
+              <h3 style="color: #333;">Download Links:</h3>
+              <ul>
+                <li><a href="https://www.getreadin.us/downloads/ReadInAI-Windows-${{ env.VERSION }}.exe">Windows (.exe)</a></li>
+                <li><a href="https://www.getreadin.us/downloads/ReadInAI-macOS-${{ env.VERSION }}.dmg">macOS (.dmg)</a></li>
+                <li><a href="https://www.getreadin.us/downloads/ReadInAI-Linux-${{ env.VERSION }}.AppImage">Linux (.AppImage)</a></li>
+              </ul>
+
+              <p style="margin-top: 20px;">
+                <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                   style="background: #d4a853; color: #000; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                  View Build Details
+                </a>
+              </p>
+
+              <hr style="margin-top: 30px; border: none; border-top: 1px solid #eee;">
+              <p style="color: #666; font-size: 12px;">
+                This is an automated message from ReadIn AI CI/CD pipeline.
+              </p>
+            </div>
+
+  notify-failure:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: failure()
+    steps:
+      - name: Send failure email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.sendgrid.net
+          server_port: 587
+          username: apikey
+          password: ${{ secrets.SENDGRID_API_KEY }}
+          subject: "❌ ReadIn AI Build Failed - v${{ env.VERSION }}"
+          to: ${{ secrets.NOTIFICATION_EMAIL }}
+          from: "ReadIn AI CI <noreply@getreadin.ai>"
+          html_body: |
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #dc3545;">❌ ReadIn AI Build Failed</h2>
+
+              <p><strong>Version:</strong> ${{ env.VERSION }}</p>
+              <p><strong>Branch:</strong> ${{ github.ref_name }}</p>
+              <p><strong>Commit:</strong> ${{ github.sha }}</p>
+              <p><strong>Triggered by:</strong> ${{ github.actor }}</p>
+
+              <p style="color: #dc3545; font-weight: bold;">
+                One or more platform builds have failed. Please check the build logs for details.
+              </p>
+
+              <p style="margin-top: 20px;">
+                <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                   style="background: #dc3545; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                  View Build Logs
+                </a>
+              </p>
+
+              <hr style="margin-top: 30px; border: none; border-top: 1px solid #eee;">
+              <p style="color: #666; font-size: 12px;">
+                This is an automated message from ReadIn AI CI/CD pipeline.
+              </p>
+            </div>
 
   release:
     needs: [build-windows, build-macos, build-linux]
