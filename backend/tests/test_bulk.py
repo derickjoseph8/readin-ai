@@ -79,7 +79,8 @@ class TestBulkOperations:
             json={"ids": [1], "status": "invalid_status"},
             headers=auth_headers,
         )
-        assert response.status_code == 400
+        # FastAPI returns 422 for validation errors (invalid enum value)
+        assert response.status_code == 422
 
     def test_bulk_delete_tasks_empty(self, client, auth_headers):
         """Test bulk delete tasks with no valid IDs."""

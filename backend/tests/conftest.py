@@ -105,6 +105,7 @@ def test_user(test_db, test_profession) -> User:
         subscription_status="trial",
         trial_start_date=datetime.utcnow(),
         trial_end_date=datetime.utcnow() + timedelta(days=14),
+        email_verified=True,  # Required for login
     )
     test_db.add(user)
     test_db.flush()
@@ -129,6 +130,7 @@ def premium_user(test_db, test_profession) -> User:
         subscription_status="active",
         subscription_id="sub_test123",
         subscription_end_date=datetime.utcnow() + timedelta(days=30),
+        email_verified=True,  # Required for login
     )
     test_db.add(user)
     test_db.flush()
@@ -149,9 +151,10 @@ def expired_trial_user(test_db, test_profession) -> User:
         hashed_password=hash_password("ExpiredPassword123!"),
         full_name="Expired User",
         profession_id=test_profession.id,
-        subscription_status="trial",
+        subscription_status="expired",  # Mark as expired
         trial_start_date=datetime.utcnow() - timedelta(days=20),
         trial_end_date=datetime.utcnow() - timedelta(days=6),
+        email_verified=True,  # Required for login
     )
     test_db.add(user)
     test_db.flush()

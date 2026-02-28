@@ -5,7 +5,7 @@ Admin routes for live chat management.
 from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func, and_
 
 from database import get_db
@@ -14,6 +14,9 @@ from models import (
     User, SupportTeam, TeamMember, ChatSession, ChatMessage,
     AgentStatus, StaffRole
 )
+
+# Maximum pagination limit to prevent OOM
+MAX_PAGE_LIMIT = 100
 from schemas import (
     ChatSessionCreate, ChatSessionResponse, ChatSessionList,
     ChatMessageCreate, ChatMessageResponse,
@@ -73,17 +76,23 @@ def enrich_session_response(db: Session, session: ChatSession) -> ChatSessionRes
 @router.get("/queue", response_model=ChatSessionList)
 async def get_chat_queue(
     team_id: Optional[int] = None,
+    limit: int = Query(50, le=MAX_PAGE_LIMIT, ge=1),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get waiting and active chat sessions.
+    """Get waiting and active chat sessions with pagination.
 
     - Admins/Super Admins see all queues
     - Regular agents only see their team's queue
+    - Maximum 100 sessions per request to prevent OOM
     """
     require_staff(current_user)
 
-    query = db.query(ChatSession).filter(
+    # Use eager loading to avoid N+1 queries
+    query = db.query(ChatSession).options(
+        selectinload(ChatSession.messages)
+    ).filter(
         ChatSession.status.in_(["waiting", "active"])
     )
 
@@ -94,14 +103,18 @@ async def get_chat_queue(
     # Chats with team_id=None are in general queue, visible to everyone
     # Agents can pick up any chat and redirect to their team if needed
 
-    sessions = query.order_by(ChatSession.started_at).all()
+    # Get total count before pagination
+    total_count = query.count()
+
+    # Apply pagination
+    sessions = query.order_by(ChatSession.started_at).offset(offset).limit(limit).all()
 
     waiting = sum(1 for s in sessions if s.status == "waiting")
     active = sum(1 for s in sessions if s.status == "active")
 
     return ChatSessionList(
         sessions=[enrich_session_response(db, s) for s in sessions],
-        total=len(sessions),
+        total=total_count,
         waiting=waiting,
         active=active
     )

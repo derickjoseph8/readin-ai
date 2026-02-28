@@ -135,10 +135,20 @@ class User(Base):
     # Stripe (for individual users)
     stripe_customer_id = Column(String, unique=True, nullable=True)
 
+    # Paystack (for African/Global regions)
+    paystack_customer_code = Column(String, nullable=True, index=True)
+    paystack_authorization_code = Column(String, nullable=True)
+
     # Subscription status
-    subscription_status = Column(String, default="trial")  # trial, active, cancelled, expired
+    subscription_status = Column(String, default="trial", index=True)  # trial, active, cancelled, expired
     subscription_id = Column(String, nullable=True)
     subscription_end_date = Column(DateTime, nullable=True)
+    subscription_seats = Column(Integer, default=1)
+    subscription_plan = Column(String, nullable=True)  # individual, starter, team, enterprise
+    subscription_region = Column(String, nullable=True)  # global, western
+    subscription_is_annual = Column(Boolean, default=False)
+    subscription_billing_cycle_start = Column(DateTime, nullable=True)
+    country_code = Column(String(2), nullable=True)  # ISO 3166-1 alpha-2
 
     # Trial
     trial_start_date = Column(DateTime, default=datetime.utcnow)
@@ -239,6 +249,9 @@ class User(Base):
 class DailyUsage(Base):
     """Track daily AI response usage for trial users."""
     __tablename__ = "daily_usage"
+    __table_args__ = (
+        Index("ix_daily_usage_user_date", "user_id", "date"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -252,6 +265,7 @@ class CalendarIntegration(Base):
     """Calendar provider integrations for users."""
     __tablename__ = "calendar_integrations"
     __table_args__ = (
+        Index("ix_calendar_user_id", "user_id"),
         Index("ix_calendar_user_provider", "user_id", "provider"),
     )
 
@@ -728,6 +742,10 @@ class EmailNotification(Base):
 class PaymentHistory(Base):
     """Log of all payment transactions."""
     __tablename__ = "payment_history"
+    __table_args__ = (
+        Index("ix_payment_history_user_id", "user_id"),
+        Index("ix_payment_history_created_at", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -736,11 +754,19 @@ class PaymentHistory(Base):
     stripe_invoice_id = Column(String, nullable=True, index=True)
     stripe_payment_intent_id = Column(String, nullable=True)
 
+    # Paystack details
+    paystack_reference = Column(String, nullable=True, index=True)
+    paystack_transaction_id = Column(String, nullable=True)
+
     # Payment info
     amount = Column(Integer, nullable=False)  # Amount in cents
     currency = Column(String(3), default="usd")
     status = Column(String, nullable=False)  # paid, failed, refunded, pending
     description = Column(String, nullable=True)
+    payment_provider = Column(String, default="stripe")  # stripe, paystack
+
+    # Idempotency key for webhook deduplication
+    idempotency_key = Column(String, nullable=True, unique=True, index=True)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -2081,17 +2107,24 @@ class StaffRole:
     AGENT = "agent"  # Support agent
 
     # Protected super admin accounts - these can NEVER be demoted
-    PROTECTED_SUPER_ADMINS = [
-        "derick@getreadin.ai",
-        "derick@getreadin.us",
-    ]
+    # Loaded from environment variable for security
+    @classmethod
+    def _get_protected_admins(cls) -> list:
+        """Get protected super admin emails from environment or default."""
+        import os
+        env_admins = os.getenv("PROTECTED_SUPER_ADMINS", "")
+        if env_admins:
+            return [e.strip().lower() for e in env_admins.split(",") if e.strip()]
+        # Default fallback
+        return ["derick@getreadin.ai", "derick@getreadin.us"]
 
     @classmethod
     def is_protected_super_admin(cls, email: str) -> bool:
         """Check if email belongs to a protected super admin account."""
         if not email:
             return False
-        return email.lower() in [e.lower() for e in cls.PROTECTED_SUPER_ADMINS]
+        protected = cls._get_protected_admins()
+        return email.lower() in protected
 
     @classmethod
     def get_role_priority(cls, role: str) -> int:

@@ -15,8 +15,8 @@ from config import LOG_LEVEL, IS_DEVELOPMENT
 logger = logging.getLogger("slow_query")
 logger.setLevel(logging.WARNING)
 
-# Default threshold in milliseconds
-SLOW_QUERY_THRESHOLD_MS = 500
+# Default threshold in milliseconds (reduced from 500ms to catch more slow queries)
+SLOW_QUERY_THRESHOLD_MS = 100
 
 
 class SlowQueryLogger:

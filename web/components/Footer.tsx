@@ -21,13 +21,15 @@ export default function Footer() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Enter your email"
-                className="flex-1 px-4 py-3 bg-premium-surface border border-premium-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-gold-500/50 transition-colors"
+                aria-label="Email address for newsletter"
+                className="flex-1 px-4 py-3 bg-premium-surface border border-premium-border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-gold-500/50 transition-colors min-h-[44px]"
               />
               <button
                 type="submit"
-                className="px-6 py-3 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-xl hover:shadow-gold transition-all flex items-center justify-center"
+                aria-label="Subscribe to newsletter"
+                className="px-6 py-3 bg-gradient-to-r from-gold-600 to-gold-500 text-premium-bg font-semibold rounded-xl hover:shadow-gold transition-all flex items-center justify-center min-h-[44px] min-w-[44px]"
               >
-                <Send className="h-4 w-4 mr-2" />
+                <Send className="h-4 w-4 mr-2" aria-hidden="true" />
                 Subscribe
               </button>
             </form>
@@ -46,24 +48,24 @@ export default function Footer() {
             <p className="text-gray-400 text-sm mb-6 max-w-xs">
               Your AI-powered meeting intelligence platform. Sound brilliant in every meeting.
             </p>
-            <div className="flex space-x-3">
-              <a href="https://twitter.com/getreadinai" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-premium-surface rounded-lg flex items-center justify-center text-gray-400 hover:text-gold-400 hover:bg-premium-card transition-all">
-                <Twitter className="h-5 w-5" />
+            <div className="flex space-x-3" role="list" aria-label="Social media links">
+              <a href="https://twitter.com/getreadinai" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-premium-surface rounded-lg flex items-center justify-center text-gray-400 hover:text-gold-400 hover:bg-premium-card transition-all min-w-[44px] min-h-[44px]" aria-label="Follow us on Twitter">
+                <Twitter className="h-5 w-5" aria-hidden="true" />
               </a>
-              <a href="https://github.com/readinai" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-premium-surface rounded-lg flex items-center justify-center text-gray-400 hover:text-gold-400 hover:bg-premium-card transition-all">
-                <Github className="h-5 w-5" />
+              <a href="https://github.com/readinai" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-premium-surface rounded-lg flex items-center justify-center text-gray-400 hover:text-gold-400 hover:bg-premium-card transition-all min-w-[44px] min-h-[44px]" aria-label="View our GitHub repository">
+                <Github className="h-5 w-5" aria-hidden="true" />
               </a>
-              <a href="https://linkedin.com/company/readinai" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-premium-surface rounded-lg flex items-center justify-center text-gray-400 hover:text-gold-400 hover:bg-premium-card transition-all">
-                <Linkedin className="h-5 w-5" />
+              <a href="https://linkedin.com/company/readinai" target="_blank" rel="noopener noreferrer" className="w-10 h-10 bg-premium-surface rounded-lg flex items-center justify-center text-gray-400 hover:text-gold-400 hover:bg-premium-card transition-all min-w-[44px] min-h-[44px]" aria-label="Connect with us on LinkedIn">
+                <Linkedin className="h-5 w-5" aria-hidden="true" />
               </a>
-              <a href="mailto:support@getreadin.ai" className="w-10 h-10 bg-premium-surface rounded-lg flex items-center justify-center text-gray-400 hover:text-gold-400 hover:bg-premium-card transition-all">
-                <Mail className="h-5 w-5" />
+              <a href="mailto:support@getreadin.ai" className="w-10 h-10 bg-premium-surface rounded-lg flex items-center justify-center text-gray-400 hover:text-gold-400 hover:bg-premium-card transition-all min-w-[44px] min-h-[44px]" aria-label="Email support">
+                <Mail className="h-5 w-5" aria-hidden="true" />
               </a>
             </div>
           </div>
 
           {/* Product */}
-          <div>
+          <nav aria-label="Product links">
             <h4 className="font-semibold mb-4 text-white">Product</h4>
             <ul className="space-y-3 text-gray-400">
               <li><a href="/#features" className="hover:text-gold-400 transition-colors">Features</a></li>
@@ -71,10 +73,10 @@ export default function Footer() {
               <li><Link href="/download" className="hover:text-gold-400 transition-colors">Download</Link></li>
               <li><Link href="/changelog" className="hover:text-gold-400 transition-colors">Changelog</Link></li>
             </ul>
-          </div>
+          </nav>
 
           {/* Support */}
-          <div>
+          <nav aria-label="Support links">
             <h4 className="font-semibold mb-4 text-white">Support</h4>
             <ul className="space-y-3 text-gray-400">
               <li><a href="/#faq" className="hover:text-gold-400 transition-colors">FAQ</a></li>
@@ -82,10 +84,10 @@ export default function Footer() {
               <li><Link href="/contact" className="hover:text-gold-400 transition-colors">Contact Us</Link></li>
               <li><a href="https://www.getreadin.us/health" target="_blank" rel="noopener noreferrer" className="hover:text-gold-400 transition-colors">System Status</a></li>
             </ul>
-          </div>
+          </nav>
 
           {/* Legal */}
-          <div>
+          <nav aria-label="Legal links">
             <h4 className="font-semibold mb-4 text-white">Legal</h4>
             <ul className="space-y-3 text-gray-400">
               <li><Link href="/privacy" className="hover:text-gold-400 transition-colors">Privacy Policy</Link></li>
@@ -93,7 +95,7 @@ export default function Footer() {
               <li><Link href="/cookies" className="hover:text-gold-400 transition-colors">Cookie Policy</Link></li>
               <li><Link href="/gdpr" className="hover:text-gold-400 transition-colors">GDPR</Link></li>
             </ul>
-          </div>
+          </nav>
         </div>
 
         {/* Bottom */}

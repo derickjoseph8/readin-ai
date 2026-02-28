@@ -205,7 +205,9 @@ def cancel_subscription(
             "cancel_at": datetime.fromtimestamp(subscription.current_period_end).isoformat()
         }
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        import logging
+        logging.getLogger(__name__).error(f"Stripe error: {str(e)}")
+        raise HTTPException(status_code=400, detail="Payment processing failed. Please try again or contact support.")
 
 
 @router.post("/subscription/reactivate")
@@ -233,7 +235,9 @@ def reactivate_subscription(
             "status": subscription.status
         }
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        import logging
+        logging.getLogger(__name__).error(f"Stripe error: {str(e)}")
+        raise HTTPException(status_code=400, detail="Payment processing failed. Please try again or contact support.")
 
 
 # =============================================================================
@@ -302,7 +306,9 @@ def get_invoice(
             hosted_invoice_url=invoice.hosted_invoice_url,
         )
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        import logging
+        logging.getLogger(__name__).error(f"Stripe error: {str(e)}")
+        raise HTTPException(status_code=400, detail="Payment processing failed. Please try again or contact support.")
 
 
 # =============================================================================
@@ -364,7 +370,9 @@ def set_default_payment_method(
 
         return {"message": "Default payment method updated"}
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        import logging
+        logging.getLogger(__name__).error(f"Stripe error: {str(e)}")
+        raise HTTPException(status_code=400, detail="Payment processing failed. Please try again or contact support.")
 
 
 @router.delete("/payment-methods/{method_id}")
@@ -385,7 +393,9 @@ def delete_payment_method(
 
         return {"message": "Payment method removed"}
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        import logging
+        logging.getLogger(__name__).error(f"Stripe error: {str(e)}")
+        raise HTTPException(status_code=400, detail="Payment processing failed. Please try again or contact support.")
 
 
 # =============================================================================
@@ -419,7 +429,17 @@ async def stripe_webhook(
 
     # Handle different event types
     event_type = event["type"]
+    event_id = event["id"]
     event_data = event["data"]["object"]
+
+    # Check for duplicate event (idempotency)
+    existing = db.query(PaymentHistory).filter(
+        PaymentHistory.idempotency_key == f"stripe:{event_id}"
+    ).first()
+    if existing:
+        import logging
+        logging.getLogger(__name__).info(f"Duplicate webhook event: {event_id}")
+        return {"status": "success", "message": "Event already processed"}
 
     if event_type == "checkout.session.completed":
         handle_checkout_completed(event_data, db)
@@ -431,18 +451,18 @@ async def stripe_webhook(
         handle_subscription_deleted(event_data, db)
 
     elif event_type == "invoice.paid":
-        # Log successful payment
-        _log_payment(db, event_data, "paid")
+        # Log successful payment with idempotency key
+        _log_payment(db, event_data, "paid", idempotency_key=f"stripe:{event_id}")
 
     elif event_type == "invoice.payment_failed":
-        # Log failed payment
-        _log_payment(db, event_data, "failed")
+        # Log failed payment with idempotency key
+        _log_payment(db, event_data, "failed", idempotency_key=f"stripe:{event_id}")
 
     return {"status": "success"}
 
 
-def _log_payment(db: Session, invoice: dict, status: str):
-    """Log a payment event."""
+def _log_payment(db: Session, invoice: dict, status: str, idempotency_key: str = None):
+    """Log a payment event with idempotency protection."""
     customer_id = invoice.get("customer")
     user = db.query(User).filter(User.stripe_customer_id == customer_id).first()
 
@@ -454,6 +474,8 @@ def _log_payment(db: Session, invoice: dict, status: str):
             currency=invoice.get("currency", "usd"),
             status=status,
             description=f"Subscription payment - {invoice.get('number', 'N/A')}",
+            payment_provider="stripe",
+            idempotency_key=idempotency_key,
         )
         db.add(payment)
         db.commit()
@@ -477,13 +499,17 @@ async def paystack_webhook(
     """Handle Paystack webhook events. Exempt from rate limiting - uses signature verification."""
     payload = await request.body()
 
-    # Verify signature if webhook secret is configured
-    if PAYSTACK_WEBHOOK_SECRET:
-        if not x_paystack_signature:
-            raise HTTPException(status_code=400, detail="Missing signature")
+    # Signature verification is MANDATORY for security
+    if not PAYSTACK_WEBHOOK_SECRET:
+        import logging
+        logging.getLogger(__name__).error("PAYSTACK_WEBHOOK_SECRET not configured!")
+        raise HTTPException(status_code=503, detail="Webhook not configured")
 
-        if not verify_webhook_signature(payload, x_paystack_signature):
-            raise HTTPException(status_code=400, detail="Invalid signature")
+    if not x_paystack_signature:
+        raise HTTPException(status_code=400, detail="Missing signature")
+
+    if not verify_webhook_signature(payload, x_paystack_signature):
+        raise HTTPException(status_code=400, detail="Invalid signature")
 
     try:
         import json

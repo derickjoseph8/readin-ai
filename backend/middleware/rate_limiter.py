@@ -86,11 +86,17 @@ def _get_storage_uri() -> str:
 
     # Fallback to in-memory storage with warning
     if IS_PRODUCTION:
-        logger.warning(
-            "SECURITY WARNING: Rate limiter falling back to in-memory storage in PRODUCTION! "
-            "This is NOT recommended. Rate limits will not be shared across instances "
-            "and will be lost on restart. Configure REDIS_URL for production deployments."
+        import sys
+        logger.critical(
+            "CRITICAL: Redis is REQUIRED for production rate limiting! "
+            "In-memory rate limiting is NOT suitable for production because: "
+            "1) Rate limits are not shared across instances "
+            "2) Memory grows unbounded over time "
+            "3) State is lost on restart. "
+            "Configure REDIS_URL environment variable."
         )
+        print("[CRITICAL] REDIS_URL must be configured for production rate limiting!")
+        sys.exit(1)
     else:
         logger.warning(
             "Rate limiter using in-memory storage. "

@@ -48,8 +48,9 @@ class OverlayWindow(QWidget):
         self._setup_ui()
         self._connect_signals()
         self._load_position()
-        # Only enable screen capture protection if setting is enabled
-        if self._settings and self._settings.get("hide_from_screen_capture", False):
+        # Enable screen capture protection by default for security
+        # Users can disable in settings if needed
+        if self._settings and self._settings.get("hide_from_screen_capture", True):
             self._setup_screen_capture_protection()
 
     def _setup_ui(self):

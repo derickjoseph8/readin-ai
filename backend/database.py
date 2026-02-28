@@ -14,10 +14,15 @@ else:
     engine = create_engine(
         DATABASE_URL,
         pool_pre_ping=True,      # Check connection health before use
-        pool_size=10,            # Base pool size
-        max_overflow=20,         # Allow up to 30 total connections (10 + 20)
+        pool_size=20,            # Base pool size (increased from 10)
+        max_overflow=30,         # Allow up to 50 total connections (20 + 30)
         pool_recycle=3600,       # Recycle connections after 1 hour
         pool_timeout=30,         # Wait up to 30s for connection from pool
+        connect_args={
+            "options": "-c statement_timeout=30000",  # 30 second query timeout
+            "connect_timeout": 5,                      # 5 second connection timeout
+            "application_name": "readin_ai_api"        # Identify connections in pg_stat_activity
+        }
     )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

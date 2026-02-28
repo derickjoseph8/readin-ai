@@ -79,6 +79,7 @@ from middleware.error_handler import ErrorHandlerMiddleware, create_error_respon
 from middleware.compression import GZipMiddleware
 from middleware.slow_query_logger import setup_slow_query_logging
 from middleware.csrf import CSRFMiddleware
+from middleware.response_time import ResponseTimeMiddleware
 
 # Initialize Sentry for error tracking (production)
 if SENTRY_DSN:
@@ -126,19 +127,22 @@ else:
 # 1. Error handler (outermost - catches all errors)
 app.add_middleware(ErrorHandlerMiddleware)
 
-# 2. Request context (request ID, timing)
+# 2. Response time tracking
+app.add_middleware(ResponseTimeMiddleware)
+
+# 3. Request context (request ID, timing)
 app.add_middleware(RequestContextMiddleware)
 
-# 3. Security headers
+# 4. Security headers
 app.add_middleware(SecurityHeadersMiddleware)
 
-# 4. GZip compression for responses > 500 bytes
+# 5. GZip compression for responses > 500 bytes
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
-# 5. CSRF protection (API endpoints with JWT are exempt)
+# 6. CSRF protection (API endpoints with JWT are exempt)
 app.add_middleware(CSRFMiddleware)
 
-# 6. CORS - configured based on environment
+# 7. CORS - configured based on environment
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOWED_ORIGINS if CORS_ALLOWED_ORIGINS else ["*"],
@@ -248,9 +252,9 @@ def startup():
         init_db()
         logger.info("  [OK] Database connected")
 
-        # Set up slow query logging
-        setup_slow_query_logging(engine, threshold_ms=500)
-        logger.info("  [OK] Slow query logging enabled (>500ms)")
+        # Set up slow query logging (100ms threshold to catch more issues)
+        setup_slow_query_logging(engine, threshold_ms=100)
+        logger.info("  [OK] Slow query logging enabled (>100ms)")
     except Exception as e:
         logger.error(f"  [ERROR] Database connection failed: {e}")
         raise
@@ -292,6 +296,22 @@ def startup():
         logger.info("  [OK] System templates initialized")
     except Exception as e:
         logger.warning(f"  [WARNING] Template initialization failed: {e}")
+
+    # Warm up caches for frequently accessed data
+    try:
+        from database import SessionLocal
+        from cache import cache
+        db = SessionLocal()
+
+        # Cache professions list (accessed frequently on signup/profile)
+        professions = db.query(Profession).filter(Profession.is_active == True).all()
+        cache_data = [{"id": p.id, "name": p.name, "category": p.category} for p in professions]
+        cache.set("professions:active", cache_data, ttl=3600)  # 1 hour TTL
+
+        db.close()
+        logger.info(f"  [OK] Cache warmed ({len(professions)} professions)")
+    except Exception as e:
+        logger.warning(f"  [WARNING] Cache warming failed: {e}")
 
     # Security status
     logger.info("")

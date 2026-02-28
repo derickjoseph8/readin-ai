@@ -108,6 +108,10 @@ PAYSTACK_WEBHOOK_SECRET = os.getenv("PAYSTACK_WEBHOOK_SECRET", "")
 # Sales team email for enterprise alerts
 SALES_TEAM_EMAIL = os.getenv("SALES_TEAM_EMAIL", "sales@getreadin.ai")
 
+# Protected super admin accounts (comma-separated list)
+# These accounts can NEVER be demoted from super admin status
+PROTECTED_SUPER_ADMINS = os.getenv("PROTECTED_SUPER_ADMINS", "derick@getreadin.ai,derick@getreadin.us")
+
 # =============================================================================
 # EMAIL CONFIGURATION
 # =============================================================================

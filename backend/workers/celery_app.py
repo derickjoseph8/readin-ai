@@ -19,6 +19,7 @@ celery_app = Celery(
         "workers.tasks.summary_generation",
         "workers.tasks.email_tasks",
         "workers.tasks.analytics_tasks",
+        "workers.tasks.subscription_tasks",
     ]
 )
 
@@ -63,6 +64,19 @@ celery_app.conf.update(
         "generate-daily-analytics": {
             "task": "workers.tasks.analytics_tasks.generate_daily_analytics",
             "schedule": 86400.0,  # Daily
+        },
+        # Subscription management tasks
+        "enforce-trial-expirations": {
+            "task": "workers.tasks.subscription_tasks.enforce_trial_expirations",
+            "schedule": 3600.0,  # Hourly check
+        },
+        "send-trial-warnings": {
+            "task": "workers.tasks.subscription_tasks.send_trial_expiration_warnings",
+            "schedule": 86400.0,  # Daily
+        },
+        "sync-subscription-status": {
+            "task": "workers.tasks.subscription_tasks.sync_subscription_status",
+            "schedule": 14400.0,  # Every 4 hours
         },
     },
 )
