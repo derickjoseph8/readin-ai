@@ -11,7 +11,7 @@ Handles all Paystack payment operations including:
 import hmac
 import hashlib
 import httpx
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 
@@ -19,7 +19,10 @@ from config import PAYSTACK_SECRET_KEY, PAYSTACK_PUBLIC_KEY, APP_URL
 from models import User, Organization, PaymentHistory
 from pricing_config import (
     Region, PlanType, get_pricing, calculate_billing,
-    should_alert_sales, get_region_from_country
+    should_alert_sales, get_region_from_country,
+    calculate_billing_with_enforcement, enforce_minimum_seats,
+    has_trial_period, get_billing_start_date, calculate_proration,
+    get_test_pricing, NO_TRIAL_PLANS
 )
 
 
@@ -112,10 +115,24 @@ async def initialize_transaction(
     """
     Initialize a Paystack transaction for subscription.
 
+    - Enforces minimum seats for billing
+    - Applies test pricing for authorized test emails
+    - Team/Starter/Enterprise: Billed instantly (no trial)
+    - Individual: May have trial period
+
     Returns authorization URL for payment.
     """
-    pricing = get_pricing(region, plan)
-    billing = calculate_billing(region, seats, is_annual)
+    # Calculate billing with enforcement and test pricing
+    billing = calculate_billing_with_enforcement(
+        region=region,
+        seats=seats,
+        is_annual=is_annual,
+        plan_override=plan,
+        user_email=user.email,
+    )
+
+    # Use billable seats (enforced minimum)
+    billable_seats = billing["billable_seats"]
 
     # Calculate amount in kobo/cents (Paystack uses smallest currency unit)
     if is_annual:
@@ -124,6 +141,10 @@ async def initialize_transaction(
         amount = int(billing["total_monthly"] * 100)
 
     customer_code = await get_or_create_customer(user, db)
+
+    # Determine if instant billing (no trial)
+    instant_billing = plan in NO_TRIAL_PLANS
+    billing_start = get_billing_start_date(plan)
 
     data = {
         "email": user.email,
@@ -134,8 +155,12 @@ async def initialize_transaction(
             "user_id": str(user.id),
             "plan": plan.value,
             "region": region.value,
-            "seats": seats,
+            "requested_seats": seats,
+            "billable_seats": billable_seats,
             "is_annual": is_annual,
+            "instant_billing": instant_billing,
+            "billing_cycle_start": billing_start.isoformat(),
+            "is_test_pricing": billing.get("is_test_pricing", False),
             "cancel_url": cancel_url or f"{APP_URL}/dashboard/settings/billing?cancelled=true",
         },
     }
@@ -146,6 +171,15 @@ async def initialize_transaction(
         "authorization_url": result.get("authorization_url"),
         "access_code": result.get("access_code"),
         "reference": result.get("reference"),
+        "billing_details": {
+            "plan": plan.value,
+            "billable_seats": billable_seats,
+            "amount": billing["total_monthly"] if not is_annual else billing["total_annual"],
+            "currency": "USD",
+            "instant_billing": instant_billing,
+            "has_trial": billing.get("has_trial", False),
+            "is_test_pricing": billing.get("is_test_pricing", False),
+        },
     }
 
 
@@ -243,6 +277,118 @@ async def cancel_subscription(user: User, db: Session) -> Dict[str, Any]:
     db.commit()
 
     return result
+
+
+async def add_seats_with_proration(
+    user: User,
+    new_total_seats: int,
+    db: Session,
+) -> Dict[str, Any]:
+    """
+    Add seats to an existing subscription with prorated billing.
+
+    Charges immediately for the prorated amount of additional seats
+    for the remaining days in the current billing cycle.
+    """
+    if not user.subscription_id:
+        raise PaystackError("No active subscription")
+
+    current_seats = user.subscription_seats or 1
+    if new_total_seats <= current_seats:
+        raise PaystackError("New seat count must be greater than current seats")
+
+    # Get user's region and plan
+    region = get_region_from_country(user.country_code or "US")
+    plan = PlanType(user.subscription_plan) if user.subscription_plan else PlanType.STARTER
+    is_annual = user.subscription_is_annual or False
+
+    # Calculate days remaining in billing cycle
+    if user.subscription_billing_cycle_start:
+        cycle_start = user.subscription_billing_cycle_start
+        if is_annual:
+            next_billing = cycle_start.replace(year=cycle_start.year + 1)
+            total_days = 365
+        else:
+            # Monthly: add 30 days
+            next_billing = cycle_start + timedelta(days=30)
+            total_days = 30
+
+        days_remaining = (next_billing - datetime.utcnow()).days
+        days_remaining = max(0, days_remaining)  # Don't go negative
+    else:
+        # Default to full cycle if no start date
+        days_remaining = 30 if not is_annual else 365
+        total_days = days_remaining
+
+    # Calculate proration
+    proration = calculate_proration(
+        region=region,
+        plan=plan,
+        current_seats=current_seats,
+        new_seats=new_total_seats,
+        days_remaining_in_cycle=days_remaining,
+        total_days_in_cycle=total_days,
+        is_annual=is_annual,
+    )
+
+    if proration["prorated_amount"] <= 0:
+        # Update seats without charge (end of cycle)
+        user.subscription_seats = new_total_seats
+        db.commit()
+        return {
+            "charged": False,
+            "message": "Seats updated, will take effect next billing cycle",
+            "new_seats": new_total_seats,
+        }
+
+    # Charge prorated amount immediately
+    amount_in_cents = int(proration["prorated_amount"] * 100)
+
+    if not user.paystack_authorization_code:
+        raise PaystackError("No saved payment method for automatic charge")
+
+    # Charge using saved authorization
+    charge_data = {
+        "authorization_code": user.paystack_authorization_code,
+        "email": user.email,
+        "amount": amount_in_cents,
+        "currency": "USD",
+        "metadata": {
+            "user_id": str(user.id),
+            "type": "seat_proration",
+            "previous_seats": current_seats,
+            "new_seats": new_total_seats,
+            "additional_seats": proration["additional_seats"],
+            "days_remaining": days_remaining,
+        },
+    }
+
+    result = await _make_request("POST", "/transaction/charge_authorization", charge_data)
+
+    # Update user's seat count
+    user.subscription_seats = new_total_seats
+    db.commit()
+
+    # Log the prorated payment
+    payment = PaymentHistory(
+        user_id=user.id,
+        paystack_reference=result.get("reference"),
+        amount=proration["prorated_amount"],
+        currency="USD",
+        status="paid",
+        description=f"Prorated charge: {proration['additional_seats']} additional seats for {days_remaining} days",
+    )
+    db.add(payment)
+    db.commit()
+
+    return {
+        "charged": True,
+        "prorated_amount": proration["prorated_amount"],
+        "additional_seats": proration["additional_seats"],
+        "new_total_seats": new_total_seats,
+        "reference": result.get("reference"),
+        "next_cycle_amount": proration["next_cycle_amount"],
+    }
 
 
 # =============================================================================

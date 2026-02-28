@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            width: 1080px;
+            height: 1920px;
+            background: linear-gradient(180deg, #0a0a0a 0%, #1a0a1a 50%, #0a0a0a 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 100px 80px;
+            position: relative;
+        }
+        .top-emoji {
+            font-size: 120px;
+            margin-bottom: 50px;
+        }
+        .headline {
+            font-size: 64px;
+            font-weight: 800;
+            color: #ffffff;
+            text-align: center;
+            line-height: 1.3;
+            margin-bottom: 30px;
+        }
+        .highlight {
+            background: linear-gradient(135deg, #d4af37, #f4d03f);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subheadline {
+            font-size: 32px;
+            color: #888;
+            text-align: center;
+            margin-bottom: 80px;
+        }
+        .demo-box {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 30px;
+            padding: 50px;
+            width: 100%;
+            margin-bottom: 60px;
+        }
+        .interviewer-q {
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+        .q-label {
+            font-size: 16px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+        }
+        .q-text {
+            font-size: 26px;
+            color: #fff;
+            font-style: italic;
+        }
+        .ai-suggestion {
+            background: linear-gradient(135deg, rgba(212,175,55,0.2), rgba(212,175,55,0.1));
+            border: 1px solid rgba(212,175,55,0.3);
+            border-radius: 20px;
+            padding: 25px;
+        }
+        .ai-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 16px;
+            color: #d4af37;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 15px;
+        }
+        .ai-text {
+            font-size: 24px;
+            color: #fff;
+            line-height: 1.5;
+        }
+        .stats-row {
+            display: flex;
+            gap: 40px;
+            margin-bottom: 80px;
+        }
+        .stat {
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 56px;
+            font-weight: 800;
+            color: #d4af37;
+        }
+        .stat-label {
+            font-size: 20px;
+            color: #888;
+        }
+        .cta-button {
+            background: linear-gradient(135deg, #d4af37, #b8962e);
+            color: #0a0a0a;
+            font-size: 32px;
+            font-weight: 700;
+            padding: 30px 100px;
+            border-radius: 60px;
+            margin-bottom: 30px;
+        }
+        .free-text {
+            color: #888;
+            font-size: 26px;
+        }
+        .logo-bottom {
+            position: absolute;
+            bottom: 80px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .logo {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #d4af37, #b8962e);
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            font-weight: bold;
+            color: #0a0a0a;
+        }
+        .brand {
+            font-size: 28px;
+            font-weight: 700;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="top-emoji">🎯</div>
+    <h1 class="headline">Land Your<br><span class="highlight">Dream Job</span></h1>
+    <p class="subheadline">AI-powered interview assistance</p>
+
+    <div class="demo-box">
+        <div class="interviewer-q">
+            <div class="q-label">Interviewer asks:</div>
+            <div class="q-text">"Tell me about a time you handled conflict at work?"</div>
+        </div>
+        <div class="ai-suggestion">
+            <div class="ai-label">🤖 AI Suggests:</div>
+            <div class="ai-text">"Use the STAR method: Describe a specific Situation, your Task, the Action you took, and the positive Result..."</div>
+        </div>
+    </div>
+
+    <div class="stats-row">
+        <div class="stat">
+            <div class="stat-number">3x</div>
+            <div class="stat-label">More confident</div>
+        </div>
+        <div class="stat">
+            <div class="stat-number">87%</div>
+            <div class="stat-label">Better answers</div>
+        </div>
+    </div>
+
+    <div class="cta-button">Try Free</div>
+    <div class="free-text">7-day trial • No credit card</div>
+
+    <div class="logo-bottom">
+        <div class="logo">R</div>
+        <span class="brand">ReadIn AI</span>
+    </div>
+</body>
+</html>

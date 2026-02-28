@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            width: 1080px;
+            height: 1080px;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 60px;
+            position: relative;
+            overflow: hidden;
+        }
+        .glow {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(212,175,55,0.15) 0%, transparent 70%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .logo {
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(135deg, #d4af37, #b8962e);
+            border-radius: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            font-weight: bold;
+            color: #0a0a0a;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 60px rgba(212,175,55,0.3);
+        }
+        .headline {
+            font-size: 72px;
+            font-weight: 800;
+            color: #ffffff;
+            text-align: center;
+            line-height: 1.1;
+            margin-bottom: 30px;
+        }
+        .highlight {
+            background: linear-gradient(135deg, #d4af37, #f4d03f);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .subheadline {
+            font-size: 28px;
+            color: #888;
+            text-align: center;
+            max-width: 700px;
+            line-height: 1.5;
+            margin-bottom: 50px;
+        }
+        .features {
+            display: flex;
+            gap: 40px;
+            margin-bottom: 50px;
+        }
+        .feature {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 24px 32px;
+            text-align: center;
+        }
+        .feature-icon {
+            font-size: 36px;
+            margin-bottom: 12px;
+        }
+        .feature-text {
+            color: #fff;
+            font-size: 18px;
+            font-weight: 500;
+        }
+        .cta {
+            background: linear-gradient(135deg, #d4af37, #b8962e);
+            color: #0a0a0a;
+            font-size: 24px;
+            font-weight: 700;
+            padding: 20px 50px;
+            border-radius: 50px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .website {
+            position: absolute;
+            bottom: 40px;
+            color: #666;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="glow"></div>
+    <div class="logo">R</div>
+    <h1 class="headline">Your AI-Powered<br><span class="highlight">Meeting Assistant</span></h1>
+    <p class="subheadline">Never miss a detail. Get real-time AI suggestions, smart summaries, and action items from every meeting.</p>
+    <div class="features">
+        <div class="feature">
+            <div class="feature-icon">🎯</div>
+            <div class="feature-text">Real-time AI</div>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">📝</div>
+            <div class="feature-text">Auto Summaries</div>
+        </div>
+        <div class="feature">
+            <div class="feature-icon">✅</div>
+            <div class="feature-text">Action Items</div>
+        </div>
+    </div>
+    <div class="cta">Try Free for 7 Days</div>
+    <div class="website">getreadin.us</div>
+</body>
+</html>

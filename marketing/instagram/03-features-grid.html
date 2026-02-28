@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            width: 1080px;
+            height: 1080px;
+            background: #0a0a0a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 60px;
+            position: relative;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        .logo-small {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #d4af37, #b8962e);
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: bold;
+            color: #0a0a0a;
+            margin-bottom: 20px;
+        }
+        .headline {
+            font-size: 48px;
+            font-weight: 800;
+            color: #ffffff;
+            margin-bottom: 10px;
+        }
+        .subheadline {
+            font-size: 22px;
+            color: #888;
+        }
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+        .feature-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            padding: 32px;
+        }
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            background: rgba(212,175,55,0.2);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+        .feature-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 12px;
+        }
+        .feature-desc {
+            font-size: 16px;
+            color: #888;
+            line-height: 1.5;
+        }
+        .highlight {
+            color: #d4af37;
+        }
+        .website {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #666;
+            font-size: 20px;
+        }
+        .website span {
+            color: #d4af37;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo-small">R</div>
+        <h1 class="headline">Supercharge Your Meetings</h1>
+        <p class="subheadline">AI that works while you talk</p>
+    </div>
+
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">🎙️</div>
+            <div class="feature-title">Real-Time Transcription</div>
+            <div class="feature-desc">Every word captured automatically. Works with <span class="highlight">Zoom, Meet, Teams</span> and more.</div>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon">🤖</div>
+            <div class="feature-title">AI Suggestions</div>
+            <div class="feature-desc">Get smart responses and talking points <span class="highlight">while you speak</span>. Never be caught off guard.</div>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon">📋</div>
+            <div class="feature-title">Auto Summaries</div>
+            <div class="feature-desc">Meeting notes <span class="highlight">emailed to you</span> automatically. Key points, decisions, and follow-ups.</div>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon">✅</div>
+            <div class="feature-title">Action Tracking</div>
+            <div class="feature-desc">Never forget a commitment. <span class="highlight">AI extracts</span> action items and deadlines for you.</div>
+        </div>
+    </div>
+
+    <div class="website">Try free at <span>getreadin.us</span></div>
+</body>
+</html>

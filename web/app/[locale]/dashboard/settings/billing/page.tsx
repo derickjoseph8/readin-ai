@@ -1,153 +1,202 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CreditCard, Check, Sparkles, Calendar, ExternalLink, Users, Building2, Zap, Shield, Clock, HeadphonesIcon } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { detectRegion, type Region, PRICING_CONFIG } from '@/lib/geo';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://www.getreadin.us';
 
-const pricingTiers = {
-  individual: [
-    {
-      name: 'Free',
-      price: 0,
-      period: 'forever',
-      description: 'For trying out ReadIn AI',
-      features: [
-        '5 AI responses per day',
-        'Basic meeting transcription',
-        'Standard AI suggestions',
-        'Email support',
-      ],
-      limitations: [
-        'No meeting summaries',
-        'No team features',
-      ],
-      cta: 'Current Plan',
-      highlighted: false,
-    },
-    {
-      name: 'Pro Monthly',
-      price: 29.99,
-      period: '/month',
-      description: 'For professionals who want more',
-      features: [
-        'Unlimited AI responses',
-        'Advanced GPT-4 integration',
-        'Meeting summaries & action items',
-        'Interview coaching',
-        'Priority support',
-        'Export to PDF/Word',
-      ],
-      limitations: [],
-      cta: 'Upgrade to Pro',
-      highlighted: true,
-      priceId: 'price_pro_monthly',
-    },
-    {
-      name: 'Pro Annual',
-      price: 299.90,
-      period: '/year',
-      description: '2 months free with annual billing',
-      features: [
-        'Everything in Pro',
-        'Save $60 per year',
-        'Priority feature requests',
-      ],
-      limitations: [],
-      cta: 'Save with Annual',
-      highlighted: false,
-      priceId: 'price_pro_annual',
-    },
-  ],
-  business: [
-    {
-      name: 'Team Monthly',
-      price: 19.99,
-      period: '/user/month',
-      description: '5-10 users (5 seats minimum)',
-      features: [
-        'Everything in Pro',
-        '5 mandatory seats included',
-        'Up to 10 team members',
-        'Team analytics dashboard',
-        'Admin controls',
-      ],
-      limitations: [],
-      cta: 'Sign Up',
-      highlighted: true,
-      priceId: 'price_team_monthly',
-    },
-    {
-      name: 'Team Annual',
-      price: 199.90,
-      period: '/user/year',
-      description: '2 months free - 5 seats minimum',
-      features: [
-        'Everything in Team Monthly',
-        'Save $40/user per year',
-        '5-10 team members',
-      ],
-      limitations: [],
-      cta: 'Sign Up',
-      highlighted: false,
-      priceId: 'price_team_annual',
-    },
-    {
-      name: 'Growth',
-      price: 14.99,
-      period: '/user/month',
-      description: 'For teams of 11-50 users',
-      features: [
-        'Everything in Team',
-        '11-50 team members',
-        'Volume discount applied',
-        'Advanced analytics',
-        'API access',
-        'SAML SSO',
-      ],
-      limitations: [],
-      cta: 'Sign Up',
-      highlighted: false,
-      priceId: 'price_growth_monthly',
-    },
-    {
-      name: 'Growth Annual',
-      price: 149.90,
-      period: '/user/year',
-      description: '2 months free for 11-50 users',
-      features: [
-        'Everything in Growth Monthly',
-        'Save $30/user per year',
-        'Best value for mid-size teams',
-      ],
-      limitations: [],
-      cta: 'Sign Up',
-      highlighted: false,
-      priceId: 'price_growth_annual',
-    },
-    {
-      name: 'Enterprise',
-      price: null,
-      period: 'Custom',
-      description: 'For 50+ users with volume discounts',
-      features: [
-        'Everything in Growth',
-        'Unlimited team members',
-        'Best volume pricing',
-        'Custom deployment',
-        'SLA guarantees',
-        'On-premise option',
-        'Dedicated success manager',
-        '2 months free on annual',
-      ],
-      limitations: [],
-      cta: 'Contact Sales',
-      highlighted: false,
-    },
-  ],
-};
+// Declare PaystackPop type
+declare global {
+  interface Window {
+    PaystackPop: {
+      setup: (options: {
+        key: string
+        email: string
+        amount: number
+        currency: string
+        ref: string
+        metadata?: Record<string, unknown>
+        onClose?: () => void
+        callback?: (response: { reference: string }) => void
+      }) => {
+        openIframe: () => void
+      }
+    }
+  }
+}
+
+// Helper to load Paystack script
+const loadPaystackScript = (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (typeof window !== 'undefined' && window.PaystackPop) {
+      resolve()
+      return
+    }
+
+    const existingScript = document.querySelector('script[src="https://js.paystack.co/v1/inline.js"]')
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve())
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://js.paystack.co/v1/inline.js'
+    script.async = false
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error('Failed to load payment system'))
+    document.head.appendChild(script)
+  })
+}
+
+// Dynamic pricing tiers based on detected region
+function getPricingTiers(region: Region) {
+  const prices = PRICING_CONFIG[region];
+
+  return {
+    individual: [
+      {
+        name: 'Free',
+        price: 0,
+        period: 'forever',
+        description: 'For trying out ReadIn AI',
+        features: [
+          '5 AI responses per day',
+          'Basic meeting transcription',
+          'Standard AI suggestions',
+          'Email support',
+        ],
+        limitations: [
+          'No meeting summaries',
+          'No team features',
+        ],
+        cta: 'Current Plan',
+        highlighted: false,
+      },
+      {
+        name: 'Premium Monthly',
+        price: prices.individual.monthly,
+        period: '/month',
+        description: 'For professionals who want more',
+        features: [
+          'Unlimited AI responses',
+          'Advanced GPT-4 integration',
+          'Meeting summaries & action items',
+          'Interview coaching',
+          'Priority support',
+          'Export to PDF/Word',
+        ],
+        limitations: [],
+        cta: 'Upgrade to Premium',
+        highlighted: true,
+        priceId: 'price_premium_monthly',
+      },
+      {
+        name: 'Premium Annual',
+        price: prices.individual.annual,
+        period: '/year',
+        description: '2 months free with annual billing',
+        features: [
+          'Everything in Premium',
+          `Save $${((prices.individual.monthly * 12) - prices.individual.annual).toFixed(0)} per year`,
+          'Priority feature requests',
+        ],
+        limitations: [],
+        cta: 'Save with Annual',
+        highlighted: false,
+        priceId: 'price_premium_annual',
+      },
+    ],
+    business: [
+      {
+        name: 'Starter Monthly',
+        price: prices.starter.monthly,
+        period: '/user/month',
+        description: '3-9 users (3 seats minimum)',
+        features: [
+          'Everything in Premium',
+          '3 mandatory seats included',
+          'Up to 9 team members',
+          'Team analytics dashboard',
+          'Admin controls',
+        ],
+        limitations: [],
+        cta: 'Sign Up',
+        highlighted: true,
+        priceId: 'price_starter_monthly',
+      },
+      {
+        name: 'Starter Annual',
+        price: prices.starter.annual,
+        period: '/user/year',
+        description: '2 months free - 3 seats minimum',
+        features: [
+          'Everything in Starter Monthly',
+          `Save $${((prices.starter.monthly * 12) - prices.starter.annual).toFixed(0)}/user per year`,
+          '3-9 team members',
+        ],
+        limitations: [],
+        cta: 'Sign Up',
+        highlighted: false,
+        priceId: 'price_starter_annual',
+      },
+      {
+        name: 'Team',
+        price: prices.team.monthly,
+        period: '/user/month',
+        description: 'For teams of 10-50 users',
+        features: [
+          'Everything in Starter',
+          '10-50 team members',
+          'Volume discount applied',
+          'Advanced analytics',
+          'API access',
+          'SAML SSO',
+        ],
+        limitations: [],
+        cta: 'Sign Up',
+        highlighted: false,
+        priceId: 'price_team_monthly',
+      },
+      {
+        name: 'Team Annual',
+        price: prices.team.annual,
+        period: '/user/year',
+        description: '2 months free for 10-50 users',
+        features: [
+          'Everything in Team Monthly',
+          `Save $${((prices.team.monthly * 12) - prices.team.annual).toFixed(0)}/user per year`,
+          'Best value for mid-size teams',
+        ],
+        limitations: [],
+        cta: 'Sign Up',
+        highlighted: false,
+        priceId: 'price_team_annual',
+      },
+      {
+        name: 'Enterprise',
+        price: null,
+        period: 'Custom',
+        description: 'For 51+ users with volume discounts',
+        features: [
+          'Everything in Team',
+          'Unlimited team members',
+          'Best volume pricing',
+          'Custom deployment',
+          'SLA guarantees',
+          'On-premise option',
+          'Dedicated success manager',
+          '2 months free on annual',
+        ],
+        limitations: [],
+        cta: 'Contact Sales',
+        highlighted: false,
+      },
+    ],
+  };
+}
 
 export default function BillingPage() {
   const { user, status, token } = useAuth();
@@ -155,29 +204,122 @@ export default function BillingPage() {
   const [selectedTab, setSelectedTab] = useState<'individual' | 'business'>(
     user?.account_type === 'business' ? 'business' : 'individual'
   );
+  const [region, setRegion] = useState<Region>('western');
+  const [pricingLoaded, setPricingLoaded] = useState(false);
+  const [paystackLoaded, setPaystackLoaded] = useState(false);
   const t = useTranslations('settings.billing');
+
+  // Load Paystack script immediately on mount
+  useEffect(() => {
+    loadPaystackScript()
+      .then(() => setPaystackLoaded(true))
+      .catch((err) => console.error('Paystack load error:', err))
+  }, [])
+
+  // Detect region for pricing on mount
+  useEffect(() => {
+    detectRegion()
+      .then((geoData) => {
+        setRegion(geoData.region);
+      })
+      .catch(() => {
+        setRegion('western'); // Default fallback
+      })
+      .finally(() => {
+        setPricingLoaded(true);
+      });
+  }, []);
+
+  // Get pricing tiers based on detected region
+  const pricingTiers = getPricingTiers(region);
 
   const handleUpgrade = async (priceId?: string) => {
     if (!token || !priceId) return;
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/subscription/create-checkout`, {
+      // Ensure Paystack is loaded before proceeding
+      if (!window.PaystackPop) {
+        await loadPaystackScript();
+      }
+
+      // Parse priceId to determine plan and billing period
+      // Format: price_premium_monthly, price_starter_annual, etc.
+      const parts = priceId.replace('price_', '').split('_');
+      const planName = parts[0]; // premium, starter, team
+      const isAnnual = parts[1] === 'annual';
+
+      // Map plan names
+      const plan = planName === 'premium' ? 'individual' : planName;
+
+      // Default seats based on plan
+      const seats = plan === 'individual' ? 1 : plan === 'starter' ? 3 : 10;
+
+      // Get popup data from backend
+      const response = await fetch(`${API_URL}/api/v1/payments/paystack/popup`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ price_id: priceId })
+        body: JSON.stringify({
+          plan,
+          seats,
+          is_annual: isAnnual
+        })
       });
 
-      const data = await response.json();
-      if (data.checkout_url) {
-        window.location.href = data.checkout_url;
+      const popupData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(popupData.detail || 'Failed to initialize payment');
       }
+
+      // Double-check Paystack is available
+      if (!window.PaystackPop) {
+        throw new Error('Payment system failed to load. Please refresh and try again.');
+      }
+
+      const handler = window.PaystackPop.setup({
+        key: popupData.key,
+        email: popupData.email,
+        amount: popupData.amount,
+        currency: popupData.currency,
+        ref: popupData.ref,
+        metadata: popupData.metadata,
+        onClose: () => {
+          setIsLoading(false);
+        },
+        callback: async (response: { reference: string }) => {
+          // Verify payment on backend
+          try {
+            const verifyResponse = await fetch(
+              `${API_URL}/api/v1/payments/paystack/verify/${response.reference}`,
+              {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+              }
+            );
+
+            if (verifyResponse.ok) {
+              alert('Payment successful! Your account has been upgraded.');
+              window.location.reload();
+            } else {
+              alert('Payment verification failed. Please contact support.');
+            }
+          } catch (err) {
+            console.error('Verification error:', err);
+            alert('Payment verification failed. Please contact support.');
+          } finally {
+            setIsLoading(false);
+          }
+        },
+      });
+
+      handler.openIframe();
     } catch (error) {
       console.error('Failed to create checkout:', error);
-    } finally {
+      alert(error instanceof Error ? error.message : 'Failed to create checkout session. Please try again.');
       setIsLoading(false);
     }
   };

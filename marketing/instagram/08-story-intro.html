@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            width: 1080px;
+            height: 1920px;
+            background: linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 80px;
+            position: relative;
+        }
+        .glow {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(212,175,55,0.3) 0%, transparent 70%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .logo {
+            width: 180px;
+            height: 180px;
+            background: linear-gradient(135deg, #d4af37, #b8962e);
+            border-radius: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 90px;
+            font-weight: bold;
+            color: #0a0a0a;
+            margin-bottom: 60px;
+            box-shadow: 0 40px 100px rgba(212,175,55,0.5);
+            position: relative;
+            z-index: 1;
+        }
+        .headline {
+            font-size: 72px;
+            font-weight: 800;
+            color: #ffffff;
+            text-align: center;
+            line-height: 1.2;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+        }
+        .highlight {
+            background: linear-gradient(135deg, #d4af37, #f4d03f);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subheadline {
+            font-size: 36px;
+            color: #888;
+            text-align: center;
+            margin-bottom: 80px;
+            position: relative;
+            z-index: 1;
+        }
+        .features {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            margin-bottom: 80px;
+            position: relative;
+            z-index: 1;
+        }
+        .feature {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            padding: 24px 40px;
+        }
+        .feature-icon {
+            font-size: 36px;
+        }
+        .feature-text {
+            font-size: 28px;
+            color: #fff;
+        }
+        .cta {
+            background: linear-gradient(135deg, #d4af37, #b8962e);
+            color: #0a0a0a;
+            font-size: 32px;
+            font-weight: 700;
+            padding: 28px 80px;
+            border-radius: 60px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            position: relative;
+            z-index: 1;
+            margin-bottom: 30px;
+        }
+        .swipe-up {
+            color: #888;
+            font-size: 24px;
+            position: relative;
+            z-index: 1;
+        }
+        .arrow {
+            font-size: 36px;
+            animation: bounce 1s infinite;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body>
+    <div class="glow"></div>
+
+    <div class="logo">R</div>
+    <h1 class="headline">Your AI<br><span class="highlight">Meeting Assistant</span></h1>
+    <p class="subheadline">Never miss a detail again</p>
+
+    <div class="features">
+        <div class="feature">
+            <span class="feature-icon">🎙️</span>
+            <span class="feature-text">Real-time transcription</span>
+        </div>
+        <div class="feature">
+            <span class="feature-icon">🤖</span>
+            <span class="feature-text">AI-powered suggestions</span>
+        </div>
+        <div class="feature">
+            <span class="feature-icon">📧</span>
+            <span class="feature-text">Auto email summaries</span>
+        </div>
+    </div>
+
+    <div class="cta">Try Free</div>
+    <div class="swipe-up">
+        <div class="arrow">↑</div>
+        Swipe up to download
+    </div>
+</body>
+</html>

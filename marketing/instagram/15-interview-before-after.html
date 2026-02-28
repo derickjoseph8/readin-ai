@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            width: 1080px;
+            height: 1080px;
+            background: #0a0a0a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            position: relative;
+        }
+        .side {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 50px;
+        }
+        .before-side {
+            background: linear-gradient(135deg, #1a0a0a 0%, #2a1010 100%);
+        }
+        .after-side {
+            background: linear-gradient(135deg, #0a1a0a 0%, #102a10 100%);
+        }
+        .side-label {
+            font-size: 20px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            font-weight: 600;
+            margin-bottom: 30px;
+        }
+        .before-label {
+            color: #ff6b6b;
+        }
+        .after-label {
+            color: #4CAF50;
+        }
+        .emoji {
+            font-size: 100px;
+            margin-bottom: 30px;
+        }
+        .title {
+            font-size: 32px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .points {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .point {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 18px;
+            color: #ccc;
+        }
+        .before-icon {
+            color: #ff6b6b;
+            font-size: 20px;
+        }
+        .after-icon {
+            color: #4CAF50;
+            font-size: 20px;
+        }
+        .divider {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, #d4af37, #b8962e);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            font-weight: bold;
+            color: #0a0a0a;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+        .bottom-cta {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+        }
+        .cta-button {
+            background: linear-gradient(135deg, #d4af37, #b8962e);
+            color: #0a0a0a;
+            font-size: 18px;
+            font-weight: 700;
+            padding: 16px 50px;
+            border-radius: 50px;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+        .website {
+            color: #888;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="side before-side">
+        <div class="side-label before-label">Before</div>
+        <div class="emoji">😰</div>
+        <div class="title">Without ReadIn AI</div>
+        <div class="points">
+            <div class="point"><span class="before-icon">✗</span> Forgetting key points</div>
+            <div class="point"><span class="before-icon">✗</span> Nervous silences</div>
+            <div class="point"><span class="before-icon">✗</span> Rambling answers</div>
+            <div class="point"><span class="before-icon">✗</span> Missing opportunities</div>
+            <div class="point"><span class="before-icon">✗</span> Post-interview regret</div>
+        </div>
+    </div>
+
+    <div class="divider">VS</div>
+
+    <div class="side after-side">
+        <div class="side-label after-label">After</div>
+        <div class="emoji">😎</div>
+        <div class="title">With ReadIn AI</div>
+        <div class="points">
+            <div class="point"><span class="after-icon">✓</span> Clear talking points</div>
+            <div class="point"><span class="after-icon">✓</span> Confident responses</div>
+            <div class="point"><span class="after-icon">✓</span> Structured answers</div>
+            <div class="point"><span class="after-icon">✓</span> Highlight your strengths</div>
+            <div class="point"><span class="after-icon">✓</span> Land the job!</div>
+        </div>
+    </div>
+
+    <div class="bottom-cta">
+        <div class="cta-button">Try Free for 7 Days</div>
+        <div class="website">getreadin.us</div>
+    </div>
+</body>
+</html>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   CreditCard,
   Check,
@@ -19,6 +19,27 @@ import {
 import { useAuth } from '@/lib/hooks/useAuth'
 import { usePermissions } from '@/lib/hooks/usePermissions'
 import { paymentsApi, Invoice, PaymentMethod, SubscriptionStatus } from '@/lib/api/payments'
+import { detectRegion, type Region, PRICING_CONFIG } from '@/lib/geo'
+
+// Declare PaystackPop type
+declare global {
+  interface Window {
+    PaystackPop: {
+      setup: (options: {
+        key: string
+        email: string
+        amount: number
+        currency: string
+        ref: string
+        metadata?: Record<string, unknown>
+        onClose?: () => void
+        callback?: (response: { reference: string }) => void
+      }) => {
+        openIframe: () => void
+      }
+    }
+  }
+}
 
 // Collapsible Section Component for mobile
 function CollapsibleSection({
@@ -63,61 +84,108 @@ function CollapsibleSection({
   )
 }
 
-const plans = [
-  {
-    id: 'free',
-    name: 'Free Trial',
-    price: 0,
-    period: 'for 7 days',
-    features: [
-      '10 AI responses per day',
-      'All video conferencing apps',
-      'Real-time transcription',
-      'Profession-tailored responses',
-    ],
-    cta: 'Current Plan',
-    current: true,
-  },
-  {
-    id: 'premium',
-    name: 'Premium',
-    price: 29.99,
-    period: 'per month',
-    features: [
-      'Unlimited AI responses',
-      'Profession-specific knowledge base',
-      'Smart meeting notes emailed to you',
-      'Action item & commitment tracking',
-      'Pre-meeting briefings & context',
-      'Participant memory across meetings',
-      'Priority support',
-    ],
-    cta: 'Upgrade to Premium',
-    popular: true,
-  },
-  {
-    id: 'team',
-    name: 'Team',
-    price: 19.99,
-    period: 'per user/month',
-    features: [
-      'Everything in Premium',
-      '5 seats included',
-      'Team admin dashboard',
-      'Shared meeting insights',
-      'Centralized billing',
-    ],
-    cta: 'Upgrade to Team',
-  },
-]
+// Dynamic plans based on detected region
+function getPlans(region: Region) {
+  const prices = PRICING_CONFIG[region];
+
+  return [
+    {
+      id: 'free',
+      name: 'Free Trial',
+      price: 0,
+      period: 'for 7 days',
+      features: [
+        '10 AI responses per day',
+        'All video conferencing apps',
+        'Real-time transcription',
+        'Profession-tailored responses',
+      ],
+      cta: 'Current Plan',
+      current: true,
+    },
+    {
+      id: 'premium',
+      name: 'Premium',
+      price: prices.individual.monthly,
+      period: 'per month',
+      features: [
+        'Unlimited AI responses',
+        'Profession-specific knowledge base',
+        'Smart meeting notes emailed to you',
+        'Action item & commitment tracking',
+        'Pre-meeting briefings & context',
+        'Participant memory across meetings',
+        'Priority support',
+      ],
+      cta: 'Upgrade to Premium',
+      popular: true,
+    },
+    {
+      id: 'team',
+      name: 'Team',
+      price: prices.team.monthly,
+      period: 'per user/month',
+      features: [
+        'Everything in Premium',
+        '3 seats minimum',
+        'Team admin dashboard',
+        'Shared meeting insights',
+        'Centralized billing',
+      ],
+      cta: 'Upgrade to Team',
+    },
+  ];
+}
+
+// Helper to load Paystack script
+const loadPaystackScript = (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (typeof window !== 'undefined' && window.PaystackPop) {
+      resolve()
+      return
+    }
+
+    const existingScript = document.querySelector('script[src="https://js.paystack.co/v1/inline.js"]')
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve())
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = 'https://js.paystack.co/v1/inline.js'
+    script.async = false // Load synchronously for faster availability
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error('Failed to load payment system'))
+    document.head.appendChild(script)
+  })
+}
 
 export default function BillingPage() {
-  const { status } = useAuth()
+  const { status, token } = useAuth()
   const { permissions } = usePermissions()
   const [isLoading, setIsLoading] = useState<string | null>(null)
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
   const [subscriptionDetails, setSubscriptionDetails] = useState<SubscriptionStatus | null>(null)
+  const [region, setRegion] = useState<Region>('western')
+  const [paystackLoaded, setPaystackLoaded] = useState(false)
+
+  // Load Paystack script immediately on mount
+  useEffect(() => {
+    loadPaystackScript()
+      .then(() => setPaystackLoaded(true))
+      .catch((err) => console.error('Paystack load error:', err))
+  }, [])
+
+  // Detect region for pricing
+  useEffect(() => {
+    detectRegion()
+      .then((geoData) => setRegion(geoData.region))
+      .catch(() => setRegion('western'))
+  }, [])
+
+  // Get plans based on detected region
+  const plans = getPlans(region)
   const [loadingInvoices, setLoadingInvoices] = useState(false)
 
   const currentPlan = status?.subscription.status === 'active' ? 'premium' :
@@ -154,14 +222,92 @@ export default function BillingPage() {
   const handleUpgrade = async (planId: string) => {
     if (!canManageBilling) return
     setIsLoading(planId)
+
     try {
-      const data = await paymentsApi.createCheckout()
-      if (data.checkout_url) {
-        window.location.href = data.checkout_url
+      // Ensure Paystack is loaded before proceeding
+      if (!window.PaystackPop) {
+        await loadPaystackScript()
       }
+
+      // Map planId to checkout options
+      const plan = planId === 'premium' ? 'individual' : planId === 'team' ? 'starter' : 'individual'
+      const seats = plan === 'individual' ? 1 : 3
+
+      // Get popup data from backend
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://www.getreadin.us'}/api/v1/payments/paystack/popup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ plan, seats, is_annual: false }),
+      })
+
+      const popupData = await response.json()
+      console.log('Paystack popup data:', popupData)
+
+      if (!response.ok) {
+        throw new Error(popupData.detail || 'Failed to initialize payment')
+      }
+
+      // Double-check Paystack is available
+      if (!window.PaystackPop) {
+        throw new Error('Payment system failed to load. Please refresh and try again.')
+      }
+
+      console.log('Paystack popup data received:', popupData)
+
+      // Double-check Paystack is available
+      if (!window.PaystackPop) {
+        throw new Error('Payment system failed to load. Please refresh and try again.')
+      }
+
+      // Use PaystackPop inline checkout
+      const handler = window.PaystackPop.setup({
+        key: popupData.key,
+        email: popupData.email,
+        amount: popupData.amount,
+        currency: popupData.currency,
+        ref: popupData.ref,
+        metadata: popupData.metadata,
+        onClose: function() {
+          console.log('Payment popup closed')
+          setIsLoading(null)
+        },
+        callback: function(paystackResponse: { reference: string }) {
+          console.log('Payment completed:', paystackResponse)
+          // Verify payment on backend
+          fetch(
+            `${process.env.NEXT_PUBLIC_API_URL || 'https://www.getreadin.us'}/api/v1/payments/paystack/verify/${paystackResponse.reference}`,
+            {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` },
+            }
+          )
+            .then(function(verifyResponse) {
+              if (verifyResponse.ok) {
+                alert('Payment successful! Your account has been upgraded.')
+                window.location.reload()
+              } else {
+                alert('Payment verification failed. Please contact support.')
+              }
+            })
+            .catch(function(err) {
+              console.error('Verification error:', err)
+              alert('Payment verification failed. Please contact support.')
+            })
+            .finally(function() {
+              setIsLoading(null)
+            })
+        },
+      })
+
+      // Open the payment popup
+      console.log('Opening Paystack iframe...')
+      handler.openIframe()
     } catch (error) {
       console.error('Upgrade failed:', error)
-    } finally {
+      alert(error instanceof Error ? error.message : 'Failed to create checkout session. Please try again.')
       setIsLoading(null)
     }
   }

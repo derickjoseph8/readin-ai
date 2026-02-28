@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            width: 1080px;
+            height: 1080px;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 60px;
+            position: relative;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        .headline {
+            font-size: 52px;
+            font-weight: 800;
+            color: #ffffff;
+            margin-bottom: 15px;
+        }
+        .highlight {
+            background: linear-gradient(135deg, #d4af37, #f4d03f);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subheadline {
+            font-size: 22px;
+            color: #888;
+        }
+        .use-cases {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+        .use-case {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        .use-case:hover {
+            border-color: #d4af37;
+        }
+        .use-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        .use-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 10px;
+        }
+        .use-desc {
+            font-size: 15px;
+            color: #888;
+            line-height: 1.5;
+        }
+        .bottom {
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+        }
+        .bottom-text {
+            color: #888;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        .cta {
+            background: linear-gradient(135deg, #d4af37, #b8962e);
+            color: #0a0a0a;
+            font-size: 18px;
+            font-weight: 700;
+            padding: 16px 40px;
+            border-radius: 50px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 class="headline">Built for <span class="highlight">Professionals</span></h1>
+        <p class="subheadline">AI assistance tailored to your industry</p>
+    </div>
+
+    <div class="use-cases">
+        <div class="use-case">
+            <div class="use-icon">💼</div>
+            <div class="use-title">Sales Teams</div>
+            <div class="use-desc">Never miss a buying signal. Get real-time suggestions to close deals faster.</div>
+        </div>
+
+        <div class="use-case">
+            <div class="use-icon">⚖️</div>
+            <div class="use-title">Lawyers</div>
+            <div class="use-desc">Perfect for client calls and depositions. Every detail documented accurately.</div>
+        </div>
+
+        <div class="use-case">
+            <div class="use-icon">🏥</div>
+            <div class="use-title">Healthcare</div>
+            <div class="use-desc">Focus on patients, not paperwork. AI handles your documentation.</div>
+        </div>
+
+        <div class="use-case">
+            <div class="use-icon">💻</div>
+            <div class="use-title">Tech Teams</div>
+            <div class="use-desc">Sprint planning, standups, retros - all captured and actionable.</div>
+        </div>
+
+        <div class="use-case">
+            <div class="use-icon">🎓</div>
+            <div class="use-title">Educators</div>
+            <div class="use-desc">Transform lectures and meetings into searchable knowledge.</div>
+        </div>
+
+        <div class="use-case">
+            <div class="use-icon">📊</div>
+            <div class="use-title">Consultants</div>
+            <div class="use-desc">Client calls to actionable reports. Look more professional, work less.</div>
+        </div>
+    </div>
+
+    <div class="bottom">
+        <p class="bottom-text">Works with Zoom, Google Meet, Microsoft Teams & more</p>
+        <div class="cta">getreadin.us</div>
+    </div>
+</body>
+</html>

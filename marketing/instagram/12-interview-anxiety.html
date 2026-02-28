@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            width: 1080px;
+            height: 1350px;
+            background: #0a0a0a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 60px;
+            position: relative;
+        }
+        .top-badge {
+            background: rgba(255,107,107,0.2);
+            border: 1px solid rgba(255,107,107,0.5);
+            color: #ff6b6b;
+            font-size: 18px;
+            font-weight: 600;
+            padding: 12px 30px;
+            border-radius: 30px;
+            display: inline-block;
+            margin-bottom: 40px;
+        }
+        .headline {
+            font-size: 52px;
+            font-weight: 800;
+            color: #ffffff;
+            margin-bottom: 30px;
+            line-height: 1.3;
+        }
+        .highlight {
+            color: #ff6b6b;
+        }
+        .anxiety-list {
+            margin-bottom: 50px;
+        }
+        .anxiety-item {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 20px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .anxiety-icon {
+            font-size: 32px;
+            width: 50px;
+        }
+        .anxiety-text {
+            font-size: 24px;
+            color: #888;
+        }
+        .divider {
+            text-align: center;
+            margin: 40px 0;
+        }
+        .divider-text {
+            background: linear-gradient(135deg, #d4af37, #b8962e);
+            color: #0a0a0a;
+            font-size: 20px;
+            font-weight: 700;
+            padding: 15px 40px;
+            border-radius: 30px;
+            display: inline-block;
+        }
+        .solution-headline {
+            font-size: 48px;
+            font-weight: 800;
+            color: #ffffff;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .solution-highlight {
+            background: linear-gradient(135deg, #d4af37, #f4d03f);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .solution-list {
+            margin-bottom: 40px;
+        }
+        .solution-item {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 20px 0;
+        }
+        .check-icon {
+            width: 50px;
+            height: 50px;
+            background: #4CAF50;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+        .solution-text {
+            font-size: 24px;
+            color: #fff;
+        }
+        .bottom {
+            position: absolute;
+            bottom: 60px;
+            left: 60px;
+            right: 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .logo {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #d4af37, #b8962e);
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            font-weight: bold;
+            color: #0a0a0a;
+        }
+        .brand {
+            font-size: 24px;
+            font-weight: 700;
+            color: #fff;
+        }
+        .cta {
+            background: linear-gradient(135deg, #d4af37, #b8962e);
+            color: #0a0a0a;
+            font-size: 20px;
+            font-weight: 700;
+            padding: 18px 40px;
+            border-radius: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="top-badge">Sound familiar?</div>
+
+    <h1 class="headline">Interview <span class="highlight">Anxiety</span><br>is Real</h1>
+
+    <div class="anxiety-list">
+        <div class="anxiety-item">
+            <span class="anxiety-icon">😰</span>
+            <span class="anxiety-text">"What if I blank out on their question?"</span>
+        </div>
+        <div class="anxiety-item">
+            <span class="anxiety-icon">🤯</span>
+            <span class="anxiety-text">"I never know what to say about my weaknesses"</span>
+        </div>
+        <div class="anxiety-item">
+            <span class="anxiety-icon">😓</span>
+            <span class="anxiety-text">"Technical questions make me panic"</span>
+        </div>
+        <div class="anxiety-item">
+            <span class="anxiety-icon">🙈</span>
+            <span class="anxiety-text">"I forget all my achievements when asked"</span>
+        </div>
+    </div>
+
+    <div class="divider">
+        <span class="divider-text">There's a better way</span>
+    </div>
+
+    <h2 class="solution-headline">Get <span class="solution-highlight">AI Support</span><br>During Your Interview</h2>
+
+    <div class="solution-list">
+        <div class="solution-item">
+            <div class="check-icon">✓</div>
+            <span class="solution-text">Discreet suggestions appear as you need them</span>
+        </div>
+        <div class="solution-item">
+            <div class="check-icon">✓</div>
+            <span class="solution-text">AI listens and provides relevant talking points</span>
+        </div>
+        <div class="solution-item">
+            <div class="check-icon">✓</div>
+            <span class="solution-text">Never forget your key achievements again</span>
+        </div>
+    </div>
+
+    <div class="bottom">
+        <div class="logo-row">
+            <div class="logo">R</div>
+            <span class="brand">ReadIn AI</span>
+        </div>
+        <div class="cta">Try Free</div>
+    </div>
+</body>
+</html>

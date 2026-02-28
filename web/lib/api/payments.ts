@@ -55,15 +55,41 @@ export interface PricingInfo {
 // PAYMENTS API
 // =============================================================================
 
+export interface CheckoutOptions {
+  plan?: 'individual' | 'starter' | 'team'
+  seats?: number
+  is_annual?: boolean
+  success_url?: string
+  cancel_url?: string
+}
+
 export const paymentsApi = {
   /**
-   * Create a checkout session for subscription
+   * Create a Paystack checkout session for subscription
    */
-  async createCheckout(successUrl?: string, cancelUrl?: string): Promise<{ checkout_url: string }> {
-    return apiClient.post('/api/v1/payments/checkout', {
-      success_url: successUrl,
-      cancel_url: cancelUrl,
+  async createCheckout(options: CheckoutOptions = {}): Promise<{ checkout_url: string; authorization_url?: string }> {
+    const {
+      plan = 'individual',
+      seats = 1,
+      is_annual = false,
+      success_url,
+      cancel_url,
+    } = options
+
+    // Use Paystack
+    const response = await apiClient.post<{ authorization_url?: string; checkout_url?: string }>('/api/v1/payments/paystack/checkout', {
+      plan,
+      seats,
+      is_annual,
+      success_url: success_url || `${typeof window !== 'undefined' ? window.location.origin : ''}/dashboard/settings/billing?success=true`,
+      cancel_url: cancel_url || `${typeof window !== 'undefined' ? window.location.origin : ''}/dashboard/settings/billing?cancelled=true`,
     })
+
+    // Paystack returns authorization_url
+    if (response.authorization_url) {
+      return { checkout_url: response.authorization_url, ...response }
+    }
+    return { checkout_url: response.checkout_url || '', ...response }
   },
 
   /**
