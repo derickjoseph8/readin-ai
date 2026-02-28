@@ -5,12 +5,18 @@ on:
     branches: [master, main]
     tags:
       - 'v*'
-  pull_request:
-    branches: [master, main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.6.0)'
+        required: false
+        default: '1.6.0'
 
 permissions:
   contents: write
+
+env:
+  VERSION: ${{ github.event.inputs.version || '1.6.0' }}
 
 jobs:
   build-windows:
@@ -23,21 +29,44 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install pyinstaller pillow
+
+      - name: Create Windows icon
+        run: |
+          python -c "
+          from PIL import Image
+          import os
+          if os.path.exists('assets/icon.png') and not os.path.exists('assets/icon.ico'):
+              img = Image.open('assets/icon.png')
+              img.save('assets/icon.ico', format='ICO', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])
+              print('Created icon.ico')
+          "
 
       - name: Build Windows executable
         run: |
-          pyinstaller --name "ReadInAI-Windows" --onefile --windowed --icon "assets/icon.ico" --add-data "assets;assets" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import numpy --hidden-import anthropic main.py
+          python -m PyInstaller --clean --noconfirm build.spec
+
+      - name: Rename with version
+        run: |
+          mv dist/ReadInAI-Portable.exe dist/ReadInAI-Windows-${{ env.VERSION }}.exe
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ReadInAI-Windows
-          path: dist/ReadInAI-Windows.exe
+          name: ReadInAI-Windows-${{ env.VERSION }}
+          path: dist/ReadInAI-Windows-${{ env.VERSION }}.exe
 
   build-macos:
     runs-on: macos-latest
@@ -48,6 +77,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install system dependencies
         run: |
@@ -61,39 +98,47 @@ jobs:
 
       - name: Create macOS icon
         run: |
-          mkdir -p ReadInAI.iconset
-          sips -z 16 16 assets/icon_512.png --out ReadInAI.iconset/icon_16x16.png
-          sips -z 32 32 assets/icon_512.png --out ReadInAI.iconset/icon_16x16@2x.png
-          sips -z 32 32 assets/icon_512.png --out ReadInAI.iconset/icon_32x32.png
-          sips -z 64 64 assets/icon_512.png --out ReadInAI.iconset/icon_32x32@2x.png
-          sips -z 128 128 assets/icon_512.png --out ReadInAI.iconset/icon_128x128.png
-          sips -z 256 256 assets/icon_512.png --out ReadInAI.iconset/icon_128x128@2x.png
-          sips -z 256 256 assets/icon_512.png --out ReadInAI.iconset/icon_256x256.png
-          sips -z 512 512 assets/icon_512.png --out ReadInAI.iconset/icon_256x256@2x.png
-          sips -z 512 512 assets/icon_512.png --out ReadInAI.iconset/icon_512x512.png
-          cp assets/icon_512.png ReadInAI.iconset/icon_512x512@2x.png
-          iconutil -c icns ReadInAI.iconset -o assets/icon.icns
+          mkdir -p assets/icon.iconset
+          if [ -f "assets/icon.png" ]; then
+            sips -z 16 16 assets/icon.png --out assets/icon.iconset/icon_16x16.png
+            sips -z 32 32 assets/icon.png --out assets/icon.iconset/icon_16x16@2x.png
+            sips -z 32 32 assets/icon.png --out assets/icon.iconset/icon_32x32.png
+            sips -z 64 64 assets/icon.png --out assets/icon.iconset/icon_32x32@2x.png
+            sips -z 128 128 assets/icon.png --out assets/icon.iconset/icon_128x128.png
+            sips -z 256 256 assets/icon.png --out assets/icon.iconset/icon_128x128@2x.png
+            sips -z 256 256 assets/icon.png --out assets/icon.iconset/icon_256x256.png
+            sips -z 512 512 assets/icon.png --out assets/icon.iconset/icon_256x256@2x.png
+            sips -z 512 512 assets/icon.png --out assets/icon.iconset/icon_512x512.png
+            cp assets/icon.png assets/icon.iconset/icon_512x512@2x.png
+            iconutil -c icns assets/icon.iconset -o assets/icon.icns
+            echo "Created icon.icns"
+          fi
 
       - name: Build macOS app
         run: |
-          pyinstaller --name "ReadInAI" --onefile --windowed --icon "assets/icon.icns" --add-data "assets:assets" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import sounddevice --hidden-import numpy --hidden-import anthropic main.py
+          python -m PyInstaller --clean --noconfirm build.spec
 
       - name: Create DMG
         run: |
-          mkdir -p dmg_contents
-          cp -r dist/ReadInAI dmg_contents/ 2>/dev/null || cp dist/ReadInAI dmg_contents/
-          hdiutil create -volname "ReadIn AI" -srcfolder dmg_contents -ov -format UDZO ReadInAI-macOS.dmg
+          if [ -d "dist/ReadInAI.app" ]; then
+            mkdir -p dmg_contents
+            cp -r dist/ReadInAI.app dmg_contents/
+            hdiutil create -volname "ReadIn AI ${{ env.VERSION }}" -srcfolder dmg_contents -ov -format UDZO dist/ReadInAI-macOS-${{ env.VERSION }}.dmg
+          elif [ -f "dist/ReadInAI-Portable" ]; then
+            mkdir -p dmg_contents
+            cp dist/ReadInAI-Portable dmg_contents/ReadInAI
+            chmod +x dmg_contents/ReadInAI
+            hdiutil create -volname "ReadIn AI ${{ env.VERSION }}" -srcfolder dmg_contents -ov -format UDZO dist/ReadInAI-macOS-${{ env.VERSION }}.dmg
+          fi
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ReadInAI-macOS
-          path: |
-            dist/ReadInAI
-            ReadInAI-macOS.dmg
+          name: ReadInAI-macOS-${{ env.VERSION }}
+          path: dist/ReadInAI-macOS-${{ env.VERSION }}.dmg
 
   build-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
@@ -102,15 +147,25 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y portaudio19-dev python3-pyaudio libasound2-dev \
+          sudo apt-get install -y \
+            portaudio19-dev python3-pyaudio libasound2-dev \
             libxcb-xinerama0 libxcb-cursor0 libxkbcommon-x11-0 libegl1 \
             libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
-            libxcb-render-util0 libxcb-shape0 \
+            libxcb-render-util0 libxcb-shape0 libxkbcommon0 \
             ffmpeg libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev \
-            libavfilter-dev libswscale-dev libswresample-dev
+            libavfilter-dev libswscale-dev libswresample-dev \
+            fuse libfuse2
 
       - name: Install Python dependencies
         run: |
@@ -120,16 +175,57 @@ jobs:
 
       - name: Build Linux executable
         run: |
-          pyinstaller --name "ReadInAI-Linux" --onefile --icon "assets/icon.png" --add-data "assets:assets" --hidden-import PyQt6.QtCore --hidden-import PyQt6.QtGui --hidden-import PyQt6.QtWidgets --hidden-import sounddevice --hidden-import numpy --hidden-import anthropic main.py
+          python -m PyInstaller --clean --noconfirm build.spec
 
-      - name: Make executable
-        run: chmod +x dist/ReadInAI-Linux
+      - name: Rename and make executable
+        run: |
+          mv dist/ReadInAI-Portable dist/ReadInAI-Linux-${{ env.VERSION }}.AppImage
+          chmod +x dist/ReadInAI-Linux-${{ env.VERSION }}.AppImage
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ReadInAI-Linux
-          path: dist/ReadInAI-Linux
+          name: ReadInAI-Linux-${{ env.VERSION }}
+          path: dist/ReadInAI-Linux-${{ env.VERSION }}.AppImage
+
+  deploy-to-server:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: |
+          ls -la artifacts/
+          ls -la artifacts/*/
+
+      - name: Deploy to server
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          # Setup SSH
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Upload files
+          for artifact_dir in artifacts/*/; do
+            for file in "$artifact_dir"*; do
+              if [ -f "$file" ]; then
+                echo "Uploading: $file"
+                scp -o StrictHostKeyChecking=no "$file" ubuntu@$SERVER_HOST:/home/ubuntu/readin-ai/downloads/
+              fi
+            done
+          done
+
+          # List uploaded files
+          ssh -o StrictHostKeyChecking=no ubuntu@$SERVER_HOST "ls -la /home/ubuntu/readin-ai/downloads/"
 
   release:
     needs: [build-windows, build-macos, build-linux]
@@ -138,15 +234,18 @@ jobs:
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ReadInAI-Windows/ReadInAI-Windows.exe
-            ReadInAI-macOS/ReadInAI-macOS.dmg
-            ReadInAI-Linux/ReadInAI-Linux
+            artifacts/ReadInAI-Windows-${{ env.VERSION }}/ReadInAI-Windows-${{ env.VERSION }}.exe
+            artifacts/ReadInAI-macOS-${{ env.VERSION }}/ReadInAI-macOS-${{ env.VERSION }}.dmg
+            artifacts/ReadInAI-Linux-${{ env.VERSION }}/ReadInAI-Linux-${{ env.VERSION }}.AppImage
           draft: false
           prerelease: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
