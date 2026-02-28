@@ -21,7 +21,7 @@ DEBUG = os.getenv("DEBUG", "false").lower() == "true" and not IS_PRODUCTION
 API_VERSION = "2.1.0"
 
 # Desktop App Version (for update checker)
-APP_VERSION = "1.4.9"
+APP_VERSION = "1.5.0"
 
 # =============================================================================
 # DATABASE CONFIGURATION
