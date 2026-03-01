@@ -419,7 +419,7 @@ class APIClient:
         try:
             # Try to refresh using the current token
             result = self._request_internal(
-                "POST", "/auth/refresh",
+                "POST", "/api/v1/auth/refresh",
                 timeout_type="auth",
                 skip_token_validation=True
             )
@@ -525,8 +525,18 @@ class APIClient:
 
                 # Handle specific status codes
                 if response.status_code == 401:
-                    self._clear_token()
-                    raise AuthenticationError("Authentication failed. Please log in again.")
+                    # For auth endpoints, 401 means invalid credentials - don't clear token
+                    if endpoint.startswith("/api/v1/auth/"):
+                        try:
+                            error_data = response.json()
+                            error_msg = error_data.get("detail", "Invalid credentials")
+                        except Exception:
+                            error_msg = "Invalid credentials"
+                        raise ValidationError(error_msg)
+                    else:
+                        # For other endpoints, clear token and re-auth
+                        self._clear_token()
+                        raise AuthenticationError("Authentication failed. Please log in again.")
 
                 if response.status_code == 429:
                     retry_after = response.headers.get("Retry-After")
@@ -569,7 +579,7 @@ class APIClient:
         """Make API request with retry logic and token validation."""
 
         # Check token validity before making request (for authenticated endpoints)
-        if self._token and not endpoint.startswith("/auth/"):
+        if self._token and not endpoint.startswith("/api/v1/auth/"):
             is_valid, action = self._validate_token()
 
             if action == "reauth":
@@ -648,14 +658,14 @@ class APIClient:
         if account_type == "business" and company_name:
             data["company_name"] = company_name
 
-        result = self._request("POST", "/auth/register", data, timeout_type="auth")
+        result = self._request("POST", "/api/v1/auth/register", data, timeout_type="auth")
         if "access_token" in result:
             self._save_token(result["access_token"])
         return result
 
     def login(self, email: str, password: str) -> Dict:
         """Login and get token."""
-        result = self._request("POST", "/auth/login", {
+        result = self._request("POST", "/api/v1/auth/login", {
             "email": email,
             "password": password
         }, timeout_type="auth")
