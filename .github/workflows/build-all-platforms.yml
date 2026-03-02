@@ -241,7 +241,7 @@ jobs:
           password: ${{ secrets.SENDGRID_API_KEY }}
           subject: "✅ ReadIn AI Build Successful - v${{ env.VERSION }}"
           to: ${{ secrets.NOTIFICATION_EMAIL }}
-          from: "ReadIn AI CI <noreply@getreadin.ai>"
+          from: "ReadIn AI CI <noreply@getreadin.us>"
           html_body: |
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #d4a853;">✅ ReadIn AI Build Successful</h2>
@@ -305,7 +305,7 @@ jobs:
           password: ${{ secrets.SENDGRID_API_KEY }}
           subject: "❌ ReadIn AI Build Failed - v${{ env.VERSION }}"
           to: ${{ secrets.NOTIFICATION_EMAIL }}
-          from: "ReadIn AI CI <noreply@getreadin.ai>"
+          from: "ReadIn AI CI <noreply@getreadin.us>"
           html_body: |
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #dc3545;">❌ ReadIn AI Build Failed</h2>

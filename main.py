@@ -1233,13 +1233,18 @@ def kill_previous_instances():
     import psutil
 
     current_pid = os.getpid()
-    current_exe = sys.executable.lower()
     killed_count = 0
 
-    # Get the name patterns to look for
-    app_names = ['readin', 'readinai', 'readin-ai', 'readin_ai']
+    # Specific executable names to look for
+    exe_patterns = [
+        'readinai-portable.exe',
+        'readinai-windows',
+        'readinai-setup',
+        'readin-ai',
+        'readinai',
+    ]
 
-    for proc in psutil.process_iter(['pid', 'name', 'exe', 'cmdline']):
+    for proc in psutil.process_iter(['pid', 'name', 'exe']):
         try:
             # Skip current process
             if proc.pid == current_pid:
@@ -1247,33 +1252,24 @@ def kill_previous_instances():
 
             proc_name = (proc.info.get('name') or '').lower()
             proc_exe = (proc.info.get('exe') or '').lower()
-            proc_cmdline = ' '.join(proc.info.get('cmdline') or []).lower()
 
-            # Check if it's a ReadIn AI process
+            # Check if it's a ReadIn AI executable
             is_readin = False
 
-            # Check process name
-            for app_name in app_names:
-                if app_name in proc_name:
+            # Direct name match for executables
+            for pattern in exe_patterns:
+                if pattern in proc_name or pattern in proc_exe:
                     is_readin = True
                     break
 
-            # Check executable path
-            if not is_readin:
-                for app_name in app_names:
-                    if app_name in proc_exe:
-                        is_readin = True
-                        break
-
-            # Check command line (for python scripts)
-            if not is_readin and 'python' in proc_name:
-                if 'main.py' in proc_cmdline and any(app_name in proc_cmdline for app_name in app_names):
-                    is_readin = True
-
             if is_readin:
                 logger.info(f"Killing previous instance: PID {proc.pid} ({proc_name})")
-                proc.kill()
-                proc.wait(timeout=5)
+                try:
+                    proc.terminate()  # Try graceful termination first
+                    proc.wait(timeout=3)
+                except psutil.TimeoutExpired:
+                    proc.kill()  # Force kill if needed
+                    proc.wait(timeout=2)
                 killed_count += 1
 
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired) as e:
@@ -1283,7 +1279,6 @@ def kill_previous_instances():
 
     if killed_count > 0:
         logger.info(f"Killed {killed_count} previous instance(s)")
-        # Brief pause to ensure processes are fully terminated
         import time
         time.sleep(0.5)
 
