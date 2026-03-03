@@ -214,6 +214,10 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts 2>/dev/null
 
+          # Remove old version files (keep only current version)
+          echo "Cleaning up old version files..."
+          ssh -o StrictHostKeyChecking=no ubuntu@$SERVER_HOST "cd /home/ubuntu/readin-ai/downloads && ls -la && rm -f ReadInAI-*.exe ReadInAI-*.dmg ReadInAI-*.AppImage 2>/dev/null || true"
+
           # Upload files
           for artifact_dir in artifacts/*/; do
             for file in "$artifact_dir"*; do
