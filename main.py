@@ -709,6 +709,8 @@ class ReadInApp:
 
         self.audio_capture.stop()
         self.transcriber.stop()
+        # Unload Whisper model to free memory when not listening
+        self.transcriber.unload_model()
         self.ai_assistant.clear_context()
         with self._overlay_lock:
             self.overlay.set_listening_state(False)
@@ -1081,9 +1083,10 @@ class ReadInApp:
         except Exception as e:
             logger.debug(f"Error stopping audio capture: {e}")
 
-        # Stop transcriber
+        # Stop transcriber and unload model to free memory
         try:
             self.transcriber.stop()
+            self.transcriber.unload_model()
         except Exception as e:
             logger.debug(f"Error stopping transcriber: {e}")
 
@@ -1244,7 +1247,13 @@ def kill_previous_instances():
         'readinai',
     ]
 
-    for proc in psutil.process_iter(['pid', 'name', 'exe']):
+    # Script patterns to check in cmdline (for Python script execution)
+    script_patterns = [
+        'main.py',
+        'readin-ai',
+    ]
+
+    for proc in psutil.process_iter(['pid', 'name', 'exe', 'cmdline']):
         try:
             # Skip current process
             if proc.pid == current_pid:
@@ -1252,6 +1261,7 @@ def kill_previous_instances():
 
             proc_name = (proc.info.get('name') or '').lower()
             proc_exe = (proc.info.get('exe') or '').lower()
+            proc_cmdline = proc.info.get('cmdline') or []
 
             # Check if it's a ReadIn AI executable
             is_readin = False
@@ -1261,6 +1271,14 @@ def kill_previous_instances():
                 if pattern in proc_name or pattern in proc_exe:
                     is_readin = True
                     break
+
+            # Check for Python running main.py (development mode)
+            if not is_readin and ('python' in proc_name or 'pythonw' in proc_name):
+                cmdline_str = ' '.join(proc_cmdline).lower()
+                for pattern in script_patterns:
+                    if pattern in cmdline_str and 'readin' in cmdline_str:
+                        is_readin = True
+                        break
 
             if is_readin:
                 logger.info(f"Killing previous instance: PID {proc.pid} ({proc_name})")
