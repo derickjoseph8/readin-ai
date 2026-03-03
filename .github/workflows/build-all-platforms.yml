@@ -8,15 +8,15 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (e.g., 1.5.2)'
+        description: 'Version number (e.g., 1.5.3)'
         required: false
-        default: '1.5.2'
+        default: '1.5.3'
 
 permissions:
   contents: write
 
 env:
-  VERSION: ${{ github.event.inputs.version || '1.5.2' }}
+  VERSION: ${{ github.event.inputs.version || '1.5.3' }}
 
 jobs:
   build-windows:

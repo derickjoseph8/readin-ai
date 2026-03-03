@@ -18,8 +18,8 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 API_BASE_URL = os.getenv("API_BASE_URL", "https://www.getreadin.us")
 
 # Whisper Configuration
-# Options: tiny.en (fastest), base.en (balanced), small.en (accurate)
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base.en")
+# Options: tiny.en (fastest), base.en (balanced), small.en (most accurate)
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small.en")
 
 # Claude Configuration
 RESPONSE_MODEL = "claude-sonnet-4-20250514"  # Fast responses
@@ -166,7 +166,7 @@ OVERLAY_HEIGHT = 300
 OVERLAY_OPACITY = 0.92
 
 # Version info
-APP_VERSION = "1.5.2"
+APP_VERSION = "1.5.3"
 APP_NAME = "ReadIn AI"
 UPDATE_CHECK_URL = "https://www.getreadin.us/api/v1/version"
 GITHUB_RELEASES_URL = "https://github.com/derickjoseph8/readin-ai/releases"
