@@ -305,6 +305,55 @@ class OverlayWindow(QWidget):
         scroll_area.setWidget(self.response_label)
         container_layout.addWidget(scroll_area, 1)
 
+        # Feature tip banner (dismissible) - shown when speaker diarization not installed
+        self.feature_tip_container = QWidget()
+        feature_tip_layout = QHBoxLayout(self.feature_tip_container)
+        feature_tip_layout.setContentsMargins(8, 6, 8, 6)
+        feature_tip_layout.setSpacing(8)
+
+        self.feature_tip_label = QLabel("Know WHO is speaking! Enable Speaker Diarization in Settings > Speakers")
+        self.feature_tip_label.setStyleSheet("""
+            color: #f9e2af;
+            font-size: 10px;
+            font-weight: 500;
+        """)
+        self.feature_tip_label.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.feature_tip_label.mousePressEvent = lambda e: self.settings_requested.emit()
+        feature_tip_layout.addWidget(self.feature_tip_label)
+
+        feature_tip_layout.addStretch()
+
+        # Dismiss button for feature tip
+        self.feature_tip_dismiss = QPushButton("×")
+        self.feature_tip_dismiss.setFixedSize(18, 18)
+        self.feature_tip_dismiss.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #6c7086;
+                border: none;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                color: #f9e2af;
+            }
+        """)
+        self.feature_tip_dismiss.setToolTip("Dismiss this tip")
+        self.feature_tip_dismiss.clicked.connect(self._dismiss_feature_tip)
+        feature_tip_layout.addWidget(self.feature_tip_dismiss)
+
+        self.feature_tip_container.setStyleSheet("""
+            QWidget {
+                background-color: rgba(249, 226, 175, 0.1);
+                border: 1px solid rgba(249, 226, 175, 0.3);
+                border-radius: 6px;
+            }
+        """)
+
+        # Check if tip should be shown
+        self._check_feature_tip_visibility()
+        container_layout.addWidget(self.feature_tip_container)
+
         # Bottom bar with hint
         bottom_bar = QHBoxLayout()
 
@@ -1063,3 +1112,47 @@ class OverlayWindow(QWidget):
         """Handle close event - hide instead of close."""
         event.ignore()
         self.hide()
+
+    # ==================== Feature Tips ====================
+
+    def _check_feature_tip_visibility(self):
+        """Check if the feature tip should be shown."""
+        if not self._settings:
+            self.feature_tip_container.hide()
+            return
+
+        # Check if user has dismissed the tip
+        tip_dismissed = self._settings.get("diarization_tip_dismissed", False)
+        if tip_dismissed:
+            self.feature_tip_container.hide()
+            return
+
+        # Check if diarization is already enabled/installed
+        diarization_enabled = self._settings.get("speaker_diarization_enabled", False)
+        if diarization_enabled:
+            self.feature_tip_container.hide()
+            return
+
+        # Check if pyannote.audio is installed
+        try:
+            import pyannote.audio
+            # If installed, check if they have a token set
+            hf_token = self._settings.get("huggingface_token", "")
+            if hf_token:
+                self.feature_tip_container.hide()
+                return
+        except ImportError:
+            pass  # Not installed, show the tip
+
+        # Show the tip
+        self.feature_tip_container.show()
+
+    def _dismiss_feature_tip(self):
+        """Dismiss the feature tip and save preference."""
+        self.feature_tip_container.hide()
+        if self._settings:
+            self._settings.set("diarization_tip_dismissed", True)
+
+    def refresh_feature_tip(self):
+        """Refresh the feature tip visibility (call after settings change)."""
+        self._check_feature_tip_visibility()

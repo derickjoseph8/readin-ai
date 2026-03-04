@@ -519,17 +519,32 @@ class SettingsWindow(QDialog):
         token_group = QGroupBox("HuggingFace API Token")
         token_layout = QVBoxLayout(token_group)
 
-        # Installation notice
+        # Installation notice with install button
+        install_frame = QFrame()
+        install_frame.setStyleSheet(
+            "background-color: #3d3000; border-radius: 6px; padding: 4px;"
+        )
+        install_frame_layout = QVBoxLayout(install_frame)
+        install_frame_layout.setContentsMargins(10, 10, 10, 10)
+
         install_notice = QLabel(
-            "⚠️ OPTIONAL INSTALL REQUIRED: Speaker diarization is not included by default.\n"
-            "To enable this feature, run: pip install pyannote.audio torch"
+            "⚠️ OPTIONAL INSTALL REQUIRED\n"
+            "Speaker diarization requires additional components (~2GB)."
         )
-        install_notice.setStyleSheet(
-            "color: #ffa500; font-size: 11px; font-weight: bold; "
-            "background-color: #3d3000; padding: 8px; border-radius: 4px; margin-bottom: 8px;"
-        )
+        install_notice.setStyleSheet("color: #ffa500; font-size: 11px; font-weight: bold;")
         install_notice.setWordWrap(True)
-        token_layout.addWidget(install_notice)
+        install_frame_layout.addWidget(install_notice)
+
+        self.install_diarization_btn = QPushButton("📦 Install Speaker Diarization")
+        self.install_diarization_btn.setStyleSheet(
+            "QPushButton { background-color: #d4a000; color: #1a1a1a; font-weight: bold; "
+            "padding: 8px 16px; border-radius: 4px; } "
+            "QPushButton:hover { background-color: #e6b000; }"
+        )
+        self.install_diarization_btn.clicked.connect(self._run_diarization_installer)
+        install_frame_layout.addWidget(self.install_diarization_btn)
+
+        token_layout.addWidget(install_frame)
 
         token_desc = QLabel(
             "After installing, you'll also need a HuggingFace token:\n"
@@ -623,6 +638,78 @@ class SettingsWindow(QDialog):
         else:
             self.hf_token_input.setEchoMode(QLineEdit.EchoMode.Password)
             self.show_token_btn.setText("Show")
+
+    def _run_diarization_installer(self):
+        """Run the speaker diarization installer script."""
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        # Find the installer script
+        if sys.platform == "win32":
+            script_name = "install_speaker_diarization.bat"
+        else:
+            script_name = "install_speaker_diarization.sh"
+
+        # Look for script in app directory
+        app_dir = Path(__file__).parent.parent.parent
+        script_path = app_dir / script_name
+
+        if not script_path.exists():
+            # Try current working directory
+            script_path = Path.cwd() / script_name
+
+        if not script_path.exists():
+            QMessageBox.warning(
+                self,
+                "Installer Not Found",
+                f"Could not find {script_name}.\n\n"
+                "You can manually install by running:\n"
+                "pip install pyannote.audio torch\n\n"
+                "Or download the installer from the ReadIn AI website."
+            )
+            return
+
+        try:
+            if sys.platform == "win32":
+                # Open in a new command prompt window
+                subprocess.Popen(
+                    ["cmd", "/c", "start", "cmd", "/k", str(script_path)],
+                    shell=True
+                )
+            else:
+                # Make script executable and run in terminal
+                script_path.chmod(0o755)
+                if sys.platform == "darwin":
+                    # macOS - open in Terminal
+                    subprocess.Popen([
+                        "osascript", "-e",
+                        f'tell app "Terminal" to do script "{script_path}"'
+                    ])
+                else:
+                    # Linux - try common terminals
+                    for terminal in ["gnome-terminal", "xterm", "konsole"]:
+                        try:
+                            subprocess.Popen([terminal, "-e", str(script_path)])
+                            break
+                        except FileNotFoundError:
+                            continue
+
+            QMessageBox.information(
+                self,
+                "Installer Started",
+                "The installer has been launched in a new window.\n\n"
+                "Please follow the instructions there.\n"
+                "After installation completes, restart ReadIn AI."
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to launch installer: {e}\n\n"
+                "You can manually install by running:\n"
+                "pip install pyannote.audio torch"
+            )
 
     def _open_speaker_manager(self):
         """Open the speaker manager dialog."""
