@@ -90,7 +90,8 @@ jobs:
           safety check --output json > safety-report.json || true
           # Run check with ignored vulnerabilities:
           # 64459, 64396: ecdsa side-channel vulnerabilities - affects all versions, no fix available
-          safety check --ignore 64459 --ignore 64396
+          # 85102: transformers deserialization - only affects loading untrusted model files (we use trusted HuggingFace models)
+          safety check --ignore 64459 --ignore 64396 --ignore 85102
 
       - name: Upload security reports
         uses: actions/upload-artifact@v4

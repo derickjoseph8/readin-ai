@@ -15,7 +15,7 @@ websockets>=14.0,<15.0
 
 # ML/AI Services
 anthropic>=0.84.0
-sentence-transformers>=2.2.0,<3.0.0  # For semantic search embeddings
+sentence-transformers>=3.1.0,<4.0.0  # For semantic search embeddings (>=3.1.0 for security fix)
 numpy>=1.24.0,<2.0.0  # Required for embedding calculations
 
 # Email Service
