@@ -519,8 +519,20 @@ class SettingsWindow(QDialog):
         token_group = QGroupBox("HuggingFace API Token")
         token_layout = QVBoxLayout(token_group)
 
+        # Installation notice
+        install_notice = QLabel(
+            "⚠️ OPTIONAL INSTALL REQUIRED: Speaker diarization is not included by default.\n"
+            "To enable this feature, run: pip install pyannote.audio torch"
+        )
+        install_notice.setStyleSheet(
+            "color: #ffa500; font-size: 11px; font-weight: bold; "
+            "background-color: #3d3000; padding: 8px; border-radius: 4px; margin-bottom: 8px;"
+        )
+        install_notice.setWordWrap(True)
+        token_layout.addWidget(install_notice)
+
         token_desc = QLabel(
-            "Speaker diarization uses pyannote.audio which requires a HuggingFace token.\n"
+            "After installing, you'll also need a HuggingFace token:\n"
             "1. Create an account at huggingface.co\n"
             "2. Go to Settings > Access Tokens > New token\n"
             "3. Accept the license at huggingface.co/pyannote/speaker-diarization-3.1"
