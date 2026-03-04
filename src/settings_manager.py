@@ -71,6 +71,27 @@ class SettingsManager:
         "diarization_max_speakers": 10,
         "diarization_interval": 30.0,  # Seconds between diarization updates
         "speaker_mapping": {},  # Persistent mapping of speaker IDs to custom names
+
+        # AI Persona settings
+        "ai_persona": "professional",  # Default persona key
+        "custom_persona_prompt": "",  # Custom persona prompt when ai_persona is "custom"
+
+        # Translation settings
+        "translation_enabled": False,  # Real-time translation disabled by default
+        "translation_target_language": "en",  # Target language for translations
+        "translation_show_original": True,  # Show original text alongside translation
+
+        # Offline mode settings
+        "offline_mode_enabled": True,  # Enable offline data storage
+        "sync_interval_minutes": 1,  # Sync interval in minutes (1-60)
+        "max_offline_storage_mb": 500,  # Maximum offline storage in MB (100-2000)
+        "auto_sync_on_startup": True,  # Automatically sync when app starts
+        "sync_on_meeting_end": True,  # Sync data when meeting ends
+
+        # Voice feedback settings
+        "voice_feedback_enabled": False,  # Speak AI responses aloud
+        "voice_feedback_rate": 150,  # Speech rate (words per minute, 50-300)
+        "voice_feedback_volume": 0.8,  # Speech volume (0.0-1.0)
     }
 
     # Pre-defined sensitive app categories for Privacy Mode
@@ -273,6 +294,38 @@ Emphasize strategic thinking and leadership perspective."""
         ("claude-3-haiku-20240307", "Claude 3 Haiku (Fastest)"),
     ]
 
+    # Supported translation languages (code, English name, native name)
+    TRANSLATION_LANGUAGES = [
+        ("en", "English", "English"),
+        ("es", "Spanish", "Espanol"),
+        ("fr", "French", "Francais"),
+        ("de", "German", "Deutsch"),
+        ("it", "Italian", "Italiano"),
+        ("pt", "Portuguese", "Portugues"),
+        ("nl", "Dutch", "Nederlands"),
+        ("pl", "Polish", "Polski"),
+        ("ru", "Russian", "Russkiy"),
+        ("ja", "Japanese", "Nihongo"),
+        ("zh", "Chinese", "Zhongwen"),
+        ("ko", "Korean", "Hangugeo"),
+        ("ar", "Arabic", "Al-Arabiyyah"),
+        ("hi", "Hindi", "Hindi"),
+        ("tr", "Turkish", "Turkce"),
+        ("vi", "Vietnamese", "Tieng Viet"),
+        ("th", "Thai", "Phasa Thai"),
+        ("id", "Indonesian", "Bahasa Indonesia"),
+        ("uk", "Ukrainian", "Ukrayinska"),
+        ("cs", "Czech", "Cestina"),
+        ("sv", "Swedish", "Svenska"),
+        ("da", "Danish", "Dansk"),
+        ("fi", "Finnish", "Suomi"),
+        ("no", "Norwegian", "Norsk"),
+        ("el", "Greek", "Ellinika"),
+        ("he", "Hebrew", "Ivrit"),
+        ("ro", "Romanian", "Romana"),
+        ("hu", "Hungarian", "Magyar"),
+    ]
+
     _instance = None
     _lock = Lock()
 
@@ -420,6 +473,10 @@ Emphasize strategic thinking and leadership perspective."""
             "overlay_width": (200, 2000),
             "overlay_height": (150, 1500),
             "context_window_size": (1, 20),
+            "sync_interval_minutes": (1, 60),
+            "max_offline_storage_mb": (100, 2000),
+            "voice_feedback_rate": (50, 300),
+            "voice_feedback_volume": (0.0, 1.0),
         }
 
         if key in numeric_constraints and isinstance(value, (int, float)):
@@ -450,6 +507,7 @@ Emphasize strategic thinking and leadership perspective."""
         max_lengths = {
             "audio_device_name": 256,
             "custom_system_prompt": 10000,
+            "custom_persona_prompt": 5000,
             "export_directory": 500,
             "shortcut_toggle_listen": 50,
             "shortcut_show_hide": 50,
@@ -506,6 +564,17 @@ Emphasize strategic thinking and leadership perspective."""
             return self.PROMPT_PRESETS["interview_coach"]["prompt"]
 
         return self.PROMPT_PRESETS.get(preset, self.PROMPT_PRESETS["interview_coach"])["prompt"]
+
+    def get_persona_prompt(self) -> str:
+        """Get the current AI persona prompt.
+
+        Returns:
+            The system prompt for the selected persona.
+        """
+        from ai_personas import get_persona_prompt
+        persona = self.get("ai_persona", "professional")
+        custom_prompt = self.get("custom_persona_prompt", "")
+        return get_persona_prompt(persona, custom_prompt)
 
     def get_all(self) -> Dict[str, Any]:
         """Get all current settings."""

@@ -70,6 +70,8 @@ from src.ui.first_run_wizard import FirstRunWizard
 from src.browser_bridge import BrowserBridge
 from src.shortcut_creator import create_desktop_shortcut, shortcut_exists
 from src.voice_commands import VoiceCommandHandler, is_voice_commands_available
+from src.services.translation_service import TranslationService
+from src.services.voice_feedback import VoiceFeedback, is_voice_feedback_available
 
 
 class SignalBridge(QObject):
@@ -97,6 +99,8 @@ class SignalBridge(QObject):
     # Voice command signals
     voice_command_recognized = pyqtSignal(str)  # command name
     voice_wake_word_detected = pyqtSignal()
+    # Translation signal
+    translation_ready = pyqtSignal(str, str, bool)  # original, translated, show_original
 
 
 class ReadInApp:
@@ -130,6 +134,8 @@ class ReadInApp:
         # Voice command signals
         self.signals.voice_command_recognized.connect(self._on_voice_command)
         self.signals.voice_wake_word_detected.connect(self._on_voice_wake_word)
+        # Translation signal
+        self.signals.translation_ready.connect(self._on_translation_ready)
 
         # Components
         self.overlay = OverlayWindow()
@@ -222,6 +228,14 @@ class ReadInApp:
         self.voice_command_handler = None
         self._setup_voice_commands()
 
+        # Initialize translation service
+        self.translation_service = None
+        self._setup_translation_service()
+
+        # Initialize voice feedback service
+        self.voice_feedback = None
+        self._setup_voice_feedback()
+
         # Thread safety locks for shared state
         self._listening_lock = threading.Lock()  # Protects _listening state
         self._overlay_lock = threading.Lock()  # Protects overlay state changes
@@ -236,6 +250,11 @@ class ReadInApp:
         self.settings.on_change("transcription_language", self._on_language_changed)
         self.settings.on_change("audio_device_index", self._on_audio_device_changed)
         self.settings.on_change("voice_commands_enabled", self._on_voice_commands_changed)
+        self.settings.on_change("translation_enabled", self._on_translation_enabled_changed)
+        self.settings.on_change("translation_target_language", self._on_translation_language_changed)
+        self.settings.on_change("voice_feedback_enabled", self._on_voice_feedback_enabled_changed)
+        self.settings.on_change("voice_feedback_rate", self._on_voice_feedback_rate_changed)
+        self.settings.on_change("voice_feedback_volume", self._on_voice_feedback_volume_changed)
 
     def _apply_ai_settings(self):
         """Apply AI-related settings."""
@@ -369,6 +388,115 @@ class ReadInApp:
             self._start_voice_commands()
         else:
             self._stop_voice_commands()
+
+    def _on_translation_enabled_changed(self, key: str, enabled: bool, old_value):
+        """Handle translation enabled setting change."""
+        if self.translation_service:
+            self.translation_service.set_enabled(enabled)
+            self.overlay.set_translation_enabled(enabled)
+            logger.info(f"Translation {'enabled' if enabled else 'disabled'}")
+
+    def _on_translation_language_changed(self, key: str, language: str, old_value):
+        """Handle translation target language change."""
+        if self.translation_service:
+            self.translation_service.set_target_language(language)
+            self.translation_service.clear_cache()  # Clear cache when language changes
+            logger.info(f"Translation target language set to: {language}")
+
+    def _setup_translation_service(self):
+        """Setup translation service."""
+        self.translation_service = TranslationService()
+
+        # Configure from settings
+        self.translation_service.set_enabled(
+            self.settings.get("translation_enabled", False)
+        )
+        self.translation_service.set_target_language(
+            self.settings.get("translation_target_language", "en")
+        )
+        self.translation_service.set_show_original(
+            self.settings.get("translation_show_original", True)
+        )
+
+        # Add listener for translation results
+        def on_translation_result(result):
+            show_original = self.settings.get("translation_show_original", True)
+            self.signals.translation_ready.emit(
+                result.original_text,
+                result.translated_text,
+                show_original
+            )
+
+        self.translation_service.add_listener(on_translation_result)
+
+        # Start the service
+        if self.translation_service.start():
+            logger.info("Translation service initialized")
+        else:
+            logger.warning("Translation service failed to start")
+
+    def _on_translation_ready(self, original: str, translated: str, show_original: bool):
+        """Handle translation result on main thread."""
+        self.overlay.set_translation(original, translated, show_original)
+
+    def _setup_voice_feedback(self):
+        """Setup voice feedback service."""
+        if not is_voice_feedback_available():
+            logger.info("Voice feedback not available - pyttsx3 not installed")
+            return
+
+        self.voice_feedback = VoiceFeedback(
+            rate=self.settings.get("voice_feedback_rate", 150),
+            volume=self.settings.get("voice_feedback_volume", 0.8),
+            on_speech_started=self._on_voice_speech_started,
+            on_speech_finished=self._on_voice_speech_finished,
+            on_error=self._on_voice_feedback_error,
+        )
+
+        # Set enabled state from settings
+        enabled = self.settings.get("voice_feedback_enabled", False)
+        self.voice_feedback.set_enabled(enabled)
+
+        # Start the service if enabled
+        if enabled:
+            if self.voice_feedback.start():
+                logger.info("Voice feedback service initialized and started")
+            else:
+                logger.warning("Voice feedback service failed to start")
+        else:
+            logger.info("Voice feedback service initialized (disabled)")
+
+    def _on_voice_speech_started(self):
+        """Handle voice speech started."""
+        logger.debug("Voice feedback: speech started")
+
+    def _on_voice_speech_finished(self):
+        """Handle voice speech finished."""
+        logger.debug("Voice feedback: speech finished")
+
+    def _on_voice_feedback_error(self, error: str):
+        """Handle voice feedback errors."""
+        logger.error(f"Voice feedback error: {error}")
+
+    def _on_voice_feedback_enabled_changed(self, key: str, enabled: bool, old_value):
+        """Handle voice feedback enabled setting change."""
+        if self.voice_feedback:
+            self.voice_feedback.set_enabled(enabled)
+            if enabled and not self.voice_feedback.is_running:
+                self.voice_feedback.start()
+            logger.info(f"Voice feedback {'enabled' if enabled else 'disabled'}")
+
+    def _on_voice_feedback_rate_changed(self, key: str, rate: int, old_value):
+        """Handle voice feedback rate setting change."""
+        if self.voice_feedback:
+            self.voice_feedback.set_rate(rate)
+            logger.debug(f"Voice feedback rate set to {rate}")
+
+    def _on_voice_feedback_volume_changed(self, key: str, volume: float, old_value):
+        """Handle voice feedback volume setting change."""
+        if self.voice_feedback:
+            self.voice_feedback.set_volume(volume)
+            logger.debug(f"Voice feedback volume set to {volume}")
 
     def _setup_voice_commands(self):
         """Setup voice command handler."""
@@ -1145,6 +1273,14 @@ class ReadInApp:
         self.overlay.set_heard_text(text)
         self.ai_assistant.generate_response(text)
 
+        # Send to translation service if enabled
+        if self.translation_service and self.translation_service.is_enabled:
+            # Get source language from transcription settings
+            source_lang = self.settings.get("language", "en")
+            if source_lang == "auto":
+                source_lang = None  # Let translation service auto-detect
+            self.translation_service.translate(text, source_lang)
+
     def _on_transcription_with_speaker(self, text: str, speaker_id: str, speaker_name: str):
         """Handle transcription with speaker information from diarization."""
         if not text.strip():
@@ -1163,12 +1299,23 @@ class ReadInApp:
         self.overlay.set_heard_text(text, speaker_id, speaker_name)
         self.ai_assistant.generate_response(text)
 
+        # Send to translation service if enabled
+        if self.translation_service and self.translation_service.is_enabled:
+            source_lang = self.settings.get("language", "en")
+            if source_lang == "auto":
+                source_lang = None
+            self.translation_service.translate(text, source_lang)
+
     def _on_streaming_chunk(self, chunk: str):
         self.overlay.append_response_text(chunk)
 
     def _on_ai_response(self, heard_text: str, response: str):
         logger.debug(f"Response: {response}")
         self.overlay.set_response_text(response)
+
+        # Speak the response aloud if voice feedback is enabled
+        if self.voice_feedback and self.voice_feedback.is_enabled:
+            self.voice_feedback.speak(response)
 
         # Save conversation to meeting session with speaker info
         if self.meeting_session.is_active:
@@ -1363,6 +1510,20 @@ class ReadInApp:
             self._stop_voice_commands()
         except Exception as e:
             logger.debug(f"Error stopping voice commands: {e}")
+
+        # Stop translation service
+        try:
+            if self.translation_service:
+                self.translation_service.stop()
+        except Exception as e:
+            logger.debug(f"Error stopping translation service: {e}")
+
+        # Stop voice feedback service
+        try:
+            if self.voice_feedback:
+                self.voice_feedback.stop()
+        except Exception as e:
+            logger.debug(f"Error stopping voice feedback: {e}")
 
         # Stop audio capture completely
         try:

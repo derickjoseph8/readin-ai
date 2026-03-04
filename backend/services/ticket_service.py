@@ -9,7 +9,10 @@ from sqlalchemy import func, and_, or_
 
 from models import (
     SupportTeam, TeamMember, SupportTicket, TicketMessage,
-    SLAConfig, AgentStatus, ChatSession, User, CATEGORY_TEAM_MAP
+    SLAConfig, AgentStatus, ChatSession, User, Organization, CATEGORY_TEAM_MAP
+)
+from services.business_hours_service import (
+    BusinessHoursService, BusinessHoursConfig, create_business_hours_service
 )
 
 
@@ -53,12 +56,34 @@ class TicketService:
             )
         ).first()
 
+    def get_organization_for_user(self, user_id: int) -> Optional[Organization]:
+        """Get the organization for a user."""
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if user and user.organization_id:
+            return self.db.query(Organization).filter(
+                Organization.id == user.organization_id
+            ).first()
+        return None
+
     def calculate_sla_deadlines(
         self,
         priority: str,
-        created_at: Optional[datetime] = None
+        created_at: Optional[datetime] = None,
+        organization: Optional[Organization] = None,
+        user_id: Optional[int] = None
     ) -> Dict[str, Optional[datetime]]:
-        """Calculate SLA deadlines for a ticket."""
+        """
+        Calculate SLA deadlines for a ticket using business hours.
+
+        Args:
+            priority: Ticket priority level (urgent, high, medium, low)
+            created_at: Ticket creation time (defaults to now)
+            organization: Organization for business hours config
+            user_id: User ID to look up organization if not provided
+
+        Returns:
+            Dict with first_response_due and resolution_due datetimes
+        """
         sla = self.get_sla_config(priority)
         created = created_at or datetime.utcnow()
 
@@ -68,11 +93,41 @@ class TicketService:
                 "resolution_due": None
             }
 
-        # Calculate business hours (simplified - 24/7 for now)
-        # TODO: Implement business hours calculation
+        # Get organization for business hours configuration
+        org = organization
+        if not org and user_id:
+            org = self.get_organization_for_user(user_id)
+
+        # Check if organization uses business hours for SLA
+        use_business_hours = True
+        if org and hasattr(org, 'use_business_hours_for_sla'):
+            use_business_hours = org.use_business_hours_for_sla
+
+        if not use_business_hours or not org:
+            # Fall back to 24/7 calendar time calculation
+            return {
+                "first_response_due": created + timedelta(minutes=sla.first_response_minutes),
+                "resolution_due": created + timedelta(minutes=sla.resolution_minutes)
+            }
+
+        # Use business hours calculation
+        business_hours_service = create_business_hours_service(organization=org)
+
+        first_response_due = business_hours_service.get_sla_deadline(
+            start=created,
+            sla_minutes=sla.first_response_minutes,
+            use_business_hours=True
+        )
+
+        resolution_due = business_hours_service.get_sla_deadline(
+            start=created,
+            sla_minutes=sla.resolution_minutes,
+            use_business_hours=True
+        )
+
         return {
-            "first_response_due": created + timedelta(minutes=sla.first_response_minutes),
-            "resolution_due": created + timedelta(minutes=sla.resolution_minutes)
+            "first_response_due": first_response_due,
+            "resolution_due": resolution_due
         }
 
     def find_available_agent(self, team_id: int) -> Optional[TeamMember]:
@@ -140,7 +195,7 @@ class TicketService:
     ) -> SupportTicket:
         """Create a new support ticket with auto-routing."""
         ticket_number = self.generate_ticket_number()
-        sla_deadlines = self.calculate_sla_deadlines(priority)
+        sla_deadlines = self.calculate_sla_deadlines(priority, user_id=user_id)
 
         ticket = SupportTicket(
             ticket_number=ticket_number,

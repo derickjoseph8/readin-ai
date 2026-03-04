@@ -271,13 +271,82 @@ def _get_token_expiry(token: str) -> Optional[datetime]:
 
 
 class APIClient:
-    """Client for ReadIn AI backend API."""
+    """Client for ReadIn AI backend API with offline support."""
 
     def __init__(self):
         self._token: Optional[str] = None
         self._user_status: Optional[Dict] = None
         self._request_signing_key: Optional[bytes] = None
+        self._is_offline: bool = False
+        self._offline_storage = None
+        self._sync_manager = None
+        self._connectivity_listeners: List[callable] = []
         self._load_token()
+
+    def enable_offline_mode(self, offline_storage=None, sync_manager=None):
+        """
+        Enable offline mode with local storage and sync.
+
+        Args:
+            offline_storage: OfflineStorage instance for local data
+            sync_manager: SyncManager instance for synchronization
+        """
+        self._offline_storage = offline_storage
+        self._sync_manager = sync_manager
+
+        if sync_manager:
+            sync_manager.set_api_client(self)
+            sync_manager.set_offline_storage(offline_storage)
+            sync_manager.add_listener("connectivity_changed", self._on_connectivity_changed)
+
+    def _on_connectivity_changed(self, status):
+        """Handle connectivity status changes."""
+        from services.sync_manager import ConnectivityStatus
+        self._is_offline = status != ConnectivityStatus.ONLINE
+
+        for listener in self._connectivity_listeners:
+            try:
+                listener(not self._is_offline)
+            except Exception:
+                pass
+
+    def add_connectivity_listener(self, callback: callable):
+        """Add listener for connectivity changes."""
+        self._connectivity_listeners.append(callback)
+
+    def remove_connectivity_listener(self, callback: callable):
+        """Remove connectivity listener."""
+        if callback in self._connectivity_listeners:
+            self._connectivity_listeners.remove(callback)
+
+    @property
+    def is_offline(self) -> bool:
+        """Check if currently in offline mode."""
+        return self._is_offline
+
+    @property
+    def has_offline_support(self) -> bool:
+        """Check if offline mode is configured."""
+        return self._offline_storage is not None
+
+    def check_connectivity(self) -> bool:
+        """
+        Check current connectivity status.
+
+        Returns:
+            True if online, False if offline
+        """
+        if self._sync_manager:
+            return self._sync_manager.check_connectivity()
+
+        # Fallback: try a quick request
+        try:
+            self._request_internal("GET", "/health", timeout_type="quick")
+            self._is_offline = False
+            return True
+        except Exception:
+            self._is_offline = True
+            return False
 
     def _load_token(self):
         """Load saved token from secure storage."""
@@ -574,10 +643,19 @@ class APIClient:
         endpoint: str,
         data: Optional[Dict] = None,
         params: Optional[Dict] = None,
-        timeout_type: str = "default"
+        timeout_type: str = "default",
+        allow_offline: bool = True
     ) -> Dict[str, Any]:
-        """Make API request with retry logic and token validation."""
+        """Make API request with retry logic, token validation, and offline support.
 
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            endpoint: API endpoint
+            data: Request body data
+            params: Query parameters
+            timeout_type: Timeout configuration type
+            allow_offline: If True, falls back to offline storage when offline
+        """
         # Check token validity before making request (for authenticated endpoints)
         if self._token and not endpoint.startswith("/api/v1/auth/"):
             is_valid, action = self._validate_token()
@@ -595,7 +673,16 @@ class APIClient:
 
         for attempt in range(MAX_RETRIES):
             try:
-                return self._request_internal(method, endpoint, data, params, timeout_type)
+                result = self._request_internal(method, endpoint, data, params, timeout_type)
+                # Successfully connected, mark as online
+                if self._is_offline:
+                    self._is_offline = False
+                    for listener in self._connectivity_listeners:
+                        try:
+                            listener(True)
+                        except Exception:
+                            pass
+                return result
 
             except RateLimitError as e:
                 # Use server-specified retry time or exponential backoff
@@ -615,6 +702,20 @@ class APIClient:
                     return {"error": "server", "message": str(e)}
 
             except (ConnectionError, TimeoutError) as e:
+                # Mark as offline on connection errors
+                self._is_offline = True
+                for listener in self._connectivity_listeners:
+                    try:
+                        listener(False)
+                    except Exception:
+                        pass
+
+                # Try offline fallback if available
+                if allow_offline and self._offline_storage:
+                    offline_result = self._handle_offline_request(method, endpoint, data, params)
+                    if offline_result is not None:
+                        return offline_result
+
                 # Retry on connection/timeout errors
                 if attempt < MAX_RETRIES - 1:
                     time.sleep(backoff)
@@ -622,7 +723,7 @@ class APIClient:
                     last_error = e
                 else:
                     error_type = "connection" if isinstance(e, ConnectionError) else "timeout"
-                    return {"error": error_type, "message": str(e)}
+                    return {"error": error_type, "message": str(e), "offline": True}
 
             except AuthenticationError:
                 return {"error": "unauthorized", "message": "Please log in again"}
@@ -635,8 +736,119 @@ class APIClient:
 
         # All retries exhausted
         if last_error:
+            # Final offline fallback attempt
+            if allow_offline and self._offline_storage:
+                offline_result = self._handle_offline_request(method, endpoint, data, params)
+                if offline_result is not None:
+                    return offline_result
             return {"error": "unknown", "message": f"Request failed after {MAX_RETRIES} attempts: {last_error}"}
         return {"error": "unknown", "message": "Request failed"}
+
+    def _handle_offline_request(
+        self,
+        method: str,
+        endpoint: str,
+        data: Optional[Dict],
+        params: Optional[Dict]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Handle request using offline storage when server is unreachable.
+
+        Returns:
+            Response dict from offline storage, or None if not handled
+        """
+        if not self._offline_storage:
+            return None
+
+        logger.debug(f"Handling offline request: {method} {endpoint}")
+
+        # Route to appropriate offline handler based on endpoint
+        try:
+            # Meetings endpoints
+            if endpoint == "/meetings" and method == "POST":
+                # Create meeting offline
+                local_id = self._offline_storage.save_meeting(
+                    meeting_type=data.get("meeting_type", "general"),
+                    title=data.get("title"),
+                    meeting_app=data.get("meeting_app")
+                )
+                return {
+                    "id": None,  # No remote ID yet
+                    "local_id": local_id,
+                    "offline": True,
+                    "message": "Meeting saved offline"
+                }
+
+            elif endpoint == "/meetings/active" and method == "GET":
+                # Get active meeting from offline storage
+                meeting = self._offline_storage.get_active_meeting()
+                if meeting:
+                    return {**meeting, "offline": True}
+                return None
+
+            elif endpoint.startswith("/meetings/") and endpoint.endswith("/end") and method == "POST":
+                # End meeting offline
+                # Extract local_id from data if available
+                local_id = data.get("local_id") if data else None
+                if local_id:
+                    self._offline_storage.end_meeting(local_id)
+                    return {"success": True, "offline": True}
+
+            elif endpoint == "/meetings" and method == "GET":
+                # List meetings from offline storage
+                meetings = self._offline_storage.get_meetings(
+                    limit=params.get("limit", 20) if params else 20,
+                    meeting_type=params.get("meeting_type") if params else None
+                )
+                return {"meetings": meetings, "offline": True}
+
+            # Conversations endpoints
+            elif endpoint == "/conversations" and method == "POST":
+                # Save conversation offline
+                meeting_local_id = data.get("meeting_local_id")
+                if not meeting_local_id:
+                    # Try to get from active meeting
+                    active = self._offline_storage.get_active_meeting()
+                    if active:
+                        meeting_local_id = active.get("local_id")
+
+                if meeting_local_id:
+                    local_id = self._offline_storage.save_conversation(
+                        meeting_local_id=meeting_local_id,
+                        heard_text=data.get("heard_text", ""),
+                        response_text=data.get("response_text", ""),
+                        speaker=data.get("speaker")
+                    )
+                    return {
+                        "id": None,
+                        "local_id": local_id,
+                        "offline": True,
+                        "message": "Conversation saved offline"
+                    }
+
+            # Task endpoints
+            elif endpoint == "/tasks/dashboard" and method == "GET":
+                # Return local action items
+                action_items = self._offline_storage.get_action_items(
+                    include_completed=False
+                )
+                return {
+                    "action_items": action_items,
+                    "commitments": [],
+                    "offline": True
+                }
+
+            elif endpoint.startswith("/tasks/action-items/") and "/complete" in endpoint and method == "POST":
+                # Complete action item offline
+                local_id = data.get("local_id") if data else None
+                if local_id:
+                    self._offline_storage.complete_action_item(local_id)
+                    return {"success": True, "offline": True}
+
+        except Exception as e:
+            logger.error(f"Offline handler error: {e}")
+
+        return None
 
     # ============== Auth ==============
 
@@ -822,6 +1034,36 @@ class APIClient:
         if "error" in result:
             return []
         return result.get("meetings", [])
+
+    # ============== Transcripts ==============
+
+    def get_meeting_transcripts(self, meeting_id: int) -> Dict:
+        """Get all transcripts for a meeting.
+
+        Args:
+            meeting_id: ID of the meeting.
+
+        Returns:
+            Dict with transcripts list and metadata.
+        """
+        return self._request("GET", f"/meetings/{meeting_id}/transcripts")
+
+    def update_transcript(self, meeting_id: int, transcript_id: int, edited_text: str) -> Dict:
+        """Update a transcript's text.
+
+        Args:
+            meeting_id: ID of the meeting.
+            transcript_id: ID of the transcript to update.
+            edited_text: The corrected/edited text.
+
+        Returns:
+            Updated transcript data.
+        """
+        return self._request(
+            "PATCH",
+            f"/meetings/{meeting_id}/transcripts/{transcript_id}",
+            data={"edited_text": edited_text}
+        )
 
     # ============== Conversations ==============
 

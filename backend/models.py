@@ -68,6 +68,14 @@ class Organization(Base):
     allow_personal_professions = Column(Boolean, default=True)
     shared_insights_enabled = Column(Boolean, default=True)
 
+    # Business Hours Settings (for SLA calculation)
+    business_hours_start = Column(String(5), default="09:00")  # HH:MM format
+    business_hours_end = Column(String(5), default="17:00")  # HH:MM format
+    business_days = Column(JSON, default=[0, 1, 2, 3, 4])  # 0=Monday, 6=Sunday
+    business_timezone = Column(String(50), default="UTC")  # IANA timezone
+    holidays = Column(JSON, default=[])  # List of date strings YYYY-MM-DD
+    use_business_hours_for_sla = Column(Boolean, default=True)  # Toggle business hours SLA
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -345,6 +353,12 @@ class Conversation(Base):
     heard_text = Column(Text, nullable=False)
     response_text = Column(Text, nullable=True)
 
+    # Transcript editing fields
+    original_text = Column(Text, nullable=True)  # Original transcription before edits
+    edited_text = Column(Text, nullable=True)  # Edited/corrected transcription
+    is_edited = Column(Boolean, default=False)  # Flag indicating if transcript was edited
+    edited_at = Column(DateTime, nullable=True)  # Timestamp of last edit
+
     # Timing
     timestamp = Column(DateTime, default=datetime.utcnow)
 
@@ -538,6 +552,14 @@ class MeetingSummary(Base):
     # Analysis
     sentiment = Column(String)  # positive, neutral, negative
     topics_discussed = Column(JSON)  # List of topic names
+
+    # Enhanced AI analysis fields
+    risks_identified = Column(JSON)  # List of risks/concerns identified
+    follow_up_suggestions = Column(JSON)  # Suggested follow-up actions
+    action_item_summary = Column(Text)  # Executive summary of action items
+    participant_contributions = Column(JSON)  # Who said what (topic -> participants)
+    meeting_effectiveness_score = Column(Integer)  # 1-10 score for meeting quality
+    next_steps = Column(JSON)  # Recommended next steps
 
     # Email status
     email_sent = Column(Boolean, default=False)
@@ -740,6 +762,51 @@ class EmailNotification(Base):
 
     # Relationships
     user = relationship("User", back_populates="email_notifications")
+
+
+class EmailMeetingLink(Base):
+    """
+    Link between emails and meetings for context and reference.
+
+    Enables deep email integration by:
+    - Linking relevant emails to meetings
+    - Providing email context for meeting preparation
+    - Tracking email threads related to meetings
+    """
+    __tablename__ = "email_meeting_links"
+    __table_args__ = (
+        Index("ix_email_meeting_link_user_id", "user_id"),
+        Index("ix_email_meeting_link_meeting_id", "meeting_id"),
+        Index("ix_email_meeting_link_email_id", "email_id"),
+        UniqueConstraint("user_id", "email_id", "meeting_id", name="uq_user_email_meeting"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
+
+    # Email identification
+    email_id = Column(String(255), nullable=False, index=True)  # External ID from email provider
+    email_thread_id = Column(String(255), nullable=True)  # Thread ID for conversation tracking
+    email_provider = Column(String(50), default="generic")  # gmail, outlook, etc.
+
+    # Email content (stored for context when email not accessible)
+    email_subject = Column(String(500), nullable=True)
+    email_from = Column(String(255), nullable=True)
+    email_body = Column(Text, nullable=True)  # Stored for offline context
+    email_date = Column(DateTime, nullable=True)
+
+    # Link metadata
+    link_type = Column(String(50), default="context")  # context, follow_up, action_required, reference
+    notes = Column(Text, nullable=True)  # User notes about the link
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User")
+    meeting = relationship("Meeting")
 
 
 # =============================================================================
@@ -2317,6 +2384,114 @@ class IntegrationProvider:
     SALESFORCE = "salesforce"
     HUBSPOT = "hubspot"
 
+    # Project Management integrations
+    NOTION = "notion"
+    ASANA = "asana"
+    LINEAR = "linear"
+    JIRA = "jira"
+    MONDAY = "monday"
+
+
+class ProjectManagementConnection(Base):
+    """
+    Project management integration connections for syncing action items.
+
+    Tracks user connections to project management tools like Notion, Asana,
+    Linear, and Jira for automatic action item synchronization.
+    """
+    __tablename__ = "project_management_connections"
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider", name="uq_pm_connection_provider"),
+        Index("ix_pm_connection_user", "user_id"),
+        Index("ix_pm_connection_provider", "provider"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Provider info
+    provider = Column(String(50), nullable=False)  # notion, asana, linear, jira
+
+    # OAuth tokens
+    access_token = Column(Text, nullable=False)
+    refresh_token = Column(Text, nullable=True)
+    token_expires_at = Column(DateTime, nullable=True)
+
+    # Provider-specific identifiers
+    workspace_id = Column(String(255), nullable=True)  # Team/Org/Workspace ID
+    workspace_name = Column(String(255), nullable=True)
+    project_id = Column(String(255), nullable=True)  # Project/Database ID for task creation
+    project_name = Column(String(255), nullable=True)
+
+    # User info from provider
+    provider_user_id = Column(String(255), nullable=True)
+    provider_user_email = Column(String(255), nullable=True)
+
+    # Sync settings
+    auto_sync_enabled = Column(Boolean, default=True)  # Auto-sync new action items
+    sync_completed_status = Column(Boolean, default=True)  # Sync completed status back
+    sync_priority = Column(Boolean, default=True)  # Sync priority changes
+    default_labels = Column(JSON, default=list)  # Default labels/tags to apply
+
+    # Property mappings (for customizable field names)
+    property_mappings = Column(JSON, default=dict)
+
+    # Status
+    is_active = Column(Boolean, default=True)
+    last_sync_at = Column(DateTime, nullable=True)
+    last_error = Column(Text, nullable=True)
+    error_count = Column(Integer, default=0)
+
+    # Timestamps
+    connected_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", backref="project_management_connections")
+    synced_items = relationship("ActionItemSync", back_populates="connection")
+
+
+class ActionItemSync(Base):
+    """
+    Tracks sync status between ReadIn action items and external PM tools.
+
+    Each record represents a link between an internal ActionItem and its
+    corresponding task/issue in an external project management system.
+    """
+    __tablename__ = "action_item_syncs"
+    __table_args__ = (
+        UniqueConstraint(
+            "action_item_id", "connection_id",
+            name="uq_action_item_connection"
+        ),
+        Index("ix_action_sync_action_item", "action_item_id"),
+        Index("ix_action_sync_connection", "connection_id"),
+        Index("ix_action_sync_external", "external_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    action_item_id = Column(Integer, ForeignKey("action_items.id"), nullable=False)
+    connection_id = Column(Integer, ForeignKey("project_management_connections.id"), nullable=False)
+
+    # External task reference
+    external_id = Column(String(255), nullable=False)  # ID in external system
+    external_url = Column(String(500), nullable=True)  # URL to view in external system
+
+    # Sync metadata
+    last_synced_at = Column(DateTime, default=datetime.utcnow)
+    last_external_status = Column(String(50), nullable=True)  # Last known status in external system
+    sync_direction = Column(String(20), default="outbound")  # outbound, inbound, bidirectional
+    sync_errors = Column(Integer, default=0)
+    last_error = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    action_item = relationship("ActionItem", backref="external_syncs")
+    connection = relationship("ProjectManagementConnection", back_populates="synced_items")
+
 
 class IntegrationNotificationType:
     """Types of notifications that can be sent via integrations."""
@@ -2375,3 +2550,52 @@ class WebAuthnCredential(Base):
 
     # Relationships
     user = relationship("User", backref="webauthn_credentials")
+
+
+# =============================================================================
+# ZAPIER INTEGRATION
+# =============================================================================
+
+class ZapierSubscription(Base):
+    """
+    Zapier REST Hook subscriptions.
+
+    Stores webhook URLs that Zapier sends when users create triggers.
+    When events occur (meeting ended, action item created, etc.),
+    ReadIn sends payloads to these URLs.
+
+    Implements Zapier's REST Hook specification:
+    https://platform.zapier.com/docs/triggers#rest-hook-trigger
+    """
+    __tablename__ = "zapier_subscriptions"
+    __table_args__ = (
+        Index("ix_zapier_sub_user", "user_id"),
+        Index("ix_zapier_sub_trigger", "trigger_type"),
+        Index("ix_zapier_sub_user_trigger", "user_id", "trigger_type"),
+        Index("ix_zapier_sub_active", "is_active"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Subscription details
+    trigger_type = Column(String(50), nullable=False)  # meeting_ended, action_item_created, summary_generated
+    target_url = Column(String(1000), nullable=False)  # Zapier's webhook URL
+
+    # Security
+    hook_secret = Column(String(255), nullable=True)  # For signing payloads
+
+    # Status
+    is_active = Column(Boolean, default=True)
+
+    # Delivery tracking
+    last_triggered_at = Column(DateTime, nullable=True)
+    consecutive_failures = Column(Integer, default=0)
+    last_error = Column(Text, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", backref="zapier_subscriptions")

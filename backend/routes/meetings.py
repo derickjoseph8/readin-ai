@@ -15,7 +15,8 @@ from models import Meeting, Conversation, MeetingSummary, ActionItem, Commitment
 from schemas import (
     MeetingCreate, MeetingEnd, MeetingResponse, MeetingDetail, MeetingList,
     MeetingSummaryResponse, MeetingSummaryRequest,
-    ConversationResponse, ActionItemResponse, CommitmentResponse
+    ConversationResponse, ActionItemResponse, CommitmentResponse,
+    TranscriptResponse, TranscriptUpdate, TranscriptListResponse
 )
 from auth import get_current_user
 
@@ -121,6 +122,15 @@ def end_meeting(
     except Exception as e:
         # Don't fail the request if embedding generation fails
         logger.error(f"Failed to generate meeting embedding: {e}")
+
+    # Fire Zapier trigger for meeting_ended
+    try:
+        from integrations.zapier import fire_meeting_ended
+        asyncio.create_task(fire_meeting_ended(db, meeting, user))
+        logger.info(f"Triggered Zapier webhook for meeting {meeting_id}")
+    except Exception as e:
+        # Don't fail the request if Zapier integration fails
+        logger.error(f"Failed to fire Zapier trigger: {e}")
 
     return MeetingResponse(
         id=meeting.id,
@@ -399,9 +409,23 @@ async def generate_summary(
     db: Session = Depends(get_db)
 ):
     """
-    Generate or regenerate meeting summary.
-    Extracts key points, action items, and commitments.
+    Generate or regenerate comprehensive AI-powered meeting summary.
+
+    This endpoint uses Claude AI to analyze the meeting transcript and extract:
+    - Executive summary with context and key insights
+    - Key discussion points with speaker attribution
+    - Decisions made with owners and timelines
+    - Action items with priorities and deadlines
+    - Risks identified with mitigation strategies
+    - Follow-up suggestions with timing recommendations
+    - Meeting effectiveness scoring
+    - Recommended next steps
+
+    The summary is optimized based on meeting type (interview, sales, team, etc.)
+    to provide the most relevant and actionable insights.
     """
+    from services.summary_generator import SummaryGenerator
+
     meeting = db.query(Meeting).filter(
         Meeting.id == meeting_id,
         Meeting.user_id == user.id
@@ -414,12 +438,12 @@ async def generate_summary(
         )
 
     # Get existing summary
-    summary = db.query(MeetingSummary).filter(
+    existing_summary = db.query(MeetingSummary).filter(
         MeetingSummary.meeting_id == meeting_id
     ).first()
 
-    if summary and not data.regenerate:
-        return MeetingSummaryResponse.model_validate(summary)
+    if existing_summary and not data.regenerate:
+        return MeetingSummaryResponse.model_validate(existing_summary)
 
     # Get conversations for summarization
     conversations = db.query(Conversation).filter(
@@ -432,27 +456,32 @@ async def generate_summary(
             detail="No conversations to summarize"
         )
 
-    # TODO: Use AI to generate summary
-    # For now, create placeholder summary
-    if summary:
-        summary.summary_text = f"Meeting summary for {meeting.title or 'Untitled Meeting'}"
-        summary.key_points = ["Key point 1", "Key point 2"]
-        summary.decisions_made = []
-        summary.topics_discussed = []
-    else:
-        summary = MeetingSummary(
-            meeting_id=meeting_id,
-            user_id=user.id,
-            summary_text=f"Meeting summary for {meeting.title or 'Untitled Meeting'}",
-            key_points=["Key point 1", "Key point 2"],
-            decisions_made=[],
-            topics_discussed=[],
-            sentiment="neutral"
-        )
-        db.add(summary)
+    # Use AI-powered SummaryGenerator for comprehensive analysis
+    try:
+        generator = SummaryGenerator(db)
 
-    db.commit()
-    db.refresh(summary)
+        # Get user's preferred language
+        language = getattr(user, 'preferred_language', 'en') or 'en'
+
+        # Generate comprehensive AI summary
+        summary = await generator.generate_summary(meeting_id, language)
+
+        logger.info(
+            f"Generated comprehensive AI summary for meeting {meeting_id} "
+            f"with {len(conversations)} conversations"
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"AI summary generation failed for meeting {meeting_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate AI summary. Please try again."
+        )
 
     # Send email if requested and user has email summaries enabled
     if data.send_email and getattr(user, 'email_summary_enabled', True):
@@ -718,3 +747,122 @@ def meeting_analytics(
         "meetings_this_week": this_week,
         "meetings_this_month": this_month
     }
+
+
+# =============================================================================
+# TRANSCRIPT EDITING ENDPOINTS
+# =============================================================================
+
+@router.get("/{meeting_id}/transcripts", response_model=TranscriptListResponse)
+def get_meeting_transcripts(
+    meeting_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all transcripts (conversations) for a meeting.
+    Returns transcripts with editing status and both original and edited text.
+    """
+    # Verify meeting belongs to user
+    meeting = db.query(Meeting).filter(
+        Meeting.id == meeting_id,
+        Meeting.user_id == user.id
+    ).first()
+
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Meeting not found"
+        )
+
+    # Get all conversations for this meeting
+    conversations = db.query(Conversation).filter(
+        Conversation.meeting_id == meeting_id
+    ).order_by(Conversation.timestamp).all()
+
+    # Convert to transcript responses
+    transcripts = []
+    for conv in conversations:
+        transcripts.append(TranscriptResponse(
+            id=conv.id,
+            meeting_id=conv.meeting_id,
+            speaker=conv.speaker,
+            heard_text=conv.heard_text,
+            response_text=conv.response_text,
+            original_text=conv.original_text,
+            edited_text=conv.edited_text,
+            is_edited=conv.is_edited or False,
+            edited_at=conv.edited_at,
+            timestamp=conv.timestamp
+        ))
+
+    return TranscriptListResponse(
+        transcripts=transcripts,
+        total=len(transcripts),
+        meeting_id=meeting_id
+    )
+
+
+@router.patch("/{meeting_id}/transcripts/{transcript_id}", response_model=TranscriptResponse)
+def update_transcript(
+    meeting_id: int,
+    transcript_id: int,
+    data: TranscriptUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update a transcript's text.
+    Stores the original text on first edit and tracks edit history.
+    """
+    # Verify meeting belongs to user
+    meeting = db.query(Meeting).filter(
+        Meeting.id == meeting_id,
+        Meeting.user_id == user.id
+    ).first()
+
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Meeting not found"
+        )
+
+    # Get the conversation/transcript
+    conversation = db.query(Conversation).filter(
+        Conversation.id == transcript_id,
+        Conversation.meeting_id == meeting_id
+    ).first()
+
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transcript not found"
+        )
+
+    # Store original text on first edit
+    if not conversation.is_edited:
+        conversation.original_text = conversation.heard_text
+
+    # Update with edited text
+    conversation.edited_text = data.edited_text
+    conversation.heard_text = data.edited_text  # Also update main text field
+    conversation.is_edited = True
+    conversation.edited_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(conversation)
+
+    logger.info(f"Transcript {transcript_id} updated for meeting {meeting_id}")
+
+    return TranscriptResponse(
+        id=conversation.id,
+        meeting_id=conversation.meeting_id,
+        speaker=conversation.speaker,
+        heard_text=conversation.heard_text,
+        response_text=conversation.response_text,
+        original_text=conversation.original_text,
+        edited_text=conversation.edited_text,
+        is_edited=conversation.is_edited,
+        edited_at=conversation.edited_at,
+        timestamp=conversation.timestamp
+    )

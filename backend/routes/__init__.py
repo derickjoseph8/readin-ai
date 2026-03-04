@@ -18,6 +18,11 @@ from .white_label import router as white_label_router
 from .two_factor import router as two_factor_router
 from .webauthn import router as webauthn_router
 from .devices import router as devices_router
+from .recommendations import router as recommendations_router
+from .recommendations import meetings_recommendations_router
+from .slack import router as slack_router
+from .email_integration import router as email_integration_router
+from .zapier import router as zapier_router
 
 # Admin routes
 from .admin.dashboard import router as admin_dashboard_router
@@ -47,6 +52,11 @@ __all__ = [
     "two_factor_router",
     "webauthn_router",
     "devices_router",
+    "recommendations_router",
+    "meetings_recommendations_router",
+    "slack_router",
+    "email_integration_router",
+    "zapier_router",
     # Admin routes
     "admin_dashboard_router",
     "admin_teams_router",

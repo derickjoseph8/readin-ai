@@ -7,6 +7,12 @@ from .briefing_generator import BriefingGenerator
 from .interview_coach import InterviewCoach
 from .email_service import EmailService
 from .scheduler import SchedulerService
+from .recommendation_service import RecommendationService
+from .business_hours_service import (
+    BusinessHoursService,
+    BusinessHoursConfig,
+    create_business_hours_service,
+)
 
 __all__ = [
     "TopicExtractor",
@@ -16,4 +22,8 @@ __all__ = [
     "InterviewCoach",
     "EmailService",
     "SchedulerService",
+    "RecommendationService",
+    "BusinessHoursService",
+    "BusinessHoursConfig",
+    "create_business_hours_service",
 ]

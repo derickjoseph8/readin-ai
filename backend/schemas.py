@@ -374,6 +374,39 @@ class ConversationResponse(BaseModel):
 
 
 # =============================================================================
+# TRANSCRIPT SCHEMAS
+# =============================================================================
+
+class TranscriptResponse(BaseModel):
+    """Transcript response with editing fields."""
+    id: int
+    meeting_id: int
+    speaker: str
+    heard_text: str
+    response_text: Optional[str]
+    original_text: Optional[str] = None
+    edited_text: Optional[str] = None
+    is_edited: bool = False
+    edited_at: Optional[datetime] = None
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TranscriptUpdate(BaseModel):
+    """Schema for updating transcript text."""
+    edited_text: str = Field(..., min_length=1, max_length=50000)
+
+
+class TranscriptListResponse(BaseModel):
+    """Response for list of transcripts."""
+    transcripts: List[TranscriptResponse]
+    total: int
+    meeting_id: int
+
+
+# =============================================================================
 # TOPIC SCHEMAS
 # =============================================================================
 
@@ -515,6 +548,13 @@ class MeetingSummaryResponse(BaseModel):
     decisions_made: Optional[List[str]]
     sentiment: Optional[str]
     topics_discussed: Optional[List[str]]
+    # Enhanced AI analysis fields
+    risks_identified: Optional[List[str]] = None
+    follow_up_suggestions: Optional[List[str]] = None
+    action_item_summary: Optional[str] = None
+    participant_contributions: Optional[dict] = None
+    meeting_effectiveness_score: Optional[int] = None
+    next_steps: Optional[List[str]] = None
     email_sent: bool
     email_sent_at: Optional[datetime]
     created_at: datetime
@@ -1208,6 +1248,125 @@ class AdminActivityLogResponse(BaseModel):
     user_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
+# PROJECT MANAGEMENT INTEGRATION SCHEMAS
+# =============================================================================
+
+class PMConnectionResponse(BaseModel):
+    """Project management connection details."""
+    id: int
+    provider: str
+    workspace_name: Optional[str] = None
+    project_name: Optional[str] = None
+    auto_sync_enabled: bool = True
+    last_sync_at: Optional[datetime] = None
+    connected_at: datetime
+    has_error: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PMSyncStatusResponse(BaseModel):
+    """Status of an action item sync with a PM tool."""
+    synced: bool
+    provider: str
+    external_id: Optional[str] = None
+    external_url: Optional[str] = None
+    external_status: Optional[str] = None
+    last_synced_at: Optional[datetime] = None
+    sync_errors: int = 0
+    last_error: Optional[str] = None
+
+
+class ActionItemWithSyncResponse(ActionItemResponse):
+    """Action item with sync status across connected PM tools."""
+    syncs: List[PMSyncStatusResponse] = []
+
+
+# =============================================================================
+# RECOMMENDATION SCHEMAS
+# =============================================================================
+
+class NextStepsResponse(BaseModel):
+    """Response schema for next steps endpoint."""
+    meeting_id: int
+    next_steps: List[str]
+    count: int
+
+
+class RiskItem(BaseModel):
+    """Schema for a single risk item."""
+    category: str
+    title: str
+    description: str
+    severity: str
+    evidence: Optional[str] = None
+    mitigation: Optional[str] = None
+    meeting_id: int
+    detected_at: str
+
+
+class RisksResponse(BaseModel):
+    """Response schema for risks endpoint."""
+    meeting_id: int
+    risks: List[RiskItem]
+    count: int
+    has_critical: bool
+    has_high: bool
+
+
+class MeetingPrepResponse(BaseModel):
+    """Response schema for meeting prep endpoint."""
+    meeting_id: int
+    key_topics: List[str] = []
+    suggested_agenda: List[str] = []
+    participant_notes: List[str] = []
+    questions_to_consider: List[str] = []
+    documents_to_review: List[str] = []
+    talking_points: List[str] = []
+    follow_up_items: List[str] = []
+    preparation_tips: List[str] = []
+    generated_at: Optional[str] = None
+
+
+class ParticipantInsightsResponse(BaseModel):
+    """Response schema for participant insights."""
+    participant_id: int
+    participant_name: str
+    relationship_summary: Optional[str] = None
+    communication_recommendations: List[str] = []
+    topics_of_interest: List[str] = []
+    conversation_starters: List[str] = []
+    things_to_remember: List[str] = []
+    collaboration_tips: List[str] = []
+    potential_opportunities: List[str] = []
+    relationship_health: Optional[str] = None
+    next_interaction_suggestions: List[str] = []
+    generated_at: Optional[str] = None
+
+
+class TopicSuggestionsResponse(BaseModel):
+    """Response schema for topic suggestions."""
+    topics: List[str]
+    meeting_type: Optional[str] = None
+    count: int
+
+
+class FullRecommendationsResponse(BaseModel):
+    """Response schema for full meeting recommendations."""
+    meeting_id: int
+    meeting_title: Optional[str] = None
+    meeting_type: Optional[str] = None
+    next_steps: List[str] = []
+    risks: List[dict] = []
+    action_items: List[dict] = []
+    commitments: List[dict] = []
+    summary: dict = {}
+    generated_at: str
+    has_urgent_items: bool = False
+    has_high_risks: bool = False
 
 
 # =============================================================================

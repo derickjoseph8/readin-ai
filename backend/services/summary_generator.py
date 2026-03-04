@@ -1,4 +1,15 @@
-"""Meeting Summary Generator using Claude AI."""
+"""Meeting Summary Generator using Claude AI.
+
+This module provides comprehensive AI-powered meeting analysis including:
+- Executive summary generation
+- Key point extraction with context
+- Decision detection and tracking
+- Risk identification and mitigation suggestions
+- Follow-up action recommendations
+- Action item summary with priorities
+- Participant contribution analysis
+- Meeting effectiveness scoring
+"""
 
 import os
 import json
@@ -18,8 +29,167 @@ from models import (
 from services.language_service import get_localized_prompt_suffix, get_fallback_message
 
 
+# Enhanced prompts for comprehensive meeting analysis
+COMPREHENSIVE_SUMMARY_PROMPT = """You are an expert meeting analyst. Analyze this meeting transcript and provide a comprehensive, actionable summary.
+
+Meeting Context:
+- Type: {meeting_type}
+- Title: {title}
+- Duration: {duration}
+
+Transcript:
+{transcript}
+
+Provide a thorough analysis in the following JSON format. Be specific, actionable, and focus on extracting maximum value from this meeting:
+
+{{
+    "summary": "A comprehensive 2-3 paragraph executive summary that captures the meeting's purpose, key discussions, outcomes, and overall trajectory. Include context about what was achieved and what remains to be done.",
+
+    "key_points": [
+        {{
+            "point": "Clear, specific key point from the meeting",
+            "context": "Brief context explaining why this point matters",
+            "speaker": "Who raised this point (if identifiable)"
+        }}
+    ],
+
+    "decisions_made": [
+        {{
+            "decision": "Specific decision that was made",
+            "rationale": "Why this decision was made (if discussed)",
+            "owner": "Who is responsible for implementing this decision",
+            "timeline": "When this should be implemented (if mentioned)"
+        }}
+    ],
+
+    "action_items": [
+        {{
+            "assignee": "Who is responsible (use 'User' if it's the meeting participant)",
+            "description": "Specific, actionable task description",
+            "due_date": "YYYY-MM-DD or null if not specified",
+            "priority": "high/medium/low",
+            "context": "Brief context about why this action is needed"
+        }}
+    ],
+
+    "commitments": [
+        {{
+            "description": "What the user committed to do",
+            "due_date": "YYYY-MM-DD or null if not specified",
+            "to_whom": "Who the commitment was made to"
+        }}
+    ],
+
+    "risks_identified": [
+        {{
+            "risk": "Description of the risk or concern",
+            "severity": "high/medium/low",
+            "mitigation": "Suggested mitigation strategy"
+        }}
+    ],
+
+    "follow_up_suggestions": [
+        {{
+            "suggestion": "Specific follow-up action to take",
+            "reason": "Why this follow-up is important",
+            "timing": "When this should be done (e.g., 'within 24 hours', 'next week')"
+        }}
+    ],
+
+    "action_item_summary": "A concise 1-2 sentence executive summary of all action items, highlighting the most critical ones and overall workload.",
+
+    "topics_discussed": ["topic1", "topic2", "topic3"],
+
+    "participant_contributions": {{
+        "topic_name": ["participant1", "participant2"]
+    }},
+
+    "meeting_effectiveness": {{
+        "score": 1-10,
+        "strengths": ["What went well in this meeting"],
+        "improvements": ["What could be improved for future meetings"]
+    }},
+
+    "next_steps": [
+        "Prioritized list of recommended next steps",
+        "Based on the meeting outcomes"
+    ],
+
+    "sentiment": "positive/neutral/negative/mixed",
+
+    "follow_up_needed": true/false,
+
+    "key_quotes": [
+        {{
+            "quote": "Important or memorable quote from the meeting",
+            "speaker": "Who said it",
+            "significance": "Why this quote matters"
+        }}
+    ]
+}}{language_instruction}
+
+Important guidelines:
+1. Be specific and actionable - avoid generic summaries
+2. Extract concrete decisions, not just discussions
+3. Identify risks proactively, even if not explicitly mentioned
+4. Suggest follow-ups that would add value
+5. Rate meeting effectiveness honestly
+6. Capture commitments that were made verbally
+7. Prioritize action items by urgency and impact
+8. Note participant contributions to topics when identifiable
+"""
+
+# Meeting type-specific analysis prompts
+MEETING_TYPE_PROMPTS = {
+    "interview": """Additional interview-specific analysis:
+- Evaluate the candidate's/interviewer's key strengths demonstrated
+- Note any red flags or concerns
+- Identify follow-up questions that should be asked
+- Assess cultural fit indicators
+- Summarize compensation/benefits discussed""",
+
+    "sales": """Additional sales meeting analysis:
+- Identify buying signals and objections
+- Note decision-maker engagement level
+- Extract budget/timeline indicators
+- Suggest next steps in the sales process
+- Highlight competitive mentions""",
+
+    "team_meeting": """Additional team meeting analysis:
+- Track blockers mentioned and their owners
+- Note team morale indicators
+- Identify resource constraints
+- Highlight cross-team dependencies
+- Summarize sprint/project status""",
+
+    "one_on_one": """Additional 1:1 meeting analysis:
+- Note feedback exchanged (positive and constructive)
+- Identify career development discussions
+- Track commitments from both parties
+- Highlight relationship-building moments
+- Summarize growth opportunities discussed""",
+
+    "tv_appearance": """Additional media appearance analysis:
+- Evaluate key message delivery
+- Note memorable sound bites
+- Identify questions that were handled well/poorly
+- Suggest improvements for future appearances
+- Track any commitments made publicly""",
+}
+
+
 class SummaryGenerator:
-    """Generate meeting summaries and extract action items."""
+    """Generate comprehensive AI-powered meeting summaries.
+
+    This class uses Claude AI to analyze meeting transcripts and extract:
+    - Executive summaries with context
+    - Key points with speaker attribution
+    - Decisions with rationale and owners
+    - Action items with priorities
+    - Risks and mitigation strategies
+    - Follow-up suggestions
+    - Meeting effectiveness scoring
+    """
 
     def __init__(self, db: Session):
         self.db = db
@@ -29,7 +199,25 @@ class SummaryGenerator:
         )
 
     async def generate_summary(self, meeting_id: int, language: Optional[str] = None) -> MeetingSummary:
-        """Generate a comprehensive meeting summary."""
+        """Generate a comprehensive meeting summary with enhanced AI analysis.
+
+        This method extracts:
+        - Executive summary with context
+        - Key points with speaker attribution
+        - Decisions with owners and timelines
+        - Action items with priorities
+        - Risks and mitigation strategies
+        - Follow-up suggestions
+        - Meeting effectiveness scoring
+        - Next steps recommendations
+
+        Args:
+            meeting_id: The meeting to summarize
+            language: Language code for the response (defaults to user preference)
+
+        Returns:
+            MeetingSummary object with all analysis fields populated
+        """
         meeting = self.db.query(Meeting).filter(Meeting.id == meeting_id).first()
         if not meeting:
             raise ValueError(f"Meeting {meeting_id} not found")
@@ -53,12 +241,16 @@ class SummaryGenerator:
         # Build conversation transcript
         transcript = self._build_transcript(conversations)
 
-        # Generate summary with Claude
+        # Generate comprehensive summary with Claude
         summary_data = await self._generate_with_claude(
-            transcript, meeting.meeting_type, meeting.title, language
+            transcript,
+            meeting.meeting_type,
+            meeting.title,
+            language,
+            meeting.duration_seconds
         )
 
-        # Create or update summary
+        # Create or update summary with all enhanced fields
         existing = (
             self.db.query(MeetingSummary)
             .filter(MeetingSummary.meeting_id == meeting_id)
@@ -66,13 +258,22 @@ class SummaryGenerator:
         )
 
         if existing:
+            # Update existing summary with all fields
             existing.summary_text = summary_data["summary"]
             existing.key_points = summary_data["key_points"]
             existing.sentiment = summary_data.get("sentiment", "neutral")
             existing.topics_discussed = summary_data.get("topics_discussed", [])
             existing.decisions_made = summary_data.get("decisions_made", [])
+            # Enhanced fields
+            existing.risks_identified = summary_data.get("risks_identified", [])
+            existing.follow_up_suggestions = summary_data.get("follow_up_suggestions", [])
+            existing.action_item_summary = summary_data.get("action_item_summary", "")
+            existing.participant_contributions = summary_data.get("participant_contributions", {})
+            existing.meeting_effectiveness_score = summary_data.get("meeting_effectiveness_score")
+            existing.next_steps = summary_data.get("next_steps", [])
             summary = existing
         else:
+            # Create new summary with all fields
             summary = MeetingSummary(
                 meeting_id=meeting_id,
                 user_id=meeting.user_id,
@@ -81,6 +282,13 @@ class SummaryGenerator:
                 sentiment=summary_data.get("sentiment", "neutral"),
                 topics_discussed=summary_data.get("topics_discussed", []),
                 decisions_made=summary_data.get("decisions_made", []),
+                # Enhanced fields
+                risks_identified=summary_data.get("risks_identified", []),
+                follow_up_suggestions=summary_data.get("follow_up_suggestions", []),
+                action_item_summary=summary_data.get("action_item_summary", ""),
+                participant_contributions=summary_data.get("participant_contributions", {}),
+                meeting_effectiveness_score=summary_data.get("meeting_effectiveness_score"),
+                next_steps=summary_data.get("next_steps", []),
             )
             self.db.add(summary)
 
@@ -95,6 +303,18 @@ class SummaryGenerator:
         )
 
         self.db.commit()
+
+        # Fire Zapier trigger for summary_generated
+        try:
+            from integrations.zapier import fire_summary_generated
+            user = self.db.query(User).filter(User.id == meeting.user_id).first()
+            if user:
+                import asyncio
+                asyncio.create_task(fire_summary_generated(self.db, summary, meeting, user))
+        except Exception as e:
+            # Don't fail if Zapier integration fails
+            pass
+
         return summary
 
     def _build_transcript(self, conversations: List[Conversation]) -> str:
@@ -109,52 +329,50 @@ class SummaryGenerator:
         return "\n".join(lines)
 
     async def _generate_with_claude(
-        self, transcript: str, meeting_type: str, title: Optional[str], language: str = "en"
+        self, transcript: str, meeting_type: str, title: Optional[str], language: str = "en", duration_seconds: Optional[int] = None
     ) -> Dict[str, Any]:
-        """Generate summary using Claude."""
+        """Generate comprehensive summary using Claude AI.
+
+        Args:
+            transcript: The meeting transcript text
+            meeting_type: Type of meeting (interview, sales, team_meeting, etc.)
+            title: Meeting title
+            language: Language code for response
+            duration_seconds: Meeting duration in seconds
+
+        Returns:
+            Comprehensive analysis dictionary with all summary components
+        """
         # Get language-specific prompt suffix
         language_instruction = get_localized_prompt_suffix(language)
 
-        prompt = f"""Analyze this meeting transcript and provide a comprehensive summary.
+        # Format duration for display
+        duration_str = "Unknown"
+        if duration_seconds:
+            hours = duration_seconds // 3600
+            minutes = (duration_seconds % 3600) // 60
+            if hours > 0:
+                duration_str = f"{hours}h {minutes}m"
+            else:
+                duration_str = f"{minutes} minutes"
 
-Meeting Type: {meeting_type or 'general'}
-Title: {title or 'Untitled Meeting'}
+        # Build the comprehensive prompt
+        prompt = COMPREHENSIVE_SUMMARY_PROMPT.format(
+            meeting_type=meeting_type or 'general',
+            title=title or 'Untitled Meeting',
+            duration=duration_str,
+            transcript=transcript,
+            language_instruction=language_instruction
+        )
 
-Transcript:
-{transcript}
-
-Provide analysis in this JSON format:
-{{
-    "summary": "A 2-3 paragraph executive summary of the meeting",
-    "key_points": [
-        "Key point 1",
-        "Key point 2",
-        "Key point 3"
-    ],
-    "action_items": [
-        {{
-            "assignee": "Who is responsible (or 'User' if the user)",
-            "description": "What needs to be done",
-            "due_date": "YYYY-MM-DD or null if not specified",
-            "priority": "high/medium/low"
-        }}
-    ],
-    "commitments": [
-        {{
-            "description": "What the user committed to do",
-            "due_date": "YYYY-MM-DD or null if not specified"
-        }}
-    ],
-    "sentiment": "positive/neutral/negative/mixed",
-    "topics_discussed": ["topic1", "topic2"],
-    "decisions_made": ["decision 1", "decision 2"],
-    "follow_up_needed": true/false
-}}{language_instruction}"""
+        # Add meeting type-specific analysis if available
+        if meeting_type and meeting_type in MEETING_TYPE_PROMPTS:
+            prompt += f"\n\n{MEETING_TYPE_PROMPTS[meeting_type]}"
 
         try:
             response = self.client.messages.create(
                 model=self.model,
-                max_tokens=2048,
+                max_tokens=4096,  # Increased for comprehensive analysis
                 messages=[{"role": "user", "content": prompt}],
             )
 
@@ -164,17 +382,103 @@ Provide analysis in this JSON format:
             elif "```" in content:
                 content = content.split("```")[1].split("```")[0]
 
-            return json.loads(content.strip())
+            data = json.loads(content.strip())
 
+            # Post-process and normalize the response
+            return self._normalize_summary_response(data)
+
+        except json.JSONDecodeError as e:
+            print(f"Summary JSON parsing error: {e}")
+            return self._get_fallback_response(language)
         except Exception as e:
             print(f"Summary generation error: {e}")
-            return {
-                "summary": get_fallback_message("summary_unavailable", language),
-                "key_points": [],
-                "action_items": [],
-                "commitments": [],
-                "sentiment": "neutral",
-            }
+            return self._get_fallback_response(language)
+
+    def _normalize_summary_response(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize and validate the AI response.
+
+        Ensures all expected fields exist and have correct types.
+        Extracts simple lists from structured data where needed.
+        """
+        # Extract simple key points list from structured data
+        key_points = data.get("key_points", [])
+        if key_points and isinstance(key_points[0], dict):
+            # Convert structured key points to simple strings with context
+            key_points = [
+                f"{kp.get('point', '')} - {kp.get('context', '')}" if kp.get('context')
+                else kp.get('point', str(kp))
+                for kp in key_points
+            ]
+
+        # Extract simple decisions list from structured data
+        decisions = data.get("decisions_made", [])
+        if decisions and isinstance(decisions[0], dict):
+            decisions = [
+                f"{d.get('decision', '')} (Owner: {d.get('owner', 'TBD')})"
+                for d in decisions
+            ]
+
+        # Extract risks as simple list
+        risks = data.get("risks_identified", [])
+        if risks and isinstance(risks[0], dict):
+            risks = [
+                f"{r.get('risk', '')} [{r.get('severity', 'medium')}] - Mitigation: {r.get('mitigation', 'TBD')}"
+                for r in risks
+            ]
+
+        # Extract follow-up suggestions as simple list
+        follow_ups = data.get("follow_up_suggestions", [])
+        if follow_ups and isinstance(follow_ups[0], dict):
+            follow_ups = [
+                f"{f.get('suggestion', '')} ({f.get('timing', 'ASAP')})"
+                for f in follow_ups
+            ]
+
+        # Extract meeting effectiveness score
+        effectiveness = data.get("meeting_effectiveness", {})
+        effectiveness_score = None
+        if isinstance(effectiveness, dict):
+            effectiveness_score = effectiveness.get("score")
+        elif isinstance(effectiveness, int):
+            effectiveness_score = effectiveness
+
+        return {
+            "summary": data.get("summary", ""),
+            "key_points": key_points,
+            "decisions_made": decisions,
+            "action_items": data.get("action_items", []),
+            "commitments": data.get("commitments", []),
+            "risks_identified": risks,
+            "follow_up_suggestions": follow_ups,
+            "action_item_summary": data.get("action_item_summary", ""),
+            "topics_discussed": data.get("topics_discussed", []),
+            "participant_contributions": data.get("participant_contributions", {}),
+            "meeting_effectiveness_score": effectiveness_score,
+            "next_steps": data.get("next_steps", []),
+            "sentiment": data.get("sentiment", "neutral"),
+            "follow_up_needed": data.get("follow_up_needed", False),
+            "key_quotes": data.get("key_quotes", []),
+        }
+
+    def _get_fallback_response(self, language: str) -> Dict[str, Any]:
+        """Get a fallback response when AI generation fails."""
+        return {
+            "summary": get_fallback_message("summary_unavailable", language),
+            "key_points": [],
+            "decisions_made": [],
+            "action_items": [],
+            "commitments": [],
+            "risks_identified": [],
+            "follow_up_suggestions": [],
+            "action_item_summary": "",
+            "topics_discussed": [],
+            "participant_contributions": {},
+            "meeting_effectiveness_score": None,
+            "next_steps": [],
+            "sentiment": "neutral",
+            "follow_up_needed": False,
+            "key_quotes": [],
+        }
 
     async def _store_action_items(
         self, meeting_id: int, user_id: int, items: List[Dict]

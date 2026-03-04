@@ -26,6 +26,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from settings_manager import SettingsManager
+from ai_personas import AI_PERSONAS
 
 # Get presets and languages from the class
 PROMPT_PRESETS = SettingsManager.PROMPT_PRESETS
@@ -107,10 +108,13 @@ class SettingsWindow(QDialog):
         # Add tabs
         self.tabs.addTab(self.create_audio_tab(), "Audio")
         self.tabs.addTab(self.create_ai_tab(), "AI")
+        self.tabs.addTab(self.create_translation_tab(), "Translation")
         self.tabs.addTab(self.create_appearance_tab(), "Appearance")
         self.tabs.addTab(self.create_shortcuts_tab(), "Shortcuts")
         self.tabs.addTab(self.create_diarization_tab(), "Speakers")
+        self.tabs.addTab(self.create_voice_feedback_tab(), "Voice")
         self.tabs.addTab(self.create_privacy_tab(), "Privacy")
+        self.tabs.addTab(self.create_offline_tab(), "Offline")
         self.tabs.addTab(self.create_advanced_tab(), "Advanced")
 
         # Buttons
@@ -233,6 +237,48 @@ class SettingsWindow(QDialog):
 
         layout.addWidget(model_group)
 
+        # AI Persona settings
+        persona_group = QGroupBox("AI Persona")
+        persona_layout = QVBoxLayout(persona_group)
+
+        # Persona description
+        persona_desc = QLabel(
+            "Select a persona to customize how the AI responds. "
+            "Each persona has a different tone and style."
+        )
+        persona_desc.setWordWrap(True)
+        persona_desc.setStyleSheet("color: #888888; font-size: 11px; margin-bottom: 5px;")
+        persona_layout.addWidget(persona_desc)
+
+        # Persona selection dropdown
+        persona_select_layout = QHBoxLayout()
+        persona_select_layout.addWidget(QLabel("Persona:"))
+        self.persona_combo = QComboBox()
+        for key, data in AI_PERSONAS.items():
+            self.persona_combo.addItem(f"{data['name']} - {data['description']}", key)
+        self.persona_combo.currentIndexChanged.connect(self.on_persona_changed)
+        persona_select_layout.addWidget(self.persona_combo, 1)
+        persona_layout.addLayout(persona_select_layout)
+
+        # Custom persona prompt editor (shown only when "custom" is selected)
+        self.custom_persona_label = QLabel("Custom Persona Prompt:")
+        self.custom_persona_label.setStyleSheet("margin-top: 10px;")
+        persona_layout.addWidget(self.custom_persona_label)
+
+        self.custom_persona_edit = QTextEdit()
+        self.custom_persona_edit.setPlaceholderText(
+            "Enter your custom persona prompt...\n\n"
+            "Example: You are a friendly mentor who explains things with patience and uses analogies."
+        )
+        self.custom_persona_edit.setMaximumHeight(100)
+        persona_layout.addWidget(self.custom_persona_edit)
+
+        # Initially hide custom prompt editor
+        self.custom_persona_label.setVisible(False)
+        self.custom_persona_edit.setVisible(False)
+
+        layout.addWidget(persona_group)
+
         # Prompt settings
         prompt_group = QGroupBox("System Prompt")
         prompt_layout = QVBoxLayout(prompt_group)
@@ -263,6 +309,91 @@ class SettingsWindow(QDialog):
         lang_layout.addRow("Transcription Language:", self.language_combo)
 
         layout.addWidget(lang_group)
+        layout.addStretch()
+
+        return widget
+
+    def on_persona_changed(self, index: int):
+        """Handle persona selection change."""
+        persona_key = self.persona_combo.itemData(index)
+        # Show/hide custom prompt editor based on selection
+        is_custom = persona_key == "custom"
+        self.custom_persona_label.setVisible(is_custom)
+        self.custom_persona_edit.setVisible(is_custom)
+
+    def create_translation_tab(self) -> QWidget:
+        """Create the Translation settings tab."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Enable/disable Translation
+        self.translation_check = QCheckBox("Enable Real-Time Translation")
+        self.translation_check.setToolTip(
+            "Translate transcribed text to your preferred language in real-time.\n"
+            "Uses Claude Haiku for fast, accurate translations."
+        )
+        self.translation_check.setStyleSheet("font-weight: bold; font-size: 13px;")
+        layout.addWidget(self.translation_check)
+
+        # Description
+        desc_label = QLabel(
+            "Real-time translation helps you understand conversations in languages "
+            "you're not fluent in. The original text will be shown alongside the "
+            "translation if desired."
+        )
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("color: #888888; font-size: 11px; margin-bottom: 10px;")
+        layout.addWidget(desc_label)
+
+        # Target language selection
+        lang_group = QGroupBox("Translation Settings")
+        lang_layout = QFormLayout(lang_group)
+
+        self.translation_lang_combo = QComboBox()
+        # Add supported translation languages
+        for code, name, native in SettingsManager.TRANSLATION_LANGUAGES:
+            display_name = f"{name} ({native})" if native != name else name
+            self.translation_lang_combo.addItem(display_name, code)
+
+        lang_layout.addRow("Translate To:", self.translation_lang_combo)
+
+        # Show original text option
+        self.show_original_check = QCheckBox("Show original text alongside translation")
+        self.show_original_check.setChecked(True)
+        self.show_original_check.setToolTip(
+            "When enabled, the original transcribed text will be shown\n"
+            "below the translated text for reference."
+        )
+        lang_layout.addRow("", self.show_original_check)
+
+        layout.addWidget(lang_group)
+
+        # Info about translation
+        info_group = QGroupBox("How It Works")
+        info_layout = QVBoxLayout(info_group)
+
+        info_text = QLabel(
+            "1. Audio is transcribed in its original language\n"
+            "2. The transcription is sent to Claude Haiku for translation\n"
+            "3. Both original and translated text appear in the overlay\n\n"
+            "Translation adds a small latency (~200-500ms) to responses.\n"
+            "For best results, ensure the transcription language is set correctly."
+        )
+        info_text.setWordWrap(True)
+        info_text.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+        info_layout.addWidget(info_text)
+
+        layout.addWidget(info_group)
+
+        # Supported languages hint
+        hint_label = QLabel(
+            "Tip: Supports 28 languages including English, Spanish, French, German, "
+            "Chinese, Japanese, Korean, Arabic, Hindi, and more."
+        )
+        hint_label.setWordWrap(True)
+        hint_label.setStyleSheet("color: #666666; font-size: 10px;")
+        layout.addWidget(hint_label)
+
         layout.addStretch()
 
         return widget
@@ -530,6 +661,156 @@ class SettingsWindow(QDialog):
                 f"Could not open speaker manager: {e}"
             )
 
+    def create_voice_feedback_tab(self) -> QWidget:
+        """Create the Voice Feedback settings tab."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Check if voice feedback is available
+        try:
+            from services.voice_feedback import is_voice_feedback_available
+            voice_available = is_voice_feedback_available()
+        except ImportError:
+            voice_available = False
+
+        # Enable/disable Voice Feedback
+        self.voice_feedback_check = QCheckBox("Enable Voice Feedback")
+        self.voice_feedback_check.setToolTip(
+            "Speak AI responses aloud using text-to-speech.\n"
+            "Requires pyttsx3 package to be installed."
+        )
+        self.voice_feedback_check.setStyleSheet("font-weight: bold; font-size: 13px;")
+        self.voice_feedback_check.setEnabled(voice_available)
+        layout.addWidget(self.voice_feedback_check)
+
+        # Availability warning
+        if not voice_available:
+            warning_label = QLabel(
+                "Voice feedback is not available. Please install pyttsx3:\n"
+                "pip install pyttsx3"
+            )
+            warning_label.setWordWrap(True)
+            warning_label.setStyleSheet("color: #f9e2af; font-size: 11px; margin-bottom: 10px;")
+            layout.addWidget(warning_label)
+
+        # Description
+        desc_label = QLabel(
+            "Voice feedback reads AI responses aloud using your system's "
+            "text-to-speech engine. This can help you stay focused on the "
+            "conversation while receiving guidance."
+        )
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("color: #888888; font-size: 11px; margin-bottom: 10px;")
+        layout.addWidget(desc_label)
+
+        # Voice Settings Group
+        voice_group = QGroupBox("Voice Settings")
+        voice_layout = QFormLayout(voice_group)
+
+        # Speech rate slider
+        rate_layout = QHBoxLayout()
+        self.voice_rate_slider = QSlider(Qt.Orientation.Horizontal)
+        self.voice_rate_slider.setRange(50, 300)
+        self.voice_rate_slider.setValue(150)
+        self.voice_rate_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.voice_rate_slider.setTickInterval(50)
+        self.voice_rate_slider.setEnabled(voice_available)
+        self.voice_rate_label = QLabel("150 wpm")
+        self.voice_rate_label.setMinimumWidth(60)
+        self.voice_rate_slider.valueChanged.connect(
+            lambda v: self.voice_rate_label.setText(f"{v} wpm")
+        )
+        rate_layout.addWidget(self.voice_rate_slider, 1)
+        rate_layout.addWidget(self.voice_rate_label)
+        voice_layout.addRow("Speech Rate:", rate_layout)
+
+        # Volume slider
+        volume_layout = QHBoxLayout()
+        self.voice_volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self.voice_volume_slider.setRange(0, 100)
+        self.voice_volume_slider.setValue(80)
+        self.voice_volume_slider.setEnabled(voice_available)
+        self.voice_volume_label = QLabel("80%")
+        self.voice_volume_label.setMinimumWidth(60)
+        self.voice_volume_slider.valueChanged.connect(
+            lambda v: self.voice_volume_label.setText(f"{v}%")
+        )
+        volume_layout.addWidget(self.voice_volume_slider, 1)
+        volume_layout.addWidget(self.voice_volume_label)
+        voice_layout.addRow("Volume:", volume_layout)
+
+        layout.addWidget(voice_group)
+
+        # Test button
+        test_layout = QHBoxLayout()
+        self.voice_test_btn = QPushButton("Test Voice")
+        self.voice_test_btn.setToolTip("Play a test message to preview voice settings")
+        self.voice_test_btn.setEnabled(voice_available)
+        self.voice_test_btn.clicked.connect(self._test_voice_feedback)
+        test_layout.addWidget(self.voice_test_btn)
+        test_layout.addStretch()
+        layout.addLayout(test_layout)
+
+        # Tips
+        tips_group = QGroupBox("Tips")
+        tips_layout = QVBoxLayout(tips_group)
+        tips_text = QLabel(
+            "- Adjust speech rate to match your listening preference\n"
+            "- Lower rates are easier to understand but take longer\n"
+            "- Voice feedback works best with shorter AI responses\n"
+            "- Use headphones to avoid feedback during meetings"
+        )
+        tips_text.setWordWrap(True)
+        tips_text.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+        tips_layout.addWidget(tips_text)
+        layout.addWidget(tips_group)
+
+        layout.addStretch()
+
+        return widget
+
+    def _test_voice_feedback(self):
+        """Test voice feedback with current settings."""
+        try:
+            from services.voice_feedback import VoiceFeedback
+
+            # Create temporary voice feedback instance with current settings
+            rate = self.voice_rate_slider.value()
+            volume = self.voice_volume_slider.value() / 100.0
+
+            test_voice = VoiceFeedback(rate=rate, volume=volume)
+            test_voice.set_enabled(True)
+
+            if test_voice.start():
+                test_voice.speak("This is a test of the voice feedback feature. How does this sound?")
+                # Schedule cleanup after a delay
+                import threading
+                def cleanup():
+                    import time
+                    time.sleep(8)  # Wait for speech to complete
+                    test_voice.stop()
+                threading.Thread(target=cleanup, daemon=True).start()
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Voice Test Failed",
+                    "Could not start the voice feedback engine.\n"
+                    "Please ensure pyttsx3 is properly installed."
+                )
+        except ImportError:
+            QMessageBox.warning(
+                self,
+                "Voice Test Failed",
+                "Voice feedback is not available.\n"
+                "Please install pyttsx3: pip install pyttsx3"
+            )
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Voice Test Failed",
+                f"Error testing voice feedback: {e}"
+            )
+
     def create_privacy_tab(self) -> QWidget:
         """Create the Privacy Mode settings tab."""
         widget = QWidget()
@@ -794,6 +1075,248 @@ class SettingsWindow(QDialog):
 
             checkbox.blockSignals(False)
 
+    def create_offline_tab(self) -> QWidget:
+        """Create the Offline Mode settings tab."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Enable/disable Offline Mode
+        self.offline_mode_check = QCheckBox("Enable Offline Mode")
+        self.offline_mode_check.setToolTip(
+            "Store meetings and conversations locally for offline access.\n"
+            "Data will sync automatically when back online."
+        )
+        self.offline_mode_check.setStyleSheet("font-weight: bold; font-size: 13px;")
+        layout.addWidget(self.offline_mode_check)
+
+        # Description
+        desc_label = QLabel(
+            "Offline Mode allows ReadIn AI to work without an internet connection. "
+            "Your meetings, transcripts, and action items are stored locally and "
+            "synced when you're back online. Local transcription works offline by default."
+        )
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("color: #888888; font-size: 11px; margin-bottom: 10px;")
+        layout.addWidget(desc_label)
+
+        # Sync Settings Group
+        sync_group = QGroupBox("Sync Settings")
+        sync_layout = QFormLayout(sync_group)
+
+        # Sync interval
+        self.sync_interval_spin = QSpinBox()
+        self.sync_interval_spin.setRange(1, 60)
+        self.sync_interval_spin.setValue(1)
+        self.sync_interval_spin.setSuffix(" minutes")
+        self.sync_interval_spin.setToolTip(
+            "How often to sync data with the server when online.\n"
+            "Lower values = more frequent syncs but higher network usage."
+        )
+        sync_layout.addRow("Sync Interval:", self.sync_interval_spin)
+
+        # Auto sync options
+        self.auto_sync_startup_check = QCheckBox("Sync on startup")
+        self.auto_sync_startup_check.setToolTip("Automatically sync when the app starts")
+        sync_layout.addRow("", self.auto_sync_startup_check)
+
+        self.sync_on_meeting_end_check = QCheckBox("Sync when meeting ends")
+        self.sync_on_meeting_end_check.setToolTip("Automatically sync data after each meeting")
+        sync_layout.addRow("", self.sync_on_meeting_end_check)
+
+        layout.addWidget(sync_group)
+
+        # Storage Settings Group
+        storage_group = QGroupBox("Storage Settings")
+        storage_layout = QFormLayout(storage_group)
+
+        # Max storage
+        self.max_storage_spin = QSpinBox()
+        self.max_storage_spin.setRange(100, 2000)
+        self.max_storage_spin.setValue(500)
+        self.max_storage_spin.setSuffix(" MB")
+        self.max_storage_spin.setToolTip(
+            "Maximum disk space for offline storage.\n"
+            "Older synced data will be removed when limit is reached."
+        )
+        storage_layout.addRow("Max Storage:", self.max_storage_spin)
+
+        # Storage usage display
+        self.storage_usage_label = QLabel("Calculating...")
+        self.storage_usage_label.setStyleSheet("color: #a6adc8; font-size: 11px;")
+        storage_layout.addRow("Current Usage:", self.storage_usage_label)
+
+        layout.addWidget(storage_group)
+
+        # Sync Status Group
+        status_group = QGroupBox("Sync Status")
+        status_layout = QFormLayout(status_group)
+
+        # Status labels
+        self.sync_status_label = QLabel("Unknown")
+        self.sync_status_label.setStyleSheet("color: #a6adc8;")
+        status_layout.addRow("Status:", self.sync_status_label)
+
+        self.pending_syncs_label = QLabel("0 items")
+        self.pending_syncs_label.setStyleSheet("color: #a6adc8;")
+        status_layout.addRow("Pending:", self.pending_syncs_label)
+
+        self.last_sync_label = QLabel("Never")
+        self.last_sync_label.setStyleSheet("color: #a6adc8;")
+        status_layout.addRow("Last Sync:", self.last_sync_label)
+
+        # Sync now button
+        sync_btn_layout = QHBoxLayout()
+        self.sync_now_btn = QPushButton("Sync Now")
+        self.sync_now_btn.setToolTip("Manually trigger a sync")
+        self.sync_now_btn.clicked.connect(self._on_sync_now_clicked)
+        sync_btn_layout.addWidget(self.sync_now_btn)
+
+        self.clear_offline_btn = QPushButton("Clear Offline Data")
+        self.clear_offline_btn.setToolTip("Remove all locally stored data (synced data only)")
+        self.clear_offline_btn.setStyleSheet("color: #f9e2af;")
+        self.clear_offline_btn.clicked.connect(self._on_clear_offline_clicked)
+        sync_btn_layout.addWidget(self.clear_offline_btn)
+
+        sync_btn_layout.addStretch()
+        status_layout.addRow("", sync_btn_layout)
+
+        layout.addWidget(status_group)
+
+        # Help text
+        help_label = QLabel(
+            "Note: Local transcription already works offline. This feature stores "
+            "meetings and conversations locally so they can be synced later."
+        )
+        help_label.setWordWrap(True)
+        help_label.setStyleSheet("color: #666666; font-size: 10px;")
+        layout.addWidget(help_label)
+
+        layout.addStretch()
+
+        # Update storage usage
+        self._update_storage_usage()
+
+        return widget
+
+    def _on_sync_now_clicked(self):
+        """Handle sync now button click."""
+        try:
+            from services.sync_manager import get_sync_manager
+            sync_manager = get_sync_manager()
+            if sync_manager.sync_now():
+                QMessageBox.information(
+                    self,
+                    "Sync Started",
+                    "Sync has been initiated. Check the sync status for progress."
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Sync Not Available",
+                    "Cannot sync at this time. Either a sync is already in progress "
+                    "or offline mode is not properly configured."
+                )
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Sync Error",
+                f"Could not start sync: {e}"
+            )
+
+    def _on_clear_offline_clicked(self):
+        """Handle clear offline data button click."""
+        reply = QMessageBox.question(
+            self,
+            "Clear Offline Data",
+            "This will remove all locally stored data that has already been synced.\n"
+            "Pending (unsynced) data will be preserved.\n\n"
+            "Are you sure you want to continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                from services.offline_storage import get_offline_storage
+                storage = get_offline_storage()
+                storage.cleanup_old_data(days=0)  # Remove all synced data
+                self._update_storage_usage()
+                QMessageBox.information(
+                    self,
+                    "Data Cleared",
+                    "Synced offline data has been removed."
+                )
+            except Exception as e:
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    f"Could not clear offline data: {e}"
+                )
+
+    def _update_storage_usage(self):
+        """Update storage usage display."""
+        try:
+            from services.offline_storage import get_offline_storage
+            storage = get_offline_storage()
+            status = storage.get_status()
+
+            usage_mb = status.get("storage_size_mb", 0)
+            max_mb = self.max_storage_spin.value()
+            percentage = int((usage_mb / max_mb) * 100) if max_mb > 0 else 0
+
+            self.storage_usage_label.setText(
+                f"{usage_mb:.1f} MB / {max_mb} MB ({percentage}%)"
+            )
+
+            # Update pending count
+            pending = status.get("pending_syncs", 0)
+            self.pending_syncs_label.setText(f"{pending} items")
+
+            # Color code based on usage
+            if percentage >= 90:
+                self.storage_usage_label.setStyleSheet("color: #ef4444;")
+            elif percentage >= 70:
+                self.storage_usage_label.setStyleSheet("color: #f9e2af;")
+            else:
+                self.storage_usage_label.setStyleSheet("color: #a6e3a1;")
+
+        except Exception as e:
+            self.storage_usage_label.setText("Unable to calculate")
+            self.storage_usage_label.setStyleSheet("color: #6c7086;")
+
+    def _update_sync_status(self):
+        """Update sync status display."""
+        try:
+            from services.sync_manager import get_sync_manager
+            sync_manager = get_sync_manager()
+            status = sync_manager.get_status()
+
+            # Update status label
+            if status.get("is_syncing"):
+                self.sync_status_label.setText("Syncing...")
+                self.sync_status_label.setStyleSheet("color: #f59e0b;")
+            elif status.get("is_online"):
+                self.sync_status_label.setText("Online")
+                self.sync_status_label.setStyleSheet("color: #a6e3a1;")
+            else:
+                self.sync_status_label.setText("Offline")
+                self.sync_status_label.setStyleSheet("color: #ef4444;")
+
+            # Update last sync
+            last_sync = status.get("last_sync")
+            if last_sync:
+                from datetime import datetime
+                try:
+                    dt = datetime.fromisoformat(last_sync)
+                    self.last_sync_label.setText(dt.strftime("%Y-%m-%d %H:%M"))
+                except (ValueError, TypeError):
+                    self.last_sync_label.setText("Unknown")
+            else:
+                self.last_sync_label.setText("Never")
+
+        except Exception:
+            self.sync_status_label.setText("Unknown")
+            self.sync_status_label.setStyleSheet("color: #6c7086;")
+
     def create_advanced_tab(self) -> QWidget:
         """Create the Advanced settings tab."""
         widget = QWidget()
@@ -1021,6 +1544,32 @@ class SettingsWindow(QDialog):
         self.context_spin.setValue(self.settings.get("context_size", 3))
         self.prompt_edit.setPlainText(self.settings.get("system_prompt", ""))
 
+        # AI Persona
+        ai_persona = self.settings.get("ai_persona", "professional")
+        for i in range(self.persona_combo.count()):
+            if self.persona_combo.itemData(i) == ai_persona:
+                self.persona_combo.setCurrentIndex(i)
+                break
+        custom_persona_prompt = self.settings.get("custom_persona_prompt", "")
+        self.custom_persona_edit.setPlainText(custom_persona_prompt)
+        # Show/hide custom prompt editor
+        is_custom = ai_persona == "custom"
+        self.custom_persona_label.setVisible(is_custom)
+        self.custom_persona_edit.setVisible(is_custom)
+
+        # Translation
+        self.translation_check.setChecked(
+            self.settings.get("translation_enabled", False)
+        )
+        translation_lang = self.settings.get("translation_target_language", "en")
+        for i in range(self.translation_lang_combo.count()):
+            if self.translation_lang_combo.itemData(i) == translation_lang:
+                self.translation_lang_combo.setCurrentIndex(i)
+                break
+        self.show_original_check.setChecked(
+            self.settings.get("translation_show_original", True)
+        )
+
         lang = self.settings.get("language", "en")
         for i in range(self.language_combo.count()):
             if self.language_combo.itemData(i) == lang:
@@ -1094,6 +1643,36 @@ class SettingsWindow(QDialog):
             self.token_status_label.setText("No token configured")
             self.token_status_label.setStyleSheet("color: #f9e2af; font-size: 11px;")
 
+        # Voice Feedback
+        self.voice_feedback_check.setChecked(
+            self.settings.get("voice_feedback_enabled", False)
+        )
+        voice_rate = self.settings.get("voice_feedback_rate", 150)
+        self.voice_rate_slider.setValue(voice_rate)
+        self.voice_rate_label.setText(f"{voice_rate} wpm")
+        voice_volume = int(self.settings.get("voice_feedback_volume", 0.8) * 100)
+        self.voice_volume_slider.setValue(voice_volume)
+        self.voice_volume_label.setText(f"{voice_volume}%")
+
+        # Offline Mode
+        self.offline_mode_check.setChecked(
+            self.settings.get("offline_mode_enabled", True)
+        )
+        self.sync_interval_spin.setValue(
+            self.settings.get("sync_interval_minutes", 1)
+        )
+        self.max_storage_spin.setValue(
+            self.settings.get("max_offline_storage_mb", 500)
+        )
+        self.auto_sync_startup_check.setChecked(
+            self.settings.get("auto_sync_on_startup", True)
+        )
+        self.sync_on_meeting_end_check.setChecked(
+            self.settings.get("sync_on_meeting_end", True)
+        )
+        self._update_storage_usage()
+        self._update_sync_status()
+
     def apply_settings(self):
         """Apply current settings without closing, emitting signals for each change."""
         # Audio - validate device before saving
@@ -1128,6 +1707,38 @@ class SettingsWindow(QDialog):
         self.settings.set("system_prompt", new_prompt)
         if old_prompt != new_prompt:
             self.setting_changed.emit("system_prompt", new_prompt)
+
+        # AI Persona settings
+        old_persona = self.settings.get("ai_persona")
+        new_persona = self.persona_combo.currentData()
+        self.settings.set("ai_persona", new_persona)
+        if old_persona != new_persona:
+            self.setting_changed.emit("ai_persona", new_persona)
+
+        old_custom_persona = self.settings.get("custom_persona_prompt")
+        new_custom_persona = self.custom_persona_edit.toPlainText()
+        self.settings.set("custom_persona_prompt", new_custom_persona)
+        if old_custom_persona != new_custom_persona:
+            self.setting_changed.emit("custom_persona_prompt", new_custom_persona)
+
+        # Translation settings
+        old_translation_enabled = self.settings.get("translation_enabled")
+        new_translation_enabled = self.translation_check.isChecked()
+        self.settings.set("translation_enabled", new_translation_enabled)
+        if old_translation_enabled != new_translation_enabled:
+            self.setting_changed.emit("translation_enabled", new_translation_enabled)
+
+        old_translation_lang = self.settings.get("translation_target_language")
+        new_translation_lang = self.translation_lang_combo.currentData()
+        self.settings.set("translation_target_language", new_translation_lang)
+        if old_translation_lang != new_translation_lang:
+            self.setting_changed.emit("translation_target_language", new_translation_lang)
+
+        old_show_original = self.settings.get("translation_show_original")
+        new_show_original = self.show_original_check.isChecked()
+        self.settings.set("translation_show_original", new_show_original)
+        if old_show_original != new_show_original:
+            self.setting_changed.emit("translation_show_original", new_show_original)
 
         old_language = self.settings.get("language")
         new_language = self.language_combo.currentData()
@@ -1227,6 +1838,57 @@ class SettingsWindow(QDialog):
             os.environ["HUGGINGFACE_TOKEN"] = hf_token
             self.token_status_label.setText("Token saved to session")
             self.token_status_label.setStyleSheet("color: #a6e3a1; font-size: 11px;")
+
+        # Voice Feedback - emit signals for changes
+        old_voice_feedback_enabled = self.settings.get("voice_feedback_enabled")
+        new_voice_feedback_enabled = self.voice_feedback_check.isChecked()
+        self.settings.set("voice_feedback_enabled", new_voice_feedback_enabled)
+        if old_voice_feedback_enabled != new_voice_feedback_enabled:
+            self.setting_changed.emit("voice_feedback_enabled", new_voice_feedback_enabled)
+
+        old_voice_rate = self.settings.get("voice_feedback_rate")
+        new_voice_rate = self.voice_rate_slider.value()
+        self.settings.set("voice_feedback_rate", new_voice_rate)
+        if old_voice_rate != new_voice_rate:
+            self.setting_changed.emit("voice_feedback_rate", new_voice_rate)
+
+        old_voice_volume = self.settings.get("voice_feedback_volume")
+        new_voice_volume = self.voice_volume_slider.value() / 100.0
+        self.settings.set("voice_feedback_volume", new_voice_volume)
+        if old_voice_volume != new_voice_volume:
+            self.setting_changed.emit("voice_feedback_volume", new_voice_volume)
+
+        # Offline Mode - emit signals for changes
+        old_offline_mode = self.settings.get("offline_mode_enabled")
+        new_offline_mode = self.offline_mode_check.isChecked()
+        self.settings.set("offline_mode_enabled", new_offline_mode)
+        if old_offline_mode != new_offline_mode:
+            self.setting_changed.emit("offline_mode_enabled", new_offline_mode)
+
+        old_sync_interval = self.settings.get("sync_interval_minutes")
+        new_sync_interval = self.sync_interval_spin.value()
+        self.settings.set("sync_interval_minutes", new_sync_interval)
+        if old_sync_interval != new_sync_interval:
+            self.setting_changed.emit("sync_interval_minutes", new_sync_interval)
+            # Update sync manager if available
+            try:
+                from services.sync_manager import get_sync_manager
+                sync_manager = get_sync_manager()
+                sync_manager.set_sync_interval(new_sync_interval * 60)  # Convert to seconds
+            except Exception:
+                pass
+
+        old_max_storage = self.settings.get("max_offline_storage_mb")
+        new_max_storage = self.max_storage_spin.value()
+        self.settings.set("max_offline_storage_mb", new_max_storage)
+        if old_max_storage != new_max_storage:
+            self.setting_changed.emit("max_offline_storage_mb", new_max_storage)
+
+        self.settings.set("auto_sync_on_startup", self.auto_sync_startup_check.isChecked())
+        self.settings.set("sync_on_meeting_end", self.sync_on_meeting_end_check.isChecked())
+
+        # Update storage display
+        self._update_storage_usage()
 
         self.settings_changed.emit()
 

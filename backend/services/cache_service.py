@@ -313,6 +313,31 @@ class CacheKeys:
     def health_check() -> str:
         return "system:health"
 
+    # Recommendation cache keys
+    @staticmethod
+    def meeting_recommendations(meeting_id: int) -> str:
+        return f"recommendation:full:{meeting_id}"
+
+    @staticmethod
+    def meeting_next_steps(meeting_id: int) -> str:
+        return f"recommendation:next_steps:{meeting_id}"
+
+    @staticmethod
+    def meeting_risks(meeting_id: int) -> str:
+        return f"recommendation:risks:{meeting_id}"
+
+    @staticmethod
+    def meeting_prep(meeting_id: int) -> str:
+        return f"recommendation:prep:{meeting_id}"
+
+    @staticmethod
+    def participant_insights(participant_id: int, user_id: int) -> str:
+        return f"recommendation:participant:{participant_id}:{user_id}"
+
+    @staticmethod
+    def topic_suggestions(user_id: int, meeting_type: str = "all") -> str:
+        return f"recommendation:topics:{user_id}:{meeting_type}"
+
 
 # =============================================================================
 # CACHE TTL CONSTANTS
@@ -336,6 +361,14 @@ class CacheTTL:
     SEARCH = SHORT
     HEALTH = VERY_SHORT
     SESSION = DAY         # 24 hours for sessions
+
+    # Recommendation TTLs
+    RECOMMENDATIONS = MEDIUM      # 5 minutes for full recommendations
+    NEXT_STEPS = MEDIUM           # 5 minutes for next steps
+    RISKS = MEDIUM                # 5 minutes for risk analysis
+    MEETING_PREP = LONG           # 15 minutes for prep hints
+    PARTICIPANT_INSIGHTS = LONG   # 15 minutes for participant insights
+    TOPIC_SUGGESTIONS = VERY_LONG # 1 hour for topic suggestions
 
 
 # =============================================================================

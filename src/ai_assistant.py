@@ -8,6 +8,7 @@ from datetime import datetime
 from anthropic import Anthropic
 
 from config import ANTHROPIC_API_KEY, RESPONSE_MODEL, DEFAULT_CONTEXT_WINDOW, MAX_CONTEXT_WINDOW
+from ai_personas import get_persona_prompt, AI_PERSONAS
 
 if TYPE_CHECKING:
     from context_provider import ContextProvider
@@ -51,6 +52,8 @@ class AIAssistant:
         self._generating_lock = threading.Lock()  # Thread safety for generation flag
         self._context_provider = context_provider
         self._meeting_type = "general"
+        self._persona_key = "professional"  # Default persona
+        self._custom_persona_prompt = ""  # Custom persona prompt
 
     @property
     def default_system_prompt(self) -> str:
@@ -79,15 +82,24 @@ Remember: The person will SPEAK these naturally - you're just giving them the ke
 
     @property
     def system_prompt(self) -> str:
-        """Get the current system prompt with personalization."""
+        """Get the current system prompt with persona and personalization."""
         base_prompt = self._custom_system_prompt or self.default_system_prompt
+
+        # Get persona prompt
+        persona_prompt = get_persona_prompt(self._persona_key, self._custom_persona_prompt)
+
+        # Combine persona with base prompt if persona is set
+        if persona_prompt:
+            combined_prompt = f"{persona_prompt}\n\n{base_prompt}"
+        else:
+            combined_prompt = base_prompt
 
         # Enhance with context provider if available
         if self._context_provider:
             return self._context_provider.build_enhanced_system_prompt(
-                base_prompt, self._meeting_type
+                combined_prompt, self._meeting_type
             )
-        return base_prompt
+        return combined_prompt
 
     def set_system_prompt(self, prompt: Optional[str]):
         """Set a custom system prompt.
@@ -112,6 +124,42 @@ Remember: The person will SPEAK these naturally - you're just giving them the ke
             meeting_type: Type of meeting (interview, manager, client, etc.)
         """
         self._meeting_type = meeting_type
+
+    def set_persona(self, persona_key: str, custom_prompt: str = ""):
+        """Set the AI persona for response styling.
+
+        Args:
+            persona_key: Key of the persona (professional, casual, technical, executive, sales, custom)
+            custom_prompt: Custom prompt to use if persona_key is "custom"
+        """
+        if persona_key in AI_PERSONAS:
+            self._persona_key = persona_key
+            self._custom_persona_prompt = custom_prompt if persona_key == "custom" else ""
+        else:
+            # Fall back to professional if invalid key
+            self._persona_key = "professional"
+            self._custom_persona_prompt = ""
+
+    def get_persona(self) -> str:
+        """Get the current persona key.
+
+        Returns:
+            The current persona key
+        """
+        return self._persona_key
+
+    def get_persona_info(self) -> Dict[str, str]:
+        """Get information about the current persona.
+
+        Returns:
+            Dict with 'key', 'name', and 'description' of the current persona
+        """
+        persona = AI_PERSONAS.get(self._persona_key, AI_PERSONAS["professional"])
+        return {
+            'key': self._persona_key,
+            'name': persona.get('name', 'Professional'),
+            'description': persona.get('description', '')
+        }
 
     def refresh_context(self) -> bool:
         """Refresh personalization context from backend.
@@ -274,12 +322,14 @@ Remember: The person will SPEAK these naturally - you're just giving them the ke
             Dict with context stats
         """
         with self._lock:
+            persona_info = self.get_persona_info()
             summary = {
                 'entries': len(self._context),
                 'max_entries': self._context_size,
                 'model': self._model,
                 'using_custom_prompt': self._custom_system_prompt is not None,
-                'meeting_type': self._meeting_type
+                'meeting_type': self._meeting_type,
+                'persona': persona_info
             }
 
             # Add personalization info

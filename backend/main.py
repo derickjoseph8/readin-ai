@@ -45,6 +45,8 @@ from routes import (
     gdpr_router, metrics_router, analytics_router, calendar_router,
     sso_router, api_keys_router, webhooks_router, white_label_router,
     two_factor_router, webauthn_router, devices_router,
+    recommendations_router, meetings_recommendations_router,
+    slack_router, email_integration_router, zapier_router,
     # Admin routes
     admin_dashboard_router, admin_teams_router, admin_tickets_router,
     customer_tickets_router, admin_chat_router, customer_chat_router,
@@ -60,6 +62,7 @@ from routes.analytics_dashboard import router as analytics_dashboard_router
 from routes.ai_preferences import router as ai_preferences_router
 from routes.exports import router as exports_router
 from routes.integrations import router as integrations_router
+from routes.project_management import router as project_management_router
 from routes.payments import router as payments_router
 from routes.chat_websocket import router as chat_websocket_router
 from routes.semantic_search import router as semantic_search_router
@@ -215,7 +218,13 @@ app.include_router(analytics_dashboard_router, prefix=API_V1_PREFIX)
 app.include_router(ai_preferences_router, prefix=API_V1_PREFIX)
 app.include_router(exports_router, prefix=API_V1_PREFIX)
 app.include_router(integrations_router, prefix=API_V1_PREFIX)
+app.include_router(project_management_router, prefix=API_V1_PREFIX)  # PM integrations (Notion, Asana, Linear, Jira)
 app.include_router(devices_router, prefix=API_V1_PREFIX)
+app.include_router(recommendations_router, prefix=API_V1_PREFIX)
+app.include_router(meetings_recommendations_router, prefix=API_V1_PREFIX)
+app.include_router(slack_router, prefix=API_V1_PREFIX)  # Slack slash commands and events
+app.include_router(email_integration_router, prefix=API_V1_PREFIX)  # Deep email integration
+app.include_router(zapier_router, prefix=API_V1_PREFIX)  # Zapier REST hooks integration
 app.include_router(payments_router)  # Already has /api/v1 prefix
 app.include_router(contact_router)
 

@@ -24,7 +24,7 @@ DEBUG = os.getenv("DEBUG", "false").lower() == "true" and not IS_PRODUCTION
 API_VERSION = "2.1.0"
 
 # Desktop App Version (for update checker)
-APP_VERSION = "1.6.0"
+APP_VERSION = "1.5.4"
 
 # =============================================================================
 # DATABASE CONFIGURATION
@@ -187,6 +187,42 @@ SALESFORCE_CLIENT_SECRET = os.getenv("SALESFORCE_CLIENT_SECRET", "")
 # HubSpot CRM
 HUBSPOT_CLIENT_ID = os.getenv("HUBSPOT_CLIENT_ID", "")
 HUBSPOT_CLIENT_SECRET = os.getenv("HUBSPOT_CLIENT_SECRET", "")
+
+# =============================================================================
+# PROJECT MANAGEMENT INTEGRATIONS
+# =============================================================================
+
+# Notion - task/database sync
+NOTION_CLIENT_ID = os.getenv("NOTION_CLIENT_ID", "")
+NOTION_CLIENT_SECRET = os.getenv("NOTION_CLIENT_SECRET", "")
+NOTION_REDIRECT_URI = os.getenv("NOTION_REDIRECT_URI", "")
+
+# Asana - task/project sync
+ASANA_CLIENT_ID = os.getenv("ASANA_CLIENT_ID", "")
+ASANA_CLIENT_SECRET = os.getenv("ASANA_CLIENT_SECRET", "")
+ASANA_REDIRECT_URI = os.getenv("ASANA_REDIRECT_URI", "")
+
+# Linear - issue tracking sync
+LINEAR_CLIENT_ID = os.getenv("LINEAR_CLIENT_ID", "")
+LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET", "")
+LINEAR_REDIRECT_URI = os.getenv("LINEAR_REDIRECT_URI", "")
+
+# Jira - issue tracking sync (Atlassian Cloud)
+JIRA_CLIENT_ID = os.getenv("JIRA_CLIENT_ID", "")
+JIRA_CLIENT_SECRET = os.getenv("JIRA_CLIENT_SECRET", "")
+JIRA_REDIRECT_URI = os.getenv("JIRA_REDIRECT_URI", "")
+
+# Monday.com - board/item sync
+MONDAY_CLIENT_ID = os.getenv("MONDAY_CLIENT_ID", "")
+MONDAY_CLIENT_SECRET = os.getenv("MONDAY_CLIENT_SECRET", "")
+MONDAY_REDIRECT_URI = os.getenv("MONDAY_REDIRECT_URI", "")
+
+# =============================================================================
+# ZAPIER INTEGRATION
+# =============================================================================
+
+ZAPIER_CLIENT_ID = os.getenv("ZAPIER_CLIENT_ID", "")
+ZAPIER_CLIENT_SECRET = os.getenv("ZAPIER_CLIENT_SECRET", "")
 
 # =============================================================================
 # APP SETTINGS

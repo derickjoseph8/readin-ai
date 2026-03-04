@@ -9,10 +9,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QApplication, QSizeGrip,
-    QScrollArea
+    QScrollArea, QMenu
 )
 from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QTimer
-from PyQt6.QtGui import QFont, QClipboard, QCursor
+from PyQt6.QtGui import QFont, QClipboard, QCursor, QAction
 
 from config import OVERLAY_WIDTH, OVERLAY_HEIGHT, OVERLAY_OPACITY, IS_WINDOWS
 
@@ -24,6 +24,13 @@ try:
 except ImportError:
     THEMES_AVAILABLE = False
 
+# Import sync status indicator
+try:
+    from ui.sync_status_indicator import SyncStatusIndicator
+    SYNC_INDICATOR_AVAILABLE = True
+except ImportError:
+    SYNC_INDICATOR_AVAILABLE = False
+
 
 class OverlayWindow(QWidget):
     """Floating overlay optimized for glancing while speaking."""
@@ -33,11 +40,13 @@ class OverlayWindow(QWidget):
     update_response_signal = pyqtSignal(str)
     append_response_signal = pyqtSignal(str)
     update_speaker_signal = pyqtSignal(str, str)  # speaker_id, speaker_name
+    update_translation_signal = pyqtSignal(str, str, bool)  # original, translated, show_original
     export_requested = pyqtSignal()
     settings_requested = pyqtSignal()
     logout_requested = pyqtSignal()
     listen_toggled = pyqtSignal(bool)  # True = start, False = stop
     speaker_rename_requested = pyqtSignal(str)  # speaker_id
+    edit_transcripts_requested = pyqtSignal()  # Request to open transcript editor
 
     def __init__(self):
         super().__init__()
@@ -46,8 +55,11 @@ class OverlayWindow(QWidget):
         self._current_heard = ""
         self._current_speaker_id = ""
         self._current_speaker_name = ""
+        self._current_translation = ""
         self._large_mode = False
         self._hidden_from_capture = False
+        self._translation_enabled = False
+        self._current_meeting_id = None  # Track current meeting for transcript editing
         self._settings = SettingsManager() if THEMES_AVAILABLE else None
         self._setup_ui()
         self._connect_signals()
@@ -94,6 +106,14 @@ class OverlayWindow(QWidget):
         self.title_label = QLabel("ReadIn AI")
         self._apply_title_style()
         header.addWidget(self.title_label)
+
+        # Sync status indicator (compact)
+        if SYNC_INDICATOR_AVAILABLE:
+            self.sync_indicator = SyncStatusIndicator()
+            self.sync_indicator.setFixedWidth(100)
+            header.addWidget(self.sync_indicator)
+        else:
+            self.sync_indicator = None
 
         header.addStretch()
 
@@ -225,6 +245,32 @@ class OverlayWindow(QWidget):
         """)
         self.heard_label.setMaximumHeight(55)
         container_layout.addWidget(self.heard_label)
+
+        # Translation section (hidden by default, shown when translation is enabled)
+        self.translation_container = QWidget()
+        translation_layout = QVBoxLayout(self.translation_container)
+        translation_layout.setContentsMargins(0, 0, 0, 0)
+        translation_layout.setSpacing(4)
+
+        translation_header = QLabel("TRANSLATION:")
+        translation_header.setStyleSheet("color: #f9e2af; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
+        translation_layout.addWidget(translation_header)
+
+        self.translation_label = QLabel("")
+        self.translation_label.setWordWrap(True)
+        self.translation_label.setStyleSheet("""
+            color: #f9e2af;
+            font-size: 12px;
+            background-color: rgba(249, 226, 175, 0.1);
+            padding: 8px 10px;
+            border-radius: 6px;
+            border-left: 2px solid #f9e2af;
+        """)
+        self.translation_label.setMaximumHeight(70)
+        translation_layout.addWidget(self.translation_label)
+
+        self.translation_container.hide()  # Hidden by default
+        container_layout.addWidget(self.translation_container)
 
         # "Your answer:" section (prominent, large, readable) with color-blind accessible text labels
         response_header = QLabel("YOUR ANSWER: (AI Response)")
@@ -373,6 +419,7 @@ class OverlayWindow(QWidget):
         self.update_response_signal.connect(self._update_response)
         self.append_response_signal.connect(self._append_response)
         self.update_speaker_signal.connect(self._update_speaker)
+        self.update_translation_signal.connect(self._update_translation)
 
     def _position_window(self):
         """Position window in bottom-right corner."""
@@ -418,6 +465,51 @@ class OverlayWindow(QWidget):
         """Handle click on speaker label to request rename."""
         if self._current_speaker_id:
             self.speaker_rename_requested.emit(self._current_speaker_id)
+
+    def _update_translation(self, original: str, translated: str, show_original: bool):
+        """Update the translation display.
+
+        Args:
+            original: Original text
+            translated: Translated text
+            show_original: Whether to show original alongside translation
+        """
+        self._current_translation = translated
+
+        if translated:
+            if show_original and original:
+                display_text = f"{translated}\n---\n[{original}]"
+            else:
+                display_text = translated
+
+            # Truncate if too long
+            if len(display_text) > 250:
+                display_text = display_text[:247] + "..."
+
+            self.translation_label.setText(display_text)
+            self.translation_container.show()
+        else:
+            self.translation_container.hide()
+
+    def set_translation_enabled(self, enabled: bool):
+        """Enable or disable translation display.
+
+        Args:
+            enabled: Whether translation is enabled
+        """
+        self._translation_enabled = enabled
+        if not enabled:
+            self.translation_container.hide()
+
+    def set_translation(self, original: str, translated: str, show_original: bool = True):
+        """Thread-safe method to update translation.
+
+        Args:
+            original: Original text
+            translated: Translated text
+            show_original: Whether to show original alongside translation
+        """
+        self.update_translation_signal.emit(original, translated, show_original)
 
     def _update_response(self, text: str):
         """Update the response label (full replacement)."""
@@ -495,7 +587,9 @@ class OverlayWindow(QWidget):
         self._current_response = ""
         self._current_speaker_id = ""
         self._current_speaker_name = ""
+        self._current_translation = ""
         self.speaker_label.hide()
+        self.translation_container.hide()
 
     def show_usage_warning(self, remaining: int):
         """Show warning when running low on daily responses."""
@@ -512,6 +606,87 @@ class OverlayWindow(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             event.accept()
+        elif event.button() == Qt.MouseButton.RightButton:
+            self._show_context_menu(event.globalPosition().toPoint())
+            event.accept()
+
+    def _show_context_menu(self, pos):
+        """Show context menu with additional actions."""
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #313244;
+                border: 1px solid #45475a;
+                border-radius: 6px;
+                padding: 4px;
+            }
+            QMenu::item {
+                color: #cdd6f4;
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #45475a;
+            }
+            QMenu::item:disabled {
+                color: #6c7086;
+            }
+            QMenu::separator {
+                height: 1px;
+                background-color: #45475a;
+                margin: 4px 8px;
+            }
+        """)
+
+        # Edit Transcripts action
+        edit_transcripts_action = QAction("Edit Transcripts", self)
+        edit_transcripts_action.setToolTip("Edit and correct meeting transcripts")
+        edit_transcripts_action.triggered.connect(self._on_edit_transcripts)
+        if not self._current_meeting_id:
+            edit_transcripts_action.setEnabled(False)
+            edit_transcripts_action.setToolTip("Start a meeting first")
+        menu.addAction(edit_transcripts_action)
+
+        menu.addSeparator()
+
+        # Settings action
+        settings_action = QAction("Settings", self)
+        settings_action.triggered.connect(self.settings_requested.emit)
+        menu.addAction(settings_action)
+
+        # Export action
+        export_action = QAction("Export Conversation", self)
+        export_action.triggered.connect(self.export_requested.emit)
+        menu.addAction(export_action)
+
+        menu.addSeparator()
+
+        # Clear Context action
+        clear_action = QAction("Clear Context", self)
+        clear_action.triggered.connect(self.clear_context)
+        menu.addAction(clear_action)
+
+        menu.exec(pos)
+
+    def _on_edit_transcripts(self):
+        """Handle request to edit transcripts."""
+        self.edit_transcripts_requested.emit()
+
+    def set_current_meeting_id(self, meeting_id):
+        """Set the current meeting ID for transcript editing.
+
+        Args:
+            meeting_id: The ID of the current active meeting, or None if no meeting.
+        """
+        self._current_meeting_id = meeting_id
+
+    def get_current_meeting_id(self):
+        """Get the current meeting ID.
+
+        Returns:
+            The current meeting ID, or None if no meeting is active.
+        """
+        return self._current_meeting_id
 
     def mouseMoveEvent(self, event):
         """Handle mouse move for dragging."""
@@ -816,6 +991,68 @@ class OverlayWindow(QWidget):
     def clear_context(self):
         """Clear the current conversation context."""
         self.reset()
+
+    # ==================== Sync Status ====================
+
+    def set_sync_online(self, is_online: bool):
+        """Update sync online/offline status."""
+        if self.sync_indicator:
+            self.sync_indicator.set_online(is_online)
+
+    def set_sync_syncing(self, is_syncing: bool, progress: int = 0):
+        """Update sync progress."""
+        if self.sync_indicator:
+            self.sync_indicator.set_syncing(is_syncing, progress)
+
+    def set_sync_pending_count(self, count: int):
+        """Update pending sync count."""
+        if self.sync_indicator:
+            self.sync_indicator.set_pending_count(count)
+
+    def update_sync_status(self, status: dict):
+        """Update sync status from status dict.
+
+        Args:
+            status: Dict from SyncManager.get_status()
+        """
+        if self.sync_indicator:
+            self.sync_indicator.update_from_status(status)
+
+    def connect_sync_manager(self, sync_manager):
+        """Connect to sync manager for status updates.
+
+        Args:
+            sync_manager: SyncManager instance
+        """
+        if not self.sync_indicator:
+            return
+
+        # Connect status update listeners
+        sync_manager.add_listener(
+            "connectivity_changed",
+            lambda status: self.set_sync_online(status.value == "online")
+        )
+        sync_manager.add_listener(
+            "sync_started",
+            lambda: self.set_sync_syncing(True)
+        )
+        sync_manager.add_listener(
+            "sync_completed",
+            lambda progress: self.set_sync_syncing(False)
+        )
+        sync_manager.add_listener(
+            "sync_progress",
+            lambda progress: self.set_sync_syncing(
+                progress.is_syncing,
+                int((progress.synced_items / max(progress.total_items, 1)) * 100)
+            )
+        )
+
+        # Connect sync button
+        self.sync_indicator.sync_requested.connect(sync_manager.sync_now)
+
+        # Initial status
+        self.update_sync_status(sync_manager.get_status())
 
     def hideEvent(self, event):
         """Handle hide event - save position."""

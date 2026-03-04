@@ -1,8 +1,10 @@
 """Tasks API routes - Action items and commitments management."""
 
+import asyncio
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_, or_
 
@@ -13,21 +15,27 @@ from schemas import (
     CommitmentCreate, CommitmentUpdate, CommitmentResponse, CommitmentList
 )
 from auth import get_current_user
+from services.pm_sync_service import trigger_action_item_sync, trigger_status_sync
 
+logger = logging.getLogger("tasks")
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 
 # ============== Action Items ==============
 
 @router.post("/action-items", response_model=ActionItemResponse)
-def create_action_item(
+async def create_action_item(
     data: ActionItemCreate,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Create an action item from a meeting.
     WHO does WHAT by WHEN.
+
+    Automatically syncs to connected project management tools
+    (Notion, Asana, Linear, Jira) if auto-sync is enabled.
     """
     # Verify meeting
     meeting = db.query(Meeting).filter(
@@ -53,6 +61,22 @@ def create_action_item(
     db.add(action_item)
     db.commit()
     db.refresh(action_item)
+
+    # Trigger auto-sync to connected PM tools in background
+    try:
+        await trigger_action_item_sync(db, action_item, user.id)
+    except Exception as e:
+        logger.error(f"Error triggering PM sync for action item {action_item.id}: {e}")
+        # Don't fail the request if sync fails
+
+    # Fire Zapier trigger for action_item_created
+    try:
+        from integrations.zapier import fire_action_item_created
+        asyncio.create_task(fire_action_item_created(db, action_item, meeting, user))
+        logger.info(f"Triggered Zapier webhook for action item {action_item.id}")
+    except Exception as e:
+        logger.error(f"Failed to fire Zapier trigger: {e}")
+        # Don't fail the request if Zapier integration fails
 
     return ActionItemResponse.model_validate(action_item)
 
@@ -127,13 +151,17 @@ def get_action_item(
 
 
 @router.patch("/action-items/{item_id}", response_model=ActionItemResponse)
-def update_action_item(
+async def update_action_item(
     item_id: int,
     data: ActionItemUpdate,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update an action item."""
+    """
+    Update an action item.
+
+    Automatically syncs changes to connected project management tools.
+    """
     action_item = db.query(ActionItem).filter(
         ActionItem.id == item_id,
         ActionItem.user_id == user.id
@@ -145,6 +173,9 @@ def update_action_item(
             detail="Action item not found"
         )
 
+    old_status = action_item.status
+    status_changed = False
+
     if data.description is not None:
         action_item.description = data.description
     if data.due_date is not None:
@@ -153,11 +184,21 @@ def update_action_item(
         action_item.priority = data.priority
     if data.status is not None:
         action_item.status = data.status
+        status_changed = (data.status != old_status)
         if data.status == "completed":
             action_item.completed_at = datetime.utcnow()
 
     db.commit()
     db.refresh(action_item)
+
+    # Sync to PM tools
+    try:
+        if status_changed:
+            await trigger_status_sync(db, action_item, action_item.status)
+        else:
+            await trigger_action_item_sync(db, action_item, user.id)
+    except Exception as e:
+        logger.error(f"Error syncing action item {item_id} update: {e}")
 
     return ActionItemResponse.model_validate(action_item)
 
@@ -187,12 +228,16 @@ def delete_action_item(
 
 
 @router.post("/action-items/{item_id}/complete")
-def complete_action_item(
+async def complete_action_item(
     item_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Mark an action item as complete."""
+    """
+    Mark an action item as complete.
+
+    Automatically syncs the completed status to connected PM tools.
+    """
     action_item = db.query(ActionItem).filter(
         ActionItem.id == item_id,
         ActionItem.user_id == user.id
@@ -207,6 +252,12 @@ def complete_action_item(
     action_item.status = "completed"
     action_item.completed_at = datetime.utcnow()
     db.commit()
+
+    # Sync completed status to PM tools
+    try:
+        await trigger_status_sync(db, action_item, "completed")
+    except Exception as e:
+        logger.error(f"Error syncing completion for action item {item_id}: {e}")
 
     return {"message": "Action item completed"}
 

@@ -29,3 +29,6 @@ torch>=2.0.0,<3.0.0             # Required for pyannote.audio
 
 # Voice Commands (optional)
 SpeechRecognition>=3.10.0,<4.0.0  # Voice command detection (wake word + commands)
+
+# Voice Feedback (optional)
+pyttsx3>=2.90,<3.0.0              # Text-to-speech for AI response audio feedback

@@ -64,6 +64,14 @@ class SchedulerService:
             replace_existing=True,
         )
 
+        # Send Slack daily digests every weekday at 8 AM
+        self.scheduler.add_job(
+            self._send_slack_daily_digests,
+            CronTrigger(day_of_week="mon-fri", hour=8, minute=0),
+            id="slack_daily_digests",
+            replace_existing=True,
+        )
+
         # Clean up old data monthly
         self.scheduler.add_job(
             self._cleanup_old_data,
@@ -353,6 +361,22 @@ class SchedulerService:
             db.rollback()
         finally:
             db.close()
+
+    async def _send_slack_daily_digests(self):
+        """Send daily digests to all Slack-connected users."""
+        try:
+            from integrations.slack_app import SlackDailyDigest, is_slack_app_configured
+
+            if not is_slack_app_configured():
+                print("Slack not configured, skipping daily digests")
+                return
+
+            digest = SlackDailyDigest()
+            await digest.send_all_daily_digests()
+            print("Slack daily digests sent successfully")
+
+        except Exception as e:
+            print(f"Error sending Slack daily digests: {e}")
 
     async def _run_data_retention_tasks(self):
         """Run GDPR data retention tasks."""
