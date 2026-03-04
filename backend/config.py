@@ -24,7 +24,7 @@ DEBUG = os.getenv("DEBUG", "false").lower() == "true" and not IS_PRODUCTION
 API_VERSION = "2.1.0"
 
 # Desktop App Version (for update checker)
-APP_VERSION = "1.5.3"
+APP_VERSION = "1.6.0"
 
 # =============================================================================
 # DATABASE CONFIGURATION
@@ -196,6 +196,13 @@ APP_NAME = os.getenv("APP_NAME", "ReadIn AI")
 APP_URL = os.getenv("APP_URL", "https://www.getreadin.us")
 TRIAL_DAYS = int(os.getenv("TRIAL_DAYS", "7"))
 TRIAL_DAILY_LIMIT = int(os.getenv("TRIAL_DAILY_LIMIT", "10"))
+
+# =============================================================================
+# FIREBASE CLOUD MESSAGING CONFIGURATION
+# =============================================================================
+
+FIREBASE_CREDENTIALS_PATH = os.getenv("FIREBASE_CREDENTIALS_PATH", "")
+FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "")
 
 # =============================================================================
 # LOGGING CONFIGURATION

@@ -213,6 +213,7 @@ class User(Base):
     media_appearances = relationship("MediaAppearance", back_populates="user")
     email_notifications = relationship("EmailNotification", back_populates="user")
     payment_history = relationship("PaymentHistory", back_populates="user")
+    device_tokens = relationship("DeviceToken", back_populates="user")
 
     @property
     def is_trial(self) -> bool:
@@ -316,6 +317,10 @@ class Meeting(Base):
     participant_count = Column(Integer, nullable=True)
     notes = Column(Text, nullable=True)
 
+    # Semantic search embedding (384 dimensions for all-MiniLM-L6-v2)
+    # Stored as JSON array in SQLite, or vector type in PostgreSQL with pgvector
+    embedding = Column(JSON, nullable=True)
+
     # Relationships
     user = relationship("User", back_populates="meetings")
     conversations = relationship("Conversation", back_populates="meeting", cascade="all, delete-orphan")
@@ -346,6 +351,9 @@ class Conversation(Base):
     # Analysis
     sentiment = Column(String, nullable=True)  # positive, neutral, negative
     confidence_score = Column(Float, nullable=True)
+
+    # Semantic search embedding (384 dimensions for all-MiniLM-L6-v2)
+    embedding = Column(JSON, nullable=True)
 
     # Relationships
     meeting = relationship("Meeting", back_populates="conversations")
@@ -1530,6 +1538,49 @@ class InAppNotification(Base):
 
     # Relationships
     user = relationship("User")
+
+
+# =============================================================================
+# DEVICE TOKENS (Push Notifications)
+# =============================================================================
+
+class DeviceToken(Base):
+    """
+    Device tokens for Firebase Cloud Messaging push notifications.
+
+    Stores FCM registration tokens for each user's devices to enable
+    push notifications on mobile and desktop apps.
+    """
+    __tablename__ = "device_tokens"
+    __table_args__ = (
+        Index("ix_device_token_user", "user_id"),
+        Index("ix_device_token_active", "user_id", "is_active"),
+        UniqueConstraint("token", name="uq_device_token"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Device identification
+    token = Column(String(500), nullable=False)  # FCM registration token
+    platform = Column(String(20), nullable=False)  # ios, android, web, desktop
+    device_name = Column(String(255), nullable=True)  # e.g., "iPhone 15 Pro", "Chrome on Windows"
+    device_id = Column(String(255), nullable=True)  # Unique device identifier (optional)
+
+    # App information
+    app_version = Column(String(50), nullable=True)  # e.g., "1.5.3"
+    os_version = Column(String(50), nullable=True)  # e.g., "iOS 17.2", "Android 14"
+
+    # Status
+    is_active = Column(Boolean, default=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_used_at = Column(DateTime, nullable=True)  # Last successful push delivery
+
+    # Relationships
+    user = relationship("User", back_populates="device_tokens")
 
 
 # =============================================================================

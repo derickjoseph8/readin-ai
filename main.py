@@ -69,6 +69,7 @@ from src.ui.app_selector_dialog import AppSelectorDialog
 from src.ui.first_run_wizard import FirstRunWizard
 from src.browser_bridge import BrowserBridge
 from src.shortcut_creator import create_desktop_shortcut, shortcut_exists
+from src.voice_commands import VoiceCommandHandler, is_voice_commands_available
 
 
 class SignalBridge(QObject):
@@ -77,6 +78,7 @@ class SignalBridge(QObject):
     meeting_ended = pyqtSignal()
     multiple_apps_detected = pyqtSignal(list)
     transcription_ready = pyqtSignal(str)
+    transcription_with_speaker = pyqtSignal(str, str, str)  # text, speaker_id, speaker_name
     ai_response_ready = pyqtSignal(str, str)
     ai_chunk_ready = pyqtSignal(str)
     briefing_ready = pyqtSignal(dict)
@@ -89,6 +91,12 @@ class SignalBridge(QObject):
     audio_level_updated = pyqtSignal(float)
     # Update checker signal
     update_available = pyqtSignal(object)  # UpdateInfo object
+    # Speaker diarization signals
+    speaker_detected = pyqtSignal(str, str)  # speaker_id, speaker_name
+    diarization_progress = pyqtSignal(float, str)  # progress, message
+    # Voice command signals
+    voice_command_recognized = pyqtSignal(str)  # command name
+    voice_wake_word_detected = pyqtSignal()
 
 
 class ReadInApp:
@@ -109,6 +117,7 @@ class ReadInApp:
         self.signals.meeting_ended.connect(self._on_meeting_ended)
         self.signals.multiple_apps_detected.connect(self._on_multiple_apps_detected)
         self.signals.transcription_ready.connect(self._on_transcription)
+        self.signals.transcription_with_speaker.connect(self._on_transcription_with_speaker)
         self.signals.ai_response_ready.connect(self._on_ai_response)
         self.signals.ai_chunk_ready.connect(self._on_streaming_chunk)
         self.signals.briefing_ready.connect(self._on_briefing_ready)
@@ -118,12 +127,16 @@ class ReadInApp:
         self.signals.browser_capture_started.connect(self._on_browser_capture_started)
         self.signals.browser_capture_stopped.connect(self._on_browser_capture_stopped)
         self.signals.update_available.connect(self._on_update_available)
+        # Voice command signals
+        self.signals.voice_command_recognized.connect(self._on_voice_command)
+        self.signals.voice_wake_word_detected.connect(self._on_voice_wake_word)
 
         # Components
         self.overlay = OverlayWindow()
         self.overlay.settings_requested.connect(self._show_settings)
         self.overlay.logout_requested.connect(self._logout)
         self.overlay.listen_toggled.connect(self._on_overlay_listen_toggled)
+        self.overlay.speaker_rename_requested.connect(self._on_speaker_rename_requested)
         self.login_window = None
         self.settings_window = None
         self.ai_assistant = AIAssistant(
@@ -199,6 +212,16 @@ class ReadInApp:
         # Initialize update checker
         self.update_checker = UpdateChecker()
 
+        # Initialize speaker diarization (lazy-loaded when enabled)
+        self.speaker_diarizer = None
+        self._diarization_enabled = self.settings.get("diarization_enabled", False)
+        self._current_speaker_id = ""
+        self._current_speaker_name = ""
+
+        # Initialize voice command handler
+        self.voice_command_handler = None
+        self._setup_voice_commands()
+
         # Thread safety locks for shared state
         self._listening_lock = threading.Lock()  # Protects _listening state
         self._overlay_lock = threading.Lock()  # Protects overlay state changes
@@ -212,6 +235,7 @@ class ReadInApp:
         self.settings.on_change("theme", self._on_theme_changed)
         self.settings.on_change("transcription_language", self._on_language_changed)
         self.settings.on_change("audio_device_index", self._on_audio_device_changed)
+        self.settings.on_change("voice_commands_enabled", self._on_voice_commands_changed)
 
     def _apply_ai_settings(self):
         """Apply AI-related settings."""
@@ -224,6 +248,63 @@ class ReadInApp:
         system_prompt = self.settings.get("system_prompt")
         if system_prompt:
             self.ai_assistant.set_system_prompt(system_prompt)
+
+    def _init_speaker_diarization(self) -> bool:
+        """Initialize speaker diarization if enabled and not already initialized.
+
+        Returns:
+            True if diarization is ready to use, False otherwise.
+        """
+        if not self._diarization_enabled:
+            return False
+
+        if self.speaker_diarizer is not None:
+            return True
+
+        try:
+            from src.services.speaker_diarization import SpeakerDiarizer
+
+            # Load speaker mapping from settings
+            speaker_mapping = self.settings.get("speaker_mapping", {})
+
+            self.speaker_diarizer = SpeakerDiarizer(
+                min_speakers=self.settings.get("diarization_min_speakers", 1),
+                max_speakers=self.settings.get("diarization_max_speakers", 10),
+                on_progress=lambda p, m: self.signals.diarization_progress.emit(p, m),
+                on_error=lambda e: logger.error(f"Diarization error: {e}")
+            )
+
+            # Restore speaker names
+            self.speaker_diarizer.set_speaker_mapping(speaker_mapping)
+
+            # Try to load the model
+            if self.speaker_diarizer.load_model():
+                logger.info("Speaker diarization initialized")
+                return True
+            else:
+                logger.warning("Failed to load speaker diarization model")
+                self.speaker_diarizer = None
+                return False
+
+        except ImportError as e:
+            logger.warning(f"pyannote.audio not available: {e}")
+            self._diarization_enabled = False
+            return False
+        except Exception as e:
+            logger.error(f"Failed to initialize speaker diarization: {e}")
+            self._diarization_enabled = False
+            return False
+
+    def _unload_speaker_diarization(self):
+        """Unload speaker diarization to free memory."""
+        if self.speaker_diarizer is not None:
+            # Save speaker mapping before unloading
+            mapping = self.speaker_diarizer.get_speaker_mapping()
+            self.settings.set("speaker_mapping", mapping)
+
+            self.speaker_diarizer.unload_model()
+            self.speaker_diarizer = None
+            logger.info("Speaker diarization unloaded")
 
     def _setup_hotkeys(self):
         """Setup global keyboard shortcuts."""
@@ -281,6 +362,140 @@ class ReadInApp:
 
             if was_listening:
                 self.audio_capture.start()
+
+    def _on_voice_commands_changed(self, key: str, enabled: bool, old_value):
+        """Handle voice commands enabled setting change."""
+        if enabled:
+            self._start_voice_commands()
+        else:
+            self._stop_voice_commands()
+
+    def _setup_voice_commands(self):
+        """Setup voice command handler."""
+        if not is_voice_commands_available():
+            logger.info("Voice commands not available - speech_recognition not installed")
+            return
+
+        if not self.settings.get("voice_commands_enabled", False):
+            logger.debug("Voice commands disabled in settings")
+            return
+
+        device_index = self.settings.get("voice_command_device_index")
+
+        self.voice_command_handler = VoiceCommandHandler(
+            on_summarize=self._voice_summarize,
+            on_repeat=self._voice_repeat,
+            on_action_items=self._voice_action_items,
+            on_stop_listening=self._voice_stop_listening,
+            on_start_listening=self._voice_start_listening,
+            on_clear=self._voice_clear,
+            on_wake_word_detected=lambda: self.signals.voice_wake_word_detected.emit(),
+            on_command_recognized=lambda cmd: self.signals.voice_command_recognized.emit(cmd),
+            on_error=self._on_voice_command_error,
+            device_index=device_index,
+        )
+
+        logger.info("Voice command handler initialized")
+
+    def _start_voice_commands(self):
+        """Start voice command handler."""
+        if not is_voice_commands_available():
+            logger.warning("Cannot start voice commands - speech_recognition not available")
+            return
+
+        if self.voice_command_handler is None:
+            self._setup_voice_commands()
+
+        if self.voice_command_handler:
+            self.voice_command_handler.start()
+            logger.info("Voice command handler started")
+
+    def _stop_voice_commands(self):
+        """Stop voice command handler."""
+        if self.voice_command_handler:
+            self.voice_command_handler.stop()
+            logger.info("Voice command handler stopped")
+
+    def _on_voice_wake_word(self):
+        """Handle wake word detection."""
+        logger.info("Voice wake word detected")
+        # Provide visual feedback
+        self.tray.showMessage(
+            "ReadIn AI",
+            "Listening for command...",
+            QSystemTrayIcon.MessageIcon.Information,
+            2000
+        )
+
+    def _on_voice_command(self, command: str):
+        """Handle voice command recognized."""
+        logger.info(f"Voice command recognized: {command}")
+
+    def _on_voice_command_error(self, error: str):
+        """Handle voice command errors."""
+        logger.error(f"Voice command error: {error}")
+
+    def _voice_summarize(self):
+        """Voice command: summarize recent conversation."""
+        logger.info("Voice command: summarize")
+        # Get recent conversation context and generate summary
+        context = self.ai_assistant.get_context()
+        if context:
+            # Build summary request
+            recent_text = "\n".join([
+                f"Q: {entry['heard']}\nA: {entry['response']}"
+                for entry in context[-3:]  # Last 3 exchanges
+            ])
+            summary_prompt = f"Please provide a brief summary of this recent conversation:\n{recent_text}"
+            self.ai_assistant.generate_response(summary_prompt)
+            self._show_overlay()
+        else:
+            self.overlay.set_response_text("No recent conversation to summarize.")
+            self._show_overlay()
+
+    def _voice_repeat(self):
+        """Voice command: repeat last AI response."""
+        logger.info("Voice command: repeat")
+        context = self.ai_assistant.get_context()
+        if context:
+            last_response = context[-1]['response']
+            self.overlay.set_response_text(last_response)
+            self._show_overlay()
+        else:
+            self.overlay.set_response_text("No previous response to repeat.")
+            self._show_overlay()
+
+    def _voice_action_items(self):
+        """Voice command: list recent action items."""
+        logger.info("Voice command: action items")
+        context = self.ai_assistant.get_context()
+        if context:
+            # Build request for action items
+            recent_text = "\n".join([
+                f"Q: {entry['heard']}\nA: {entry['response']}"
+                for entry in context
+            ])
+            action_prompt = f"Based on this conversation, what are the key action items or tasks mentioned? List them as bullet points:\n{recent_text}"
+            self.ai_assistant.generate_response(action_prompt)
+            self._show_overlay()
+        else:
+            self.overlay.set_response_text("No conversation context to extract action items from.")
+            self._show_overlay()
+
+    def _voice_stop_listening(self):
+        """Voice command: stop audio capture."""
+        logger.info("Voice command: stop listening")
+        self._stop_listening()
+
+    def _voice_start_listening(self):
+        """Voice command: start audio capture."""
+        logger.info("Voice command: start listening")
+        self._start_listening(skip_dialog=True)
+
+    def _voice_clear(self):
+        """Voice command: clear context."""
+        logger.info("Voice command: clear")
+        self._clear_context()
 
     def _on_audio_error(self, error_message: str):
         """Handle audio capture errors."""
@@ -621,6 +836,37 @@ class ReadInApp:
             if is_listening:
                 self._stop_listening()
 
+    def _on_speaker_rename_requested(self, speaker_id: str):
+        """Handle speaker rename request from overlay."""
+        from PyQt6.QtWidgets import QInputDialog
+
+        current_name = self.meeting_session.get_speaker_name(speaker_id)
+
+        new_name, ok = QInputDialog.getText(
+            self.overlay,
+            "Rename Speaker",
+            f"Enter a name for {speaker_id}:",
+            text=current_name if current_name != speaker_id else ""
+        )
+
+        if ok and new_name.strip():
+            # Update meeting session
+            self.meeting_session.set_speaker_name(speaker_id, new_name.strip())
+
+            # Update diarizer if active
+            if self.speaker_diarizer is not None:
+                self.speaker_diarizer.set_speaker_name(speaker_id, new_name.strip())
+
+            # Update settings for persistence
+            mapping = self.settings.get("speaker_mapping", {})
+            mapping[speaker_id] = new_name.strip()
+            self.settings.set("speaker_mapping", mapping)
+
+            # Update overlay display
+            self.overlay.update_speaker_signal.emit(speaker_id, new_name.strip())
+
+            logger.info(f"Renamed speaker {speaker_id} to '{new_name.strip()}'")
+
     def _toggle_listening(self):
         if not api.is_logged_in():
             self._show_login()
@@ -683,6 +929,15 @@ class ReadInApp:
             if api.is_logged_in():
                 self.context_provider.refresh_context()
 
+            # Initialize speaker diarization if enabled
+            self._diarization_enabled = self.settings.get("diarization_enabled", False)
+            if self._diarization_enabled:
+                if self._init_speaker_diarization():
+                    self.meeting_session.enable_diarization(True)
+                    logger.info("Speaker diarization enabled for this session")
+                else:
+                    logger.warning("Speaker diarization could not be enabled")
+
             self.transcriber.start()
             self.audio_capture.start()
             with self._overlay_lock:
@@ -711,6 +966,8 @@ class ReadInApp:
         self.transcriber.stop()
         # Unload Whisper model to free memory when not listening
         self.transcriber.unload_model()
+        # Unload speaker diarization to free memory
+        self._unload_speaker_diarization()
         self.ai_assistant.clear_context()
         with self._overlay_lock:
             self.overlay.set_listening_state(False)
@@ -888,6 +1145,24 @@ class ReadInApp:
         self.overlay.set_heard_text(text)
         self.ai_assistant.generate_response(text)
 
+    def _on_transcription_with_speaker(self, text: str, speaker_id: str, speaker_name: str):
+        """Handle transcription with speaker information from diarization."""
+        if not text.strip():
+            return
+
+        # Check if user can make request
+        if not api.can_use():
+            self._show_upgrade_prompt()
+            return
+
+        # Store current speaker info for use in response
+        self._current_speaker_id = speaker_id
+        self._current_speaker_name = speaker_name
+
+        logger.debug(f"[{speaker_name or speaker_id}] Heard: {text}")
+        self.overlay.set_heard_text(text, speaker_id, speaker_name)
+        self.ai_assistant.generate_response(text)
+
     def _on_streaming_chunk(self, chunk: str):
         self.overlay.append_response_text(chunk)
 
@@ -895,12 +1170,18 @@ class ReadInApp:
         logger.debug(f"Response: {response}")
         self.overlay.set_response_text(response)
 
-        # Save conversation to meeting session
+        # Save conversation to meeting session with speaker info
         if self.meeting_session.is_active:
             self.meeting_session.add_conversation(
                 heard_text=heard_text,
-                response_text=response
+                response_text=response,
+                speaker=self._current_speaker_id,
+                speaker_name=self._current_speaker_name
             )
+
+        # Clear speaker info after saving
+        self._current_speaker_id = ""
+        self._current_speaker_name = ""
 
         # Track usage
         result = api.increment_usage()
@@ -1077,6 +1358,12 @@ class ReadInApp:
         except Exception as e:
             logger.debug(f"Error stopping hotkey manager: {e}")
 
+        # Stop voice command handler
+        try:
+            self._stop_voice_commands()
+        except Exception as e:
+            logger.debug(f"Error stopping voice commands: {e}")
+
         # Stop audio capture completely
         try:
             self.audio_capture.stop()
@@ -1151,6 +1438,10 @@ class ReadInApp:
 
         # Start browser bridge for extension support
         self.browser_bridge.start()
+
+        # Start voice commands if enabled
+        if self.settings.get("voice_commands_enabled", False):
+            self._start_voice_commands()
 
         logger.info("ReadIn AI started")
 

@@ -353,3 +353,113 @@ def search_suggestions(
         "query": q,
         "suggestions": suggestions[:10],  # Limit total suggestions
     }
+
+
+@router.get("/hybrid")
+async def hybrid_search(
+    q: str = Query(..., min_length=2, max_length=200, description="Search query"),
+    scope: SearchScope = Query(default=SearchScope.MEETINGS, description="Search scope"),
+    limit: int = Query(default=20, ge=1, le=100, description="Results limit"),
+    semantic_boost: float = Query(default=0.3, ge=0.0, le=1.0, description="Weight for semantic results"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Hybrid search combining full-text and semantic search.
+
+    This endpoint performs both traditional keyword search and semantic
+    (embedding-based) search, then combines the results with configurable
+    weighting.
+
+    - semantic_boost: 0.0 = only full-text, 1.0 = only semantic, 0.5 = equal mix
+    """
+    from services.semantic_search_service import SemanticSearchService
+
+    results = {
+        "query": q,
+        "full_text_results": [],
+        "semantic_results": [],
+        "combined_results": []
+    }
+
+    # Full-text search
+    search_term = f"%{q.lower()}%"
+
+    if scope in [SearchScope.ALL, SearchScope.MEETINGS]:
+        # Full-text results
+        ft_meetings = db.query(Meeting).filter(
+            Meeting.user_id == user.id,
+            or_(
+                func.lower(Meeting.title).like(search_term),
+                func.lower(Meeting.notes).like(search_term),
+            )
+        ).order_by(Meeting.started_at.desc()).limit(limit).all()
+
+        for m in ft_meetings:
+            results["full_text_results"].append({
+                "id": m.id,
+                "title": m.title,
+                "meeting_type": m.meeting_type,
+                "started_at": m.started_at.isoformat() if m.started_at else None,
+                "status": m.status,
+                "match_type": "full_text",
+                "score": 1.0  # Full-text gets base score of 1
+            })
+
+        # Semantic results
+        try:
+            search_service = SemanticSearchService(db)
+            semantic_results = await search_service.semantic_search(
+                query=q,
+                user_id=user.id,
+                limit=limit,
+                min_similarity=0.3
+            )
+
+            for sr in semantic_results:
+                results["semantic_results"].append({
+                    "id": sr["id"],
+                    "title": sr["title"],
+                    "meeting_type": sr["meeting_type"],
+                    "started_at": sr["started_at"],
+                    "status": sr["status"],
+                    "match_type": "semantic",
+                    "score": sr["similarity_score"]
+                })
+        except Exception as e:
+            # If semantic search fails, continue with full-text only
+            pass
+
+    # Combine and deduplicate results
+    combined = {}
+
+    # Add full-text results with their score
+    for r in results["full_text_results"]:
+        combined[r["id"]] = {
+            **r,
+            "combined_score": r["score"] * (1 - semantic_boost)
+        }
+
+    # Add or boost semantic results
+    for r in results["semantic_results"]:
+        if r["id"] in combined:
+            # Meeting found in both - boost score
+            combined[r["id"]]["combined_score"] += r["score"] * semantic_boost
+            combined[r["id"]]["match_type"] = "hybrid"
+        else:
+            combined[r["id"]] = {
+                **r,
+                "combined_score": r["score"] * semantic_boost
+            }
+
+    # Sort by combined score
+    sorted_results = sorted(
+        combined.values(),
+        key=lambda x: x["combined_score"],
+        reverse=True
+    )[:limit]
+
+    results["combined_results"] = sorted_results
+    results["total_results"] = len(sorted_results)
+
+    return results

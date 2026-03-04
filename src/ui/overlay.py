@@ -32,16 +32,20 @@ class OverlayWindow(QWidget):
     update_heard_signal = pyqtSignal(str)
     update_response_signal = pyqtSignal(str)
     append_response_signal = pyqtSignal(str)
+    update_speaker_signal = pyqtSignal(str, str)  # speaker_id, speaker_name
     export_requested = pyqtSignal()
     settings_requested = pyqtSignal()
     logout_requested = pyqtSignal()
     listen_toggled = pyqtSignal(bool)  # True = start, False = stop
+    speaker_rename_requested = pyqtSignal(str)  # speaker_id
 
     def __init__(self):
         super().__init__()
         self._drag_position: QPoint = QPoint()
         self._current_response = ""
         self._current_heard = ""
+        self._current_speaker_id = ""
+        self._current_speaker_name = ""
         self._large_mode = False
         self._hidden_from_capture = False
         self._settings = SettingsManager() if THEMES_AVAILABLE else None
@@ -186,9 +190,29 @@ class OverlayWindow(QWidget):
         container_layout.addLayout(header)
 
         # "They asked:" section (compact) with color-blind accessible text labels
+        heard_header_layout = QHBoxLayout()
         heard_header = QLabel("THEY ASKED: (Question)")
         heard_header.setStyleSheet("color: #a6adc8; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
-        container_layout.addWidget(heard_header)
+        heard_header_layout.addWidget(heard_header)
+
+        # Speaker label (shown when diarization is active)
+        self.speaker_label = QLabel("")
+        self.speaker_label.setStyleSheet("""
+            color: #89b4fa;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 6px;
+            background-color: rgba(137, 180, 250, 0.15);
+            border-radius: 3px;
+        """)
+        self.speaker_label.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.speaker_label.setToolTip("Click to rename speaker")
+        self.speaker_label.mousePressEvent = self._on_speaker_clicked
+        self.speaker_label.hide()  # Hidden by default
+        heard_header_layout.addWidget(self.speaker_label)
+
+        heard_header_layout.addStretch()
+        container_layout.addLayout(heard_header_layout)
 
         self.heard_label = QLabel("Listening...")
         self.heard_label.setWordWrap(True)
@@ -348,6 +372,7 @@ class OverlayWindow(QWidget):
         self.update_heard_signal.connect(self._update_heard)
         self.update_response_signal.connect(self._update_response)
         self.append_response_signal.connect(self._append_response)
+        self.update_speaker_signal.connect(self._update_speaker)
 
     def _position_window(self):
         """Position window in bottom-right corner."""
@@ -367,6 +392,33 @@ class OverlayWindow(QWidget):
             display_text = display_text[:147] + "..."
         self.heard_label.setText(display_text)
 
+    def _update_speaker(self, speaker_id: str, speaker_name: str):
+        """Update the speaker label."""
+        self._current_speaker_id = speaker_id
+        self._current_speaker_name = speaker_name
+
+        if speaker_id:
+            # Format display name
+            if speaker_name and speaker_name != speaker_id:
+                display = speaker_name
+            else:
+                # Show abbreviated ID (e.g., "S0" instead of "SPEAKER_00")
+                try:
+                    num = int(speaker_id.split("_")[1])
+                    display = f"Speaker {num + 1}"
+                except (IndexError, ValueError):
+                    display = speaker_id
+
+            self.speaker_label.setText(f"[{display}]")
+            self.speaker_label.show()
+        else:
+            self.speaker_label.hide()
+
+    def _on_speaker_clicked(self, event):
+        """Handle click on speaker label to request rename."""
+        if self._current_speaker_id:
+            self.speaker_rename_requested.emit(self._current_speaker_id)
+
     def _update_response(self, text: str):
         """Update the response label (full replacement)."""
         self._current_response = text
@@ -377,11 +429,21 @@ class OverlayWindow(QWidget):
         self._current_response += text
         self.response_label.setText(self._current_response)
 
-    def set_heard_text(self, text: str):
-        """Thread-safe method to update heard text."""
+    def set_heard_text(self, text: str, speaker_id: str = "", speaker_name: str = ""):
+        """Thread-safe method to update heard text with optional speaker info.
+
+        Args:
+            text: The transcribed text.
+            speaker_id: Speaker identifier from diarization (e.g., "SPEAKER_00").
+            speaker_name: Custom display name for the speaker.
+        """
         self.update_heard_signal.emit(text)
         self._current_response = ""
         self.update_response_signal.emit("Thinking...")
+
+        # Update speaker info if provided
+        if speaker_id:
+            self.update_speaker_signal.emit(speaker_id, speaker_name or speaker_id)
 
     def set_response_text(self, text: str):
         """Thread-safe method to set response text."""
@@ -431,6 +493,9 @@ class OverlayWindow(QWidget):
         self.update_heard_signal.emit("Listening...")
         self.update_response_signal.emit("Waiting for question...")
         self._current_response = ""
+        self._current_speaker_id = ""
+        self._current_speaker_name = ""
+        self.speaker_label.hide()
 
     def show_usage_warning(self, remaining: int):
         """Show warning when running low on daily responses."""
@@ -743,7 +808,9 @@ class OverlayWindow(QWidget):
         """Get current conversation data for export."""
         return {
             "heard": self._current_heard,
-            "response": self._current_response
+            "response": self._current_response,
+            "speaker_id": self._current_speaker_id,
+            "speaker_name": self._current_speaker_name
         }
 
     def clear_context(self):

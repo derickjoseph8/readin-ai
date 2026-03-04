@@ -112,6 +112,16 @@ def end_meeting(
             # Don't fail the request if async task fails to queue
             logger.error(f"Failed to queue summary generation: {e}")
 
+    # Generate embedding for semantic search
+    try:
+        from services.embedding_service import EmbeddingService
+        embedding_service = EmbeddingService(db)
+        asyncio.create_task(embedding_service.generate_meeting_embedding(meeting_id))
+        logger.info(f"Triggered embedding generation for meeting {meeting_id}")
+    except Exception as e:
+        # Don't fail the request if embedding generation fails
+        logger.error(f"Failed to generate meeting embedding: {e}")
+
     return MeetingResponse(
         id=meeting.id,
         meeting_type=meeting.meeting_type,
@@ -294,16 +304,31 @@ def update_meeting(
             detail="Meeting not found"
         )
 
+    # Track if content changed that affects embedding
+    content_changed = False
+
     if title is not None:
         meeting.title = title
+        content_changed = True
     if meeting_type is not None:
         meeting.meeting_type = meeting_type
     if notes is not None:
         meeting.notes = notes
+        content_changed = True
     if participant_count is not None:
         meeting.participant_count = participant_count
 
     db.commit()
+
+    # Regenerate embedding if content changed
+    if content_changed and meeting.status == "ended":
+        try:
+            from services.embedding_service import EmbeddingService
+            embedding_service = EmbeddingService(db)
+            asyncio.create_task(embedding_service.generate_meeting_embedding(meeting_id))
+            logger.info(f"Triggered embedding regeneration for meeting {meeting_id}")
+        except Exception as e:
+            logger.error(f"Failed to regenerate meeting embedding: {e}")
 
     return {"message": "Meeting updated"}
 

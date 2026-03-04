@@ -21,3 +21,11 @@ pywin32>=306,<400; sys_platform == "win32"  # Windows shortcuts and registry
 # Security - Credential storage
 keyring>=24.0.0,<25.0.0         # Cross-platform secure credential storage
 cryptography>=41.0.0,<45.0.0    # Encryption for fallback storage
+
+# Speaker Diarization (optional - requires HuggingFace token)
+# Note: pyannote.audio requires accepting license at huggingface.co/pyannote/speaker-diarization-3.1
+pyannote.audio>=3.1.0,<4.0.0; python_version >= "3.8"  # Speaker diarization
+torch>=2.0.0,<3.0.0             # Required for pyannote.audio
+
+# Voice Commands (optional)
+SpeechRecognition>=3.10.0,<4.0.0  # Voice command detection (wake word + commands)

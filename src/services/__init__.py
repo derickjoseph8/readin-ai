@@ -6,6 +6,7 @@ Provides clean abstractions for:
 - Audio capture and transcription
 - AI response generation
 - Backend synchronization
+- Speaker diarization
 """
 
 from .meeting_service import MeetingService
@@ -13,6 +14,12 @@ from .audio_service import AudioService
 from .transcription_service import TranscriptionService
 from .ai_service import AIService
 from .sync_service import SyncService
+from .speaker_diarization import (
+    SpeakerDiarizer,
+    SpeakerSegment,
+    DiarizationResult,
+    DiarizedTranscriber,
+)
 
 __all__ = [
     "MeetingService",
@@ -20,4 +27,8 @@ __all__ = [
     "TranscriptionService",
     "AIService",
     "SyncService",
+    "SpeakerDiarizer",
+    "SpeakerSegment",
+    "DiarizationResult",
+    "DiarizedTranscriber",
 ]

@@ -56,6 +56,125 @@ class SettingsManager:
         # Internal state
         "_minimize_tooltip_shown": False,
         "_first_run": True,
+
+        # Privacy Mode settings
+        "privacy_mode_enabled": True,
+        "excluded_apps": [],  # List of app names to exclude from monitoring
+
+        # Voice command settings
+        "voice_commands_enabled": False,  # Disabled by default - requires speech_recognition
+        "voice_command_device_index": None,  # None = use default microphone
+
+        # Speaker diarization settings
+        "diarization_enabled": False,  # Disabled by default - requires pyannote.audio and HuggingFace token
+        "diarization_min_speakers": 1,
+        "diarization_max_speakers": 10,
+        "diarization_interval": 30.0,  # Seconds between diarization updates
+        "speaker_mapping": {},  # Persistent mapping of speaker IDs to custom names
+    }
+
+    # Pre-defined sensitive app categories for Privacy Mode
+    SENSITIVE_APP_CATEGORIES = {
+        "banking": {
+            "name": "Banking & Finance",
+            "description": "Banking apps, trading platforms, and financial tools",
+            "apps": [
+                # Banking apps
+                "Chase", "chase.exe", "Bank of America", "bofa.exe",
+                "Wells Fargo", "wellsfargo.exe", "Citi", "citi.exe",
+                "Capital One", "capitalone.exe", "TD Bank", "tdbank.exe",
+                "PNC", "pnc.exe", "US Bank", "usbank.exe",
+                # Trading platforms
+                "E-Trade", "etrade.exe", "TD Ameritrade", "tdameritrade.exe",
+                "Fidelity", "fidelity.exe", "Charles Schwab", "schwab.exe",
+                "Robinhood", "robinhood.exe", "Webull", "webull.exe",
+                "Interactive Brokers", "ibkr.exe", "Coinbase", "coinbase.exe",
+                # Crypto wallets
+                "MetaMask", "metamask.exe", "Ledger Live", "ledgerlive.exe",
+                "Exodus", "exodus.exe", "Trezor Suite", "trezorsuite.exe",
+                # Payment apps
+                "PayPal", "paypal.exe", "Venmo", "venmo.exe",
+                "Cash App", "cashapp.exe", "Zelle", "zelle.exe",
+            ]
+        },
+        "password_managers": {
+            "name": "Password Managers",
+            "description": "Password managers and authentication apps",
+            "apps": [
+                "1Password", "1password.exe", "1Password 7", "1Password 8",
+                "LastPass", "lastpass.exe", "LastPassBrowser",
+                "Bitwarden", "bitwarden.exe", "Bitwarden Desktop",
+                "Dashlane", "dashlane.exe", "Dashlane Desktop",
+                "KeePass", "keepass.exe", "KeePassXC", "keepassxc.exe",
+                "Keeper", "keeper.exe", "Keeper Security",
+                "NordPass", "nordpass.exe",
+                "RoboForm", "roboform.exe",
+                "Enpass", "enpass.exe",
+                # Authenticators
+                "Authy", "authy.exe", "Authy Desktop",
+                "Microsoft Authenticator", "authenticator.exe",
+                "Google Authenticator",
+            ]
+        },
+        "medical": {
+            "name": "Medical & Health",
+            "description": "Healthcare portals, medical apps, and health tracking",
+            "apps": [
+                "MyChart", "mychart.exe", "Epic MyChart",
+                "HealthVault", "healthvault.exe",
+                "Teladoc", "teladoc.exe",
+                "Kaiser Permanente", "kaiserpermanente.exe",
+                "CVS Health", "cvshealth.exe", "CVS Pharmacy",
+                "Walgreens", "walgreens.exe",
+                "GoodRx", "goodrx.exe",
+                "Zocdoc", "zocdoc.exe",
+                # Mental health
+                "BetterHelp", "betterhelp.exe",
+                "Talkspace", "talkspace.exe",
+                "Calm", "calm.exe",
+                "Headspace", "headspace.exe",
+                # Fitness with health data
+                "Apple Health",
+                "Fitbit", "fitbit.exe",
+                "Garmin Connect", "garminconnect.exe",
+            ]
+        },
+        "legal": {
+            "name": "Legal & Documents",
+            "description": "Legal document signing and sensitive document apps",
+            "apps": [
+                "DocuSign", "docusign.exe",
+                "Adobe Sign", "adobesign.exe",
+                "HelloSign", "hellosign.exe",
+                "PandaDoc", "pandadoc.exe",
+                "SignNow", "signnow.exe",
+                "LegalZoom", "legalzoom.exe",
+                "Rocket Lawyer", "rocketlawyer.exe",
+            ]
+        },
+        "vpn_security": {
+            "name": "VPN & Security",
+            "description": "VPN clients and security software",
+            "apps": [
+                # VPN clients
+                "NordVPN", "nordvpn.exe", "NordVPN.exe",
+                "ExpressVPN", "expressvpn.exe", "ExpressVPN.exe",
+                "Surfshark", "surfshark.exe",
+                "ProtonVPN", "protonvpn.exe",
+                "Private Internet Access", "pia.exe",
+                "CyberGhost", "cyberghost.exe",
+                "Mullvad VPN", "mullvad.exe",
+                "Windscribe", "windscribe.exe",
+                # Corporate VPN
+                "Cisco AnyConnect", "vpnui.exe", "anyconnect.exe",
+                "GlobalProtect", "globalprotect.exe", "PanGPA.exe",
+                "Pulse Secure", "pulsesecure.exe",
+                "FortiClient", "forticlient.exe",
+                "OpenVPN", "openvpn.exe", "openvpn-gui.exe",
+                # Security tools
+                "Tor Browser", "tor.exe", "firefox.exe",
+            ]
+        },
     }
 
     # System prompt presets
@@ -391,6 +510,119 @@ Emphasize strategic thinking and leadership perspective."""
     def get_all(self) -> Dict[str, Any]:
         """Get all current settings."""
         return self._settings.copy()
+
+    def get_excluded_apps(self) -> List[str]:
+        """Get the list of excluded apps for Privacy Mode.
+
+        Returns:
+            List of app names that should be excluded from monitoring.
+        """
+        return self.get("excluded_apps", [])
+
+    def add_excluded_app(self, app_name: str) -> bool:
+        """Add an app to the excluded apps list.
+
+        Args:
+            app_name: Name of the app to exclude
+
+        Returns:
+            True if app was added, False if already in list
+        """
+        excluded = self.get_excluded_apps()
+        # Case-insensitive check for duplicates
+        if app_name.lower() not in [app.lower() for app in excluded]:
+            excluded.append(app_name)
+            self.set("excluded_apps", excluded)
+            return True
+        return False
+
+    def remove_excluded_app(self, app_name: str) -> bool:
+        """Remove an app from the excluded apps list.
+
+        Args:
+            app_name: Name of the app to remove
+
+        Returns:
+            True if app was removed, False if not found
+        """
+        excluded = self.get_excluded_apps()
+        # Case-insensitive removal
+        for i, app in enumerate(excluded):
+            if app.lower() == app_name.lower():
+                excluded.pop(i)
+                self.set("excluded_apps", excluded)
+                return True
+        return False
+
+    def add_sensitive_category(self, category_key: str) -> int:
+        """Add all apps from a sensitive category to excluded apps.
+
+        Args:
+            category_key: Key of the category in SENSITIVE_APP_CATEGORIES
+
+        Returns:
+            Number of apps added
+        """
+        if category_key not in self.SENSITIVE_APP_CATEGORIES:
+            return 0
+
+        category = self.SENSITIVE_APP_CATEGORIES[category_key]
+        added_count = 0
+        for app in category["apps"]:
+            if self.add_excluded_app(app):
+                added_count += 1
+        return added_count
+
+    def remove_sensitive_category(self, category_key: str) -> int:
+        """Remove all apps from a sensitive category from excluded apps.
+
+        Args:
+            category_key: Key of the category in SENSITIVE_APP_CATEGORIES
+
+        Returns:
+            Number of apps removed
+        """
+        if category_key not in self.SENSITIVE_APP_CATEGORIES:
+            return 0
+
+        category = self.SENSITIVE_APP_CATEGORIES[category_key]
+        removed_count = 0
+        for app in category["apps"]:
+            if self.remove_excluded_app(app):
+                removed_count += 1
+        return removed_count
+
+    def is_app_excluded(self, app_name: str) -> bool:
+        """Check if an app is in the excluded list.
+
+        Args:
+            app_name: Name of the app to check
+
+        Returns:
+            True if app is excluded, False otherwise
+        """
+        if not self.get("privacy_mode_enabled", True):
+            return False
+        excluded = self.get_excluded_apps()
+        return app_name.lower() in [app.lower() for app in excluded]
+
+    def get_category_status(self, category_key: str) -> tuple:
+        """Get the status of a sensitive category (how many apps are excluded).
+
+        Args:
+            category_key: Key of the category in SENSITIVE_APP_CATEGORIES
+
+        Returns:
+            Tuple of (excluded_count, total_count)
+        """
+        if category_key not in self.SENSITIVE_APP_CATEGORIES:
+            return (0, 0)
+
+        category = self.SENSITIVE_APP_CATEGORIES[category_key]
+        excluded = [app.lower() for app in self.get_excluded_apps()]
+        total = len(category["apps"])
+        excluded_count = sum(1 for app in category["apps"] if app.lower() in excluded)
+        return (excluded_count, total)
 
     def export_settings(self, path: Path) -> bool:
         """Export settings to a specific file."""

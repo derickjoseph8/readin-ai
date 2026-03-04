@@ -15,9 +15,14 @@ websockets>=14.0,<15.0
 
 # ML/AI Services
 anthropic>=0.84.0
+sentence-transformers>=2.2.0,<3.0.0  # For semantic search embeddings
+numpy>=1.24.0,<2.0.0  # Required for embedding calculations
 
 # Email Service
 sendgrid>=6.10.0,<6.11.0
+
+# Push Notifications (Firebase Cloud Messaging)
+firebase-admin>=6.4.0,<7.0.0
 
 # Background Scheduler
 apscheduler>=3.10.0,<3.11.0
@@ -52,6 +57,9 @@ celery[redis]>=5.3.0,<5.4.0
 # Export Formats (optional)
 # weasyprint>=60.0,<60.1.0  # For PDF export (requires system deps)
 # python-docx>=1.1.0,<1.2.0  # For Word document export
+
+# Vector Search (PostgreSQL with pgvector)
+# pgvector>=0.2.0,<0.3.0  # Install if using PostgreSQL with pgvector extension
 
 # Testing (dev dependencies)
 # pytest>=8.0.0,<8.1.0

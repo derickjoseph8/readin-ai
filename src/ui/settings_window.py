@@ -13,10 +13,11 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
     QLabel, QComboBox, QSlider, QPushButton, QLineEdit,
     QTextEdit, QSpinBox, QCheckBox, QGroupBox, QFormLayout,
-    QMessageBox, QFileDialog, QListWidget, QListWidgetItem
+    QMessageBox, QFileDialog, QListWidget, QListWidgetItem,
+    QInputDialog, QFrame, QScrollArea, QSizePolicy
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QKeySequence
+from PyQt6.QtGui import QKeySequence, QFont
 
 import sys
 import os
@@ -108,6 +109,8 @@ class SettingsWindow(QDialog):
         self.tabs.addTab(self.create_ai_tab(), "AI")
         self.tabs.addTab(self.create_appearance_tab(), "Appearance")
         self.tabs.addTab(self.create_shortcuts_tab(), "Shortcuts")
+        self.tabs.addTab(self.create_diarization_tab(), "Speakers")
+        self.tabs.addTab(self.create_privacy_tab(), "Privacy")
         self.tabs.addTab(self.create_advanced_tab(), "Advanced")
 
         # Buttons
@@ -357,6 +360,440 @@ class SettingsWindow(QDialog):
 
         return widget
 
+    def create_diarization_tab(self) -> QWidget:
+        """Create the Speaker Diarization settings tab."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Enable/disable diarization
+        self.diarization_check = QCheckBox("Enable Speaker Diarization")
+        self.diarization_check.setToolTip(
+            "Identify different speakers in your meetings.\n"
+            "Requires a HuggingFace API token."
+        )
+        self.diarization_check.setStyleSheet("font-weight: bold; font-size: 13px;")
+        layout.addWidget(self.diarization_check)
+
+        # Description
+        desc_label = QLabel(
+            "Speaker diarization identifies who is speaking in your meetings. "
+            "This allows you to see which participant said what, and you can assign "
+            "custom names to speakers (e.g., rename 'SPEAKER_00' to 'John')."
+        )
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("color: #888888; font-size: 11px; margin-bottom: 10px;")
+        layout.addWidget(desc_label)
+
+        # API Token group
+        token_group = QGroupBox("HuggingFace API Token")
+        token_layout = QVBoxLayout(token_group)
+
+        token_desc = QLabel(
+            "Speaker diarization uses pyannote.audio which requires a HuggingFace token.\n"
+            "1. Create an account at huggingface.co\n"
+            "2. Go to Settings > Access Tokens > New token\n"
+            "3. Accept the license at huggingface.co/pyannote/speaker-diarization-3.1"
+        )
+        token_desc.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+        token_desc.setWordWrap(True)
+        token_layout.addWidget(token_desc)
+
+        token_input_layout = QHBoxLayout()
+        token_input_layout.addWidget(QLabel("Token:"))
+        self.hf_token_input = QLineEdit()
+        self.hf_token_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.hf_token_input.setPlaceholderText("hf_...")
+        token_input_layout.addWidget(self.hf_token_input, 1)
+
+        self.show_token_btn = QPushButton("Show")
+        self.show_token_btn.setCheckable(True)
+        self.show_token_btn.clicked.connect(self._toggle_token_visibility)
+        token_input_layout.addWidget(self.show_token_btn)
+
+        token_layout.addLayout(token_input_layout)
+
+        # Token status
+        self.token_status_label = QLabel("")
+        self.token_status_label.setStyleSheet("font-size: 11px;")
+        token_layout.addWidget(self.token_status_label)
+
+        layout.addWidget(token_group)
+
+        # Speaker settings group
+        speaker_group = QGroupBox("Speaker Detection Settings")
+        speaker_layout = QFormLayout(speaker_group)
+
+        self.min_speakers_spin = QSpinBox()
+        self.min_speakers_spin.setRange(1, 20)
+        self.min_speakers_spin.setValue(1)
+        self.min_speakers_spin.setToolTip("Minimum number of speakers expected")
+        speaker_layout.addRow("Min Speakers:", self.min_speakers_spin)
+
+        self.max_speakers_spin = QSpinBox()
+        self.max_speakers_spin.setRange(1, 20)
+        self.max_speakers_spin.setValue(10)
+        self.max_speakers_spin.setToolTip("Maximum number of speakers expected")
+        speaker_layout.addRow("Max Speakers:", self.max_speakers_spin)
+
+        self.diarization_interval_spin = QSpinBox()
+        self.diarization_interval_spin.setRange(10, 120)
+        self.diarization_interval_spin.setValue(30)
+        self.diarization_interval_spin.setSuffix(" seconds")
+        self.diarization_interval_spin.setToolTip(
+            "How often to update speaker identification.\n"
+            "Lower values = more responsive but higher CPU usage."
+        )
+        speaker_layout.addRow("Update Interval:", self.diarization_interval_spin)
+
+        layout.addWidget(speaker_group)
+
+        # Manage speakers button
+        manage_speakers_layout = QHBoxLayout()
+        manage_speakers_layout.addStretch()
+
+        self.manage_speakers_btn = QPushButton("Manage Speaker Names...")
+        self.manage_speakers_btn.setToolTip("Rename detected speakers for the current session")
+        self.manage_speakers_btn.clicked.connect(self._open_speaker_manager)
+        manage_speakers_layout.addWidget(self.manage_speakers_btn)
+
+        layout.addLayout(manage_speakers_layout)
+
+        # Help text
+        help_label = QLabel(
+            "Note: Speaker diarization requires significant CPU resources. "
+            "For best results, ensure your system meets the requirements and "
+            "consider using a GPU if available."
+        )
+        help_label.setWordWrap(True)
+        help_label.setStyleSheet("color: #666666; font-size: 10px;")
+        layout.addWidget(help_label)
+
+        layout.addStretch()
+
+        return widget
+
+    def _toggle_token_visibility(self):
+        """Toggle HuggingFace token visibility."""
+        if self.show_token_btn.isChecked():
+            self.hf_token_input.setEchoMode(QLineEdit.EchoMode.Normal)
+            self.show_token_btn.setText("Hide")
+        else:
+            self.hf_token_input.setEchoMode(QLineEdit.EchoMode.Password)
+            self.show_token_btn.setText("Show")
+
+    def _open_speaker_manager(self):
+        """Open the speaker manager dialog."""
+        try:
+            from ui.speaker_manager_dialog import SpeakerManagerDialog
+
+            # Get current speaker data from settings
+            speaker_mapping = self.settings.get("speaker_mapping", {})
+
+            # Create sample speakers if none exist (for demo purposes)
+            speakers = []
+            for speaker_id, name in speaker_mapping.items():
+                speakers.append({
+                    "id": speaker_id,
+                    "name": name,
+                    "message_count": 0,
+                    "percentage": 0.0
+                })
+
+            if not speakers:
+                QMessageBox.information(
+                    self,
+                    "No Speakers Detected",
+                    "No speakers have been detected yet.\n\n"
+                    "Start a meeting with speaker diarization enabled, "
+                    "and speakers will appear here as they are identified."
+                )
+                return
+
+            result = SpeakerManagerDialog.edit_speakers(
+                speakers=speakers,
+                speaker_mapping=speaker_mapping,
+                parent=self
+            )
+
+            if result is not None:
+                self.settings.set("speaker_mapping", result)
+                QMessageBox.information(
+                    self,
+                    "Speakers Updated",
+                    "Speaker names have been updated."
+                )
+
+        except ImportError as e:
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Could not open speaker manager: {e}"
+            )
+
+    def create_privacy_tab(self) -> QWidget:
+        """Create the Privacy Mode settings tab."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Enable/disable Privacy Mode
+        self.privacy_mode_check = QCheckBox("Enable Privacy Mode")
+        self.privacy_mode_check.setToolTip(
+            "When enabled, ReadIn AI will not monitor or transcribe\n"
+            "audio from apps in your excluded list."
+        )
+        self.privacy_mode_check.setStyleSheet("font-weight: bold; font-size: 13px;")
+        layout.addWidget(self.privacy_mode_check)
+
+        # Description
+        desc_label = QLabel(
+            "Privacy Mode lets you exclude sensitive apps from being monitored. "
+            "When an excluded app is running, ReadIn AI will skip it during process detection."
+        )
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("color: #888888; font-size: 11px; margin-bottom: 10px;")
+        layout.addWidget(desc_label)
+
+        # Sensitive Categories Group
+        categories_group = QGroupBox("Quick Add Sensitive Categories")
+        categories_layout = QVBoxLayout(categories_group)
+
+        categories_desc = QLabel("Add all apps from a category to your exclusion list:")
+        categories_desc.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+        categories_layout.addWidget(categories_desc)
+
+        # Category checkboxes
+        self.category_checkboxes = {}
+        for cat_key, cat_data in SettingsManager.SENSITIVE_APP_CATEGORIES.items():
+            cat_layout = QHBoxLayout()
+
+            checkbox = QCheckBox(cat_data["name"])
+            checkbox.setToolTip(cat_data["description"])
+            checkbox.setProperty("category_key", cat_key)
+            checkbox.stateChanged.connect(self._on_category_toggled)
+            self.category_checkboxes[cat_key] = checkbox
+            cat_layout.addWidget(checkbox)
+
+            # Show count label
+            count_label = QLabel("")
+            count_label.setStyleSheet("color: #666666; font-size: 10px;")
+            count_label.setProperty("category_key", cat_key)
+            cat_layout.addWidget(count_label)
+            cat_layout.addStretch()
+
+            categories_layout.addLayout(cat_layout)
+
+        layout.addWidget(categories_group)
+
+        # Custom Excluded Apps Group
+        apps_group = QGroupBox("Excluded Apps")
+        apps_layout = QVBoxLayout(apps_group)
+
+        # List of excluded apps
+        self.excluded_apps_list = QListWidget()
+        self.excluded_apps_list.setMinimumHeight(120)
+        self.excluded_apps_list.setMaximumHeight(180)
+        self.excluded_apps_list.setToolTip("Apps that will not be monitored by ReadIn AI")
+        apps_layout.addWidget(self.excluded_apps_list)
+
+        # Add/Remove buttons
+        btn_layout = QHBoxLayout()
+
+        self.add_app_btn = QPushButton("Add App")
+        self.add_app_btn.clicked.connect(self._add_excluded_app)
+        btn_layout.addWidget(self.add_app_btn)
+
+        self.add_running_btn = QPushButton("Add from Running Apps")
+        self.add_running_btn.clicked.connect(self._add_running_app)
+        self.add_running_btn.setToolTip("Select from currently running applications")
+        btn_layout.addWidget(self.add_running_btn)
+
+        self.remove_app_btn = QPushButton("Remove Selected")
+        self.remove_app_btn.clicked.connect(self._remove_excluded_app)
+        btn_layout.addWidget(self.remove_app_btn)
+
+        apps_layout.addLayout(btn_layout)
+
+        # Clear all button
+        clear_btn_layout = QHBoxLayout()
+        clear_btn_layout.addStretch()
+        self.clear_apps_btn = QPushButton("Clear All")
+        self.clear_apps_btn.clicked.connect(self._clear_all_excluded_apps)
+        self.clear_apps_btn.setStyleSheet("color: #ff6b6b;")
+        clear_btn_layout.addWidget(self.clear_apps_btn)
+        apps_layout.addLayout(clear_btn_layout)
+
+        layout.addWidget(apps_group)
+
+        # Help text
+        help_label = QLabel(
+            "Tip: App names should match the process name or friendly name. "
+            "For example: 'Discord', 'discord.exe', 'Microsoft Teams', etc."
+        )
+        help_label.setWordWrap(True)
+        help_label.setStyleSheet("color: #666666; font-size: 10px;")
+        layout.addWidget(help_label)
+
+        layout.addStretch()
+
+        return widget
+
+    def _on_category_toggled(self, state):
+        """Handle category checkbox toggle."""
+        checkbox = self.sender()
+        if not checkbox:
+            return
+
+        cat_key = checkbox.property("category_key")
+        if state == Qt.CheckState.Checked.value:
+            # Add all apps from category
+            added = self.settings.add_sensitive_category(cat_key)
+            if added > 0:
+                self._refresh_excluded_apps_list()
+        else:
+            # Remove all apps from category
+            removed = self.settings.remove_sensitive_category(cat_key)
+            if removed > 0:
+                self._refresh_excluded_apps_list()
+
+    def _add_excluded_app(self):
+        """Add a custom app to the excluded list."""
+        app_name, ok = QInputDialog.getText(
+            self,
+            "Add Excluded App",
+            "Enter the app name or process name to exclude:\n"
+            "(e.g., 'Discord', 'discord.exe', 'Microsoft Teams')",
+        )
+
+        if ok and app_name.strip():
+            app_name = app_name.strip()
+            if self.settings.add_excluded_app(app_name):
+                self._refresh_excluded_apps_list()
+            else:
+                QMessageBox.information(
+                    self,
+                    "Already Excluded",
+                    f"'{app_name}' is already in the exclusion list."
+                )
+
+    def _add_running_app(self):
+        """Show dialog to add from currently running apps."""
+        try:
+            import psutil
+            running_apps = []
+            seen_names = set()
+
+            for proc in psutil.process_iter(['name']):
+                try:
+                    name = proc.info['name']
+                    if name and name not in seen_names and not name.startswith('_'):
+                        # Filter out system processes
+                        if not name.lower() in ['system', 'idle', 'registry', 'smss.exe',
+                                                 'csrss.exe', 'wininit.exe', 'services.exe',
+                                                 'lsass.exe', 'svchost.exe', 'fontdrvhost.exe',
+                                                 'dwm.exe', 'spoolsv.exe', 'sihost.exe',
+                                                 'taskhostw.exe', 'ctfmon.exe', 'runtimebroker.exe',
+                                                 'searchhost.exe', 'startmenuexperiencehost.exe']:
+                            running_apps.append(name)
+                            seen_names.add(name)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+
+            running_apps.sort(key=lambda x: x.lower())
+
+            if not running_apps:
+                QMessageBox.information(
+                    self,
+                    "No Apps Found",
+                    "No running applications were found."
+                )
+                return
+
+            app_name, ok = QInputDialog.getItem(
+                self,
+                "Add Running App",
+                "Select an app to exclude from monitoring:",
+                running_apps,
+                0,
+                False
+            )
+
+            if ok and app_name:
+                if self.settings.add_excluded_app(app_name):
+                    self._refresh_excluded_apps_list()
+                else:
+                    QMessageBox.information(
+                        self,
+                        "Already Excluded",
+                        f"'{app_name}' is already in the exclusion list."
+                    )
+
+        except ImportError:
+            QMessageBox.warning(
+                self,
+                "psutil Required",
+                "The psutil package is required for this feature."
+            )
+
+    def _remove_excluded_app(self):
+        """Remove the selected app from the excluded list."""
+        current_item = self.excluded_apps_list.currentItem()
+        if current_item:
+            app_name = current_item.text()
+            self.settings.remove_excluded_app(app_name)
+            self._refresh_excluded_apps_list()
+
+    def _clear_all_excluded_apps(self):
+        """Clear all excluded apps."""
+        if self.excluded_apps_list.count() == 0:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Clear All Excluded Apps",
+            "Are you sure you want to remove all apps from the exclusion list?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            self.settings.set("excluded_apps", [])
+            self._refresh_excluded_apps_list()
+            # Uncheck all category checkboxes
+            for checkbox in self.category_checkboxes.values():
+                checkbox.blockSignals(True)
+                checkbox.setChecked(False)
+                checkbox.blockSignals(False)
+
+    def _refresh_excluded_apps_list(self):
+        """Refresh the excluded apps list widget."""
+        self.excluded_apps_list.clear()
+        excluded_apps = self.settings.get_excluded_apps()
+
+        for app in sorted(excluded_apps, key=lambda x: x.lower()):
+            item = QListWidgetItem(app)
+            self.excluded_apps_list.addItem(item)
+
+        # Update category checkbox states
+        self._update_category_states()
+
+    def _update_category_states(self):
+        """Update category checkboxes based on current exclusions."""
+        for cat_key, checkbox in self.category_checkboxes.items():
+            excluded_count, total_count = self.settings.get_category_status(cat_key)
+
+            # Block signals to prevent triggering stateChanged
+            checkbox.blockSignals(True)
+
+            if excluded_count == total_count:
+                checkbox.setChecked(True)
+            elif excluded_count > 0:
+                checkbox.setTristate(True)
+                checkbox.setCheckState(Qt.CheckState.PartiallyChecked)
+            else:
+                checkbox.setTristate(False)
+                checkbox.setChecked(False)
+
+            checkbox.blockSignals(False)
+
     def create_advanced_tab(self) -> QWidget:
         """Create the Advanced settings tab."""
         widget = QWidget()
@@ -476,9 +913,9 @@ class SettingsWindow(QDialog):
     def reset_shortcuts(self):
         """Reset shortcuts to defaults."""
         from config import DEFAULT_SHORTCUTS
-        self.shortcut_toggle.setText(DEFAULT_SHORTCUTS["toggle_listening"])
-        self.shortcut_show_hide.setText(DEFAULT_SHORTCUTS["show_hide_overlay"])
-        self.shortcut_clear.setText(DEFAULT_SHORTCUTS["clear_context"])
+        self.shortcut_toggle.setText(DEFAULT_SHORTCUTS.get("toggle_listen", "ctrl+shift+r"))
+        self.shortcut_show_hide.setText(DEFAULT_SHORTCUTS.get("show_hide", "ctrl+shift+h"))
+        self.shortcut_clear.setText(DEFAULT_SHORTCUTS.get("clear_context", "ctrl+shift+c"))
 
     def export_conversations(self, format: str):
         """Export conversations in the specified format."""
@@ -626,6 +1063,37 @@ class SettingsWindow(QDialog):
             self.settings.get("debug_mode", False)
         )
 
+        # Privacy Mode
+        self.privacy_mode_check.setChecked(
+            self.settings.get("privacy_mode_enabled", True)
+        )
+        self._refresh_excluded_apps_list()
+
+        # Speaker Diarization
+        self.diarization_check.setChecked(
+            self.settings.get("diarization_enabled", False)
+        )
+        self.min_speakers_spin.setValue(
+            self.settings.get("diarization_min_speakers", 1)
+        )
+        self.max_speakers_spin.setValue(
+            self.settings.get("diarization_max_speakers", 10)
+        )
+        self.diarization_interval_spin.setValue(
+            int(self.settings.get("diarization_interval", 30))
+        )
+
+        # Load HuggingFace token from environment or settings
+        import os
+        hf_token = os.getenv("HUGGINGFACE_TOKEN", "")
+        if hf_token:
+            self.hf_token_input.setText(hf_token)
+            self.token_status_label.setText("Token loaded from environment")
+            self.token_status_label.setStyleSheet("color: #a6e3a1; font-size: 11px;")
+        else:
+            self.token_status_label.setText("No token configured")
+            self.token_status_label.setStyleSheet("color: #f9e2af; font-size: 11px;")
+
     def apply_settings(self):
         """Apply current settings without closing, emitting signals for each change."""
         # Audio - validate device before saving
@@ -731,6 +1199,34 @@ class SettingsWindow(QDialog):
         self.settings.set("debug_mode", new_debug_mode)
         if old_debug_mode != new_debug_mode:
             self.setting_changed.emit("debug_mode", new_debug_mode)
+
+        # Privacy Mode - emit signals for changes
+        old_privacy_mode = self.settings.get("privacy_mode_enabled")
+        new_privacy_mode = self.privacy_mode_check.isChecked()
+        self.settings.set("privacy_mode_enabled", new_privacy_mode)
+        if old_privacy_mode != new_privacy_mode:
+            self.setting_changed.emit("privacy_mode_enabled", new_privacy_mode)
+
+        # Note: excluded_apps are saved immediately when modified through the UI
+
+        # Speaker Diarization - emit signals for changes
+        old_diarization = self.settings.get("diarization_enabled")
+        new_diarization = self.diarization_check.isChecked()
+        self.settings.set("diarization_enabled", new_diarization)
+        if old_diarization != new_diarization:
+            self.setting_changed.emit("diarization_enabled", new_diarization)
+
+        self.settings.set("diarization_min_speakers", self.min_speakers_spin.value())
+        self.settings.set("diarization_max_speakers", self.max_speakers_spin.value())
+        self.settings.set("diarization_interval", float(self.diarization_interval_spin.value()))
+
+        # Save HuggingFace token to environment if provided
+        hf_token = self.hf_token_input.text().strip()
+        if hf_token:
+            import os
+            os.environ["HUGGINGFACE_TOKEN"] = hf_token
+            self.token_status_label.setText("Token saved to session")
+            self.token_status_label.setStyleSheet("color: #a6e3a1; font-size: 11px;")
 
         self.settings_changed.emit()
 

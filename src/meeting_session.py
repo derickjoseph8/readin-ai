@@ -15,8 +15,11 @@ class ConversationExchange:
     heard_text: str
     response_text: str
     speaker: Optional[str] = None
+    speaker_name: Optional[str] = None  # Custom name for speaker
     timestamp: datetime = field(default_factory=datetime.now)
     synced: bool = False
+    start_time: Optional[float] = None  # Start time in audio (seconds)
+    end_time: Optional[float] = None  # End time in audio (seconds)
 
 
 class MeetingSession:
@@ -45,6 +48,10 @@ class MeetingSession:
         self._is_active: bool = False
         self._sync_lock = threading.Lock()
         self._on_session_change: Optional[Callable] = None
+
+        # Speaker diarization support
+        self._speaker_mapping: Dict[str, str] = {}  # Maps speaker IDs to custom names
+        self._diarization_enabled: bool = False
 
     @property
     def is_active(self) -> bool:
@@ -126,13 +133,36 @@ class MeetingSession:
         self._notify_change()
         return summary
 
-    def add_conversation(self, heard_text: str, response_text: str,
-                         speaker: Optional[str] = None) -> None:
-        """Add a conversation exchange to the session."""
+    def add_conversation(
+        self,
+        heard_text: str,
+        response_text: str,
+        speaker: Optional[str] = None,
+        speaker_name: Optional[str] = None,
+        start_time: Optional[float] = None,
+        end_time: Optional[float] = None
+    ) -> None:
+        """Add a conversation exchange to the session.
+
+        Args:
+            heard_text: The transcribed text that was heard.
+            response_text: The AI-generated response.
+            speaker: Speaker ID from diarization (e.g., "SPEAKER_00").
+            speaker_name: Custom display name for the speaker.
+            start_time: Start time in audio (seconds from session start).
+            end_time: End time in audio (seconds from session start).
+        """
+        # Resolve speaker name from mapping if not provided
+        if speaker and not speaker_name:
+            speaker_name = self._speaker_mapping.get(speaker, speaker)
+
         exchange = ConversationExchange(
             heard_text=heard_text,
             response_text=response_text,
-            speaker=speaker
+            speaker=speaker,
+            speaker_name=speaker_name,
+            start_time=start_time,
+            end_time=end_time
         )
         self._conversations.append(exchange)
 
@@ -202,11 +232,91 @@ class MeetingSession:
                 "heard_text": c.heard_text,
                 "response_text": c.response_text,
                 "speaker": c.speaker,
+                "speaker_name": c.speaker_name or self._speaker_mapping.get(c.speaker, c.speaker),
                 "timestamp": c.timestamp.isoformat(),
-                "synced": c.synced
+                "synced": c.synced,
+                "start_time": c.start_time,
+                "end_time": c.end_time
             }
             for c in self._conversations
         ]
+
+    def set_speaker_name(self, speaker_id: str, name: str) -> None:
+        """Set a custom display name for a speaker.
+
+        Args:
+            speaker_id: The speaker identifier (e.g., "SPEAKER_00").
+            name: The custom display name to use.
+        """
+        self._speaker_mapping[speaker_id] = name
+        logger.info(f"Renamed speaker {speaker_id} to '{name}'")
+
+        # Update existing conversations with this speaker
+        for conv in self._conversations:
+            if conv.speaker == speaker_id:
+                conv.speaker_name = name
+
+    def get_speaker_name(self, speaker_id: str) -> str:
+        """Get the display name for a speaker.
+
+        Args:
+            speaker_id: The speaker identifier.
+
+        Returns:
+            The custom name if set, otherwise the speaker_id.
+        """
+        return self._speaker_mapping.get(speaker_id, speaker_id)
+
+    def get_speaker_mapping(self) -> Dict[str, str]:
+        """Get the current speaker name mapping."""
+        return self._speaker_mapping.copy()
+
+    def set_speaker_mapping(self, mapping: Dict[str, str]) -> None:
+        """Set the speaker name mapping.
+
+        Args:
+            mapping: Dictionary mapping speaker IDs to custom names.
+        """
+        self._speaker_mapping = mapping.copy()
+        # Update existing conversations
+        for conv in self._conversations:
+            if conv.speaker and conv.speaker in self._speaker_mapping:
+                conv.speaker_name = self._speaker_mapping[conv.speaker]
+
+    def get_speakers(self) -> List[Dict[str, Any]]:
+        """Get list of unique speakers in the session with statistics.
+
+        Returns:
+            List of speaker info dictionaries.
+        """
+        speakers: Dict[str, Dict[str, Any]] = {}
+
+        for conv in self._conversations:
+            speaker_id = conv.speaker or "UNKNOWN"
+            if speaker_id not in speakers:
+                speakers[speaker_id] = {
+                    "id": speaker_id,
+                    "name": conv.speaker_name or self._speaker_mapping.get(speaker_id, speaker_id),
+                    "message_count": 0,
+                    "total_characters": 0,
+                    "first_seen": conv.timestamp.isoformat(),
+                    "last_seen": conv.timestamp.isoformat()
+                }
+
+            speakers[speaker_id]["message_count"] += 1
+            speakers[speaker_id]["total_characters"] += len(conv.heard_text)
+            speakers[speaker_id]["last_seen"] = conv.timestamp.isoformat()
+
+        return list(speakers.values())
+
+    def enable_diarization(self, enable: bool = True) -> None:
+        """Enable or disable speaker diarization tracking."""
+        self._diarization_enabled = enable
+
+    @property
+    def is_diarization_enabled(self) -> bool:
+        """Check if speaker diarization is enabled."""
+        return self._diarization_enabled
 
     def get_session_info(self) -> Dict[str, Any]:
         """Get current session information."""
@@ -219,7 +329,10 @@ class MeetingSession:
             "started_at": self._started_at.isoformat() if self._started_at else None,
             "duration_seconds": self.duration_seconds,
             "conversation_count": len(self._conversations),
-            "synced_count": sum(1 for c in self._conversations if c.synced)
+            "synced_count": sum(1 for c in self._conversations if c.synced),
+            "diarization_enabled": self._diarization_enabled,
+            "speaker_mapping": self._speaker_mapping,
+            "speakers": self.get_speakers()
         }
 
     def resume_active(self) -> bool:
@@ -248,4 +361,6 @@ class MeetingSession:
         self._started_at = None
         self._conversations = []
         self._is_active = False
+        self._speaker_mapping = {}
+        self._diarization_enabled = False
         self._notify_change()

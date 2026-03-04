@@ -44,7 +44,7 @@ from routes import (
     conversations_router, tasks_router, briefings_router, interviews_router,
     gdpr_router, metrics_router, analytics_router, calendar_router,
     sso_router, api_keys_router, webhooks_router, white_label_router,
-    two_factor_router, webauthn_router,
+    two_factor_router, webauthn_router, devices_router,
     # Admin routes
     admin_dashboard_router, admin_teams_router, admin_tickets_router,
     customer_tickets_router, admin_chat_router, customer_chat_router,
@@ -62,6 +62,7 @@ from routes.exports import router as exports_router
 from routes.integrations import router as integrations_router
 from routes.payments import router as payments_router
 from routes.chat_websocket import router as chat_websocket_router
+from routes.semantic_search import router as semantic_search_router
 
 # Import scheduler
 from services.scheduler import start_scheduler, stop_scheduler
@@ -207,12 +208,14 @@ app.include_router(webauthn_router)  # Already has /api/v1 prefix
 app.include_router(sessions_router, prefix=API_V1_PREFIX)
 app.include_router(bulk_router, prefix=API_V1_PREFIX)
 app.include_router(search_router, prefix=API_V1_PREFIX)
+app.include_router(semantic_search_router, prefix=API_V1_PREFIX)
 app.include_router(websocket_router, prefix=API_V1_PREFIX)
 app.include_router(templates_router, prefix=API_V1_PREFIX)
 app.include_router(analytics_dashboard_router, prefix=API_V1_PREFIX)
 app.include_router(ai_preferences_router, prefix=API_V1_PREFIX)
 app.include_router(exports_router, prefix=API_V1_PREFIX)
 app.include_router(integrations_router, prefix=API_V1_PREFIX)
+app.include_router(devices_router, prefix=API_V1_PREFIX)
 app.include_router(payments_router)  # Already has /api/v1 prefix
 app.include_router(contact_router)
 

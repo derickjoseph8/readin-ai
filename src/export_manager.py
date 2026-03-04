@@ -136,7 +136,11 @@ class ExportManager:
             timestamp = conv.get('timestamp', '')
             timestamp_str = f" [{timestamp}]" if timestamp else ""
 
-            lines.append(f"[{i}]{timestamp_str}")
+            # Speaker information
+            speaker = conv.get('speaker_name') or conv.get('speaker', '')
+            speaker_str = f" ({speaker})" if speaker else ""
+
+            lines.append(f"[{i}]{timestamp_str}{speaker_str}")
             lines.append("")
             lines.append("QUESTION:")
             lines.append(conv.get('question', '(No question recorded)'))
@@ -193,7 +197,11 @@ class ExportManager:
             timestamp = conv.get('timestamp', '')
             timestamp_str = f" `{timestamp}`" if timestamp else ""
 
-            lines.append(f"### Exchange {i}{timestamp_str}")
+            # Speaker information
+            speaker = conv.get('speaker_name') or conv.get('speaker', '')
+            speaker_str = f" - **{speaker}**" if speaker else ""
+
+            lines.append(f"### Exchange {i}{timestamp_str}{speaker_str}")
             lines.append("")
             lines.append("**Question:**")
             lines.append(f"> {conv.get('question', '(No question recorded)')}")
@@ -206,7 +214,7 @@ class ExportManager:
             for line in answer.split('\n'):
                 line = line.strip()
                 if line:
-                    if line.startswith('•') or line.startswith('-') or line.startswith('*'):
+                    if line.startswith('u2022') or line.startswith('-') or line.startswith('*'):
                         lines.append(line)
                     else:
                         lines.append(f"- {line}")

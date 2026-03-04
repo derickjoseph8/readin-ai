@@ -3,12 +3,13 @@ Multi-channel notification service.
 
 Supports:
 - Email notifications (SendGrid)
-- Push notifications (for mobile)
+- Push notifications (Firebase Cloud Messaging)
 - In-app notifications (stored in database)
 - Webhook delivery
 - Slack/Teams integration (future)
 """
 
+import os
 import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
@@ -18,7 +19,24 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from models import User, EmailNotification
-from config import SENDGRID_API_KEY, EMAIL_FROM, EMAIL_FROM_NAME
+from config import SENDGRID_API_KEY, EMAIL_FROM, EMAIL_FROM_NAME, FIREBASE_CREDENTIALS_PATH, FIREBASE_PROJECT_ID
+
+# Firebase Cloud Messaging initialization
+_firebase_initialized = False
+
+try:
+    if FIREBASE_CREDENTIALS_PATH and os.path.exists(FIREBASE_CREDENTIALS_PATH):
+        import firebase_admin
+        from firebase_admin import credentials, messaging
+
+        cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+        firebase_admin.initialize_app(cred, {
+            'projectId': FIREBASE_PROJECT_ID,
+        } if FIREBASE_PROJECT_ID else None)
+        _firebase_initialized = True
+        logging.getLogger("notifications").info("Firebase Cloud Messaging initialized successfully")
+except Exception as e:
+    logging.getLogger("notifications").warning(f"Firebase initialization failed: {e}. Push notifications disabled.")
 
 logger = logging.getLogger("notifications")
 
@@ -196,10 +214,69 @@ class NotificationService:
             return {"success": False, "error": str(e)}
 
     async def _send_push(self, notification: Notification, user: User) -> Dict:
-        """Send push notification (placeholder for mobile integration)."""
-        # TODO: Integrate with Firebase Cloud Messaging or similar
-        logger.info(f"Push notification queued for user {user.id}: {notification.title}")
-        return {"success": True, "queued": True}
+        """Send push notification via Firebase Cloud Messaging."""
+        if not _firebase_initialized:
+            logger.warning("Firebase not initialized. Push notification skipped.")
+            return {"success": False, "error": "Firebase not configured"}
+
+        from models import DeviceToken
+
+        # Get all active device tokens for the user
+        device_tokens = self.db.query(DeviceToken).filter(
+            DeviceToken.user_id == user.id,
+            DeviceToken.is_active == True
+        ).all()
+
+        if not device_tokens:
+            logger.info(f"No device tokens found for user {user.id}")
+            return {"success": False, "error": "No device tokens registered"}
+
+        results = []
+        for device_token in device_tokens:
+            try:
+                response = await send_push_notification(
+                    device_token=device_token.token,
+                    title=notification.title,
+                    body=notification.message,
+                    data={
+                        "type": notification.type.value,
+                        "priority": notification.priority,
+                        **(notification.data or {})
+                    }
+                )
+                results.append({
+                    "device_id": device_token.id,
+                    "platform": device_token.platform,
+                    "success": True,
+                    "message_id": response
+                })
+                # Update last used timestamp
+                device_token.last_used_at = datetime.utcnow()
+            except Exception as e:
+                error_str = str(e)
+                logger.error(f"Failed to send push to device {device_token.id}: {error_str}")
+                results.append({
+                    "device_id": device_token.id,
+                    "platform": device_token.platform,
+                    "success": False,
+                    "error": error_str
+                })
+                # Deactivate invalid tokens
+                if "registration-token-not-registered" in error_str.lower() or \
+                   "invalid-registration-token" in error_str.lower():
+                    device_token.is_active = False
+                    logger.info(f"Deactivated invalid device token {device_token.id}")
+
+        self.db.commit()
+
+        successful = sum(1 for r in results if r.get("success"))
+        return {
+            "success": successful > 0,
+            "total_devices": len(results),
+            "successful": successful,
+            "failed": len(results) - successful,
+            "details": results
+        }
 
     async def _send_in_app(self, notification: Notification, user: User) -> Dict:
         """Store in-app notification in database."""
@@ -297,6 +374,213 @@ class NotificationService:
         </body>
         </html>
         """
+
+
+# =============================================================================
+# FIREBASE CLOUD MESSAGING FUNCTIONS
+# =============================================================================
+
+async def send_push_notification(
+    device_token: str,
+    title: str,
+    body: str,
+    data: dict = None,
+    image_url: str = None,
+    badge: int = None,
+    sound: str = "default",
+    priority: str = "high"
+) -> str:
+    """
+    Send a push notification via Firebase Cloud Messaging.
+
+    Args:
+        device_token: The FCM device registration token
+        title: Notification title
+        body: Notification body text
+        data: Optional data payload (key-value pairs, all strings)
+        image_url: Optional image URL for rich notifications
+        badge: Optional badge count for iOS
+        sound: Notification sound (default: "default")
+        priority: Message priority ("high" or "normal")
+
+    Returns:
+        Message ID from FCM
+
+    Raises:
+        Exception if Firebase is not initialized or sending fails
+    """
+    if not _firebase_initialized:
+        raise Exception("Firebase Cloud Messaging is not initialized")
+
+    from firebase_admin import messaging
+
+    # Build notification payload
+    notification = messaging.Notification(
+        title=title,
+        body=body,
+        image=image_url
+    )
+
+    # Build Android-specific config
+    android_config = messaging.AndroidConfig(
+        priority=priority,
+        notification=messaging.AndroidNotification(
+            icon="ic_notification",
+            color="#d4af37",  # ReadIn AI brand color
+            sound=sound,
+            default_sound=True if sound == "default" else False,
+            default_vibrate_timings=True,
+            default_light_settings=True,
+        )
+    )
+
+    # Build iOS-specific config
+    apns_config = messaging.APNSConfig(
+        payload=messaging.APNSPayload(
+            aps=messaging.Aps(
+                alert=messaging.ApsAlert(
+                    title=title,
+                    body=body
+                ),
+                badge=badge,
+                sound=sound,
+                content_available=True,
+            )
+        )
+    )
+
+    # Ensure data payload values are strings (FCM requirement)
+    data_payload = {}
+    if data:
+        for key, value in data.items():
+            if isinstance(value, (dict, list)):
+                import json
+                data_payload[key] = json.dumps(value)
+            else:
+                data_payload[key] = str(value)
+
+    # Build the message
+    message = messaging.Message(
+        notification=notification,
+        data=data_payload,
+        token=device_token,
+        android=android_config,
+        apns=apns_config,
+    )
+
+    # Send the message
+    response = messaging.send(message)
+    logger.info(f"Push notification sent successfully: {response}")
+    return response
+
+
+async def send_push_to_topic(
+    topic: str,
+    title: str,
+    body: str,
+    data: dict = None,
+) -> str:
+    """
+    Send a push notification to all devices subscribed to a topic.
+
+    Args:
+        topic: The topic name (e.g., "announcements", "user_123")
+        title: Notification title
+        body: Notification body text
+        data: Optional data payload
+
+    Returns:
+        Message ID from FCM
+    """
+    if not _firebase_initialized:
+        raise Exception("Firebase Cloud Messaging is not initialized")
+
+    from firebase_admin import messaging
+
+    notification = messaging.Notification(title=title, body=body)
+
+    data_payload = {}
+    if data:
+        for key, value in data.items():
+            if isinstance(value, (dict, list)):
+                import json
+                data_payload[key] = json.dumps(value)
+            else:
+                data_payload[key] = str(value)
+
+    message = messaging.Message(
+        notification=notification,
+        data=data_payload,
+        topic=topic,
+    )
+
+    response = messaging.send(message)
+    logger.info(f"Topic notification sent to '{topic}': {response}")
+    return response
+
+
+async def send_multicast_push(
+    device_tokens: List[str],
+    title: str,
+    body: str,
+    data: dict = None,
+) -> Dict[str, Any]:
+    """
+    Send a push notification to multiple devices efficiently.
+
+    Args:
+        device_tokens: List of FCM device registration tokens (max 500)
+        title: Notification title
+        body: Notification body text
+        data: Optional data payload
+
+    Returns:
+        Dictionary with success/failure counts and details
+    """
+    if not _firebase_initialized:
+        raise Exception("Firebase Cloud Messaging is not initialized")
+
+    from firebase_admin import messaging
+
+    if len(device_tokens) > 500:
+        raise ValueError("Maximum 500 device tokens per multicast request")
+
+    notification = messaging.Notification(title=title, body=body)
+
+    data_payload = {}
+    if data:
+        for key, value in data.items():
+            if isinstance(value, (dict, list)):
+                import json
+                data_payload[key] = json.dumps(value)
+            else:
+                data_payload[key] = str(value)
+
+    message = messaging.MulticastMessage(
+        notification=notification,
+        data=data_payload,
+        tokens=device_tokens,
+    )
+
+    response = messaging.send_each_for_multicast(message)
+
+    return {
+        "success_count": response.success_count,
+        "failure_count": response.failure_count,
+        "responses": [
+            {
+                "success": r.success,
+                "message_id": r.message_id if r.success else None,
+                "error": str(r.exception) if r.exception else None
+            }
+            for r in response.responses
+        ]
+    }
+
+
+def is_firebase_configured() -> bool:
+    """Check if Firebase Cloud Messaging is properly configured."""
+    return _firebase_initialized
 
 
 # =============================================================================

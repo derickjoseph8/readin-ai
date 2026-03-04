@@ -7,6 +7,7 @@ from typing import Callable, Optional, List, Set
 import psutil
 
 from config import MONITORED_PROCESSES, PROCESS_CHECK_INTERVAL
+from settings_manager import settings
 
 # Map process names to friendly app names (cross-platform)
 PROCESS_TO_APP = {
@@ -133,25 +134,57 @@ class ProcessMonitor(threading.Thread):
         self._detected_apps: Set[str] = set()
 
     def _find_all_meeting_processes(self) -> List[str]:
-        """Find all running meeting processes and return unique app names."""
+        """Find all running meeting processes and return unique app names.
+
+        Respects Privacy Mode settings by filtering out excluded apps.
+        """
         found_apps = set()
+
+        # Get excluded apps list for Privacy Mode filtering
+        excluded_apps = settings.get('excluded_apps', [])
+        excluded_apps_lower = [app.lower() for app in excluded_apps]
+        privacy_mode_enabled = settings.get('privacy_mode_enabled', True)
+
         for proc in psutil.process_iter(['name']):
             try:
                 proc_name = proc.info['name']
                 if proc_name and proc_name in MONITORED_PROCESSES:
                     # Get friendly app name
                     app_name = PROCESS_TO_APP.get(proc_name, proc_name)
+
+                    # Privacy Mode: Skip excluded apps
+                    if privacy_mode_enabled:
+                        # Check both process name and friendly app name
+                        if (proc_name.lower() in excluded_apps_lower or
+                            app_name.lower() in excluded_apps_lower):
+                            continue  # Skip monitoring this app
+
                     found_apps.add(app_name)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
         return list(found_apps)
 
     def _find_meeting_process(self) -> Optional[str]:
-        """Check if any monitored process is running (returns first found)."""
+        """Check if any monitored process is running (returns first found).
+
+        Respects Privacy Mode settings by filtering out excluded apps.
+        """
+        # Get excluded apps list for Privacy Mode filtering
+        excluded_apps = settings.get('excluded_apps', [])
+        excluded_apps_lower = [app.lower() for app in excluded_apps]
+        privacy_mode_enabled = settings.get('privacy_mode_enabled', True)
+
         for proc in psutil.process_iter(['name']):
             try:
                 proc_name = proc.info['name']
                 if proc_name and proc_name in MONITORED_PROCESSES:
+                    # Privacy Mode: Skip excluded apps
+                    if privacy_mode_enabled:
+                        app_name = PROCESS_TO_APP.get(proc_name, proc_name)
+                        if (proc_name.lower() in excluded_apps_lower or
+                            app_name.lower() in excluded_apps_lower):
+                            continue  # Skip monitoring this app
+
                     return proc_name
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue

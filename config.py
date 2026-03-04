@@ -14,6 +14,11 @@ IS_LINUX = sys.platform.startswith("linux")
 # API Configuration
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
+# HuggingFace Configuration (for pyannote.audio speaker diarization)
+# Get your token from: https://huggingface.co/settings/tokens
+# Also accept the license at: https://huggingface.co/pyannote/speaker-diarization-3.1
+HUGGINGFACE_TOKEN = os.getenv("HUGGINGFACE_TOKEN", "")
+
 # Backend API Configuration
 API_BASE_URL = os.getenv("API_BASE_URL", "https://www.getreadin.us")
 
@@ -166,7 +171,7 @@ OVERLAY_HEIGHT = 300
 OVERLAY_OPACITY = 0.92
 
 # Version info
-APP_VERSION = "1.5.3"
+APP_VERSION = "1.6.0"
 APP_NAME = "ReadIn AI"
 UPDATE_CHECK_URL = "https://www.getreadin.us/api/v1/version"
 GITHUB_RELEASES_URL = "https://github.com/derickjoseph8/readin-ai/releases"
