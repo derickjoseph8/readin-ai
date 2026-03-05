@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from services.ai_personas import (
     get_persona, get_all_personas, list_persona_options, Persona
 )
-from routes.auth import get_current_user
+from auth import get_current_user
 from models import User
 from database import get_db
 from sqlalchemy.orm import Session

@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from routes.auth import get_current_user
+from auth import get_current_user
 from models import User
 from database import get_db
 from sqlalchemy.orm import Session

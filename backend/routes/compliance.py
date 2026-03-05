@@ -5,7 +5,7 @@ from typing import Optional
 from uuid import UUID
 from pydantic import BaseModel
 from datetime import date
-from routes.auth import get_current_user
+from auth import get_current_user
 from models import User
 from database import get_db
 from sqlalchemy.orm import Session
