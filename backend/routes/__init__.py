@@ -36,6 +36,7 @@ from .slack_commands import router as slack_commands_router
 from .slack_interactive import router as slack_interactive_router
 from .compliance import router as compliance_router
 from .integrations.pm_integrations import router as pm_integrations_router
+from .speakers import router as speakers_router
 
 # Admin routes
 from .admin.dashboard import router as admin_dashboard_router
@@ -81,6 +82,7 @@ __all__ = [
     "slack_interactive_router",
     "compliance_router",
     "pm_integrations_router",
+    "speakers_router",
     # Admin routes
     "admin_dashboard_router",
     "admin_teams_router",

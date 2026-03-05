@@ -356,8 +356,14 @@ class Conversation(Base):
 
     # Content
     speaker = Column(String, default="other")  # user, other, unknown
+    speaker_id = Column(String(50), nullable=True, index=True)  # Diarization speaker ID (e.g., SPEAKER_00)
+    speaker_name = Column(String(100), nullable=True)  # Human-readable speaker name
     heard_text = Column(Text, nullable=False)
     response_text = Column(Text, nullable=True)
+
+    # Timing for audio sync
+    start_time = Column(Float, nullable=True)  # Start time in audio (seconds)
+    end_time = Column(Float, nullable=True)  # End time in audio (seconds)
 
     # Transcript editing fields
     original_text = Column(Text, nullable=True)  # Original transcription before edits
@@ -2773,3 +2779,43 @@ class DataProcessingAgreement(Base):
 
     # Relationships
     organization = relationship("Organization")
+
+
+# =============================================================================
+# SPEAKER DIARIZATION
+# =============================================================================
+
+class Speaker(Base):
+    """Speaker profile for voice identification across meetings."""
+    __tablename__ = "speakers"
+    __table_args__ = (
+        Index("ix_speaker_user_id", "user_id"),
+        Index("ix_speaker_speaker_id", "speaker_id"),
+        UniqueConstraint("user_id", "speaker_id", name="uq_user_speaker_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Speaker identification
+    speaker_id = Column(String(50), nullable=False)  # e.g., "SPEAKER_00"
+    display_name = Column(String(100), nullable=True)  # Human-readable name
+
+    # Voice profile
+    voice_embedding = Column(Text, nullable=True)  # JSON array of voice embedding
+
+    # Statistics
+    total_meetings = Column(Integer, default=0)
+    total_speaking_time = Column(Float, default=0.0)  # Total time in seconds
+
+    # Timestamps
+    first_seen = Column(DateTime, nullable=True)
+    last_seen = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Additional metadata
+    metadata = Column(JSON, default=dict)
+
+    # Relationships
+    user = relationship("User")

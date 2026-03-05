@@ -53,6 +53,7 @@ from routes import (
     # New feature routes
     personas_router, collaboration_router, slack_commands_router,
     slack_interactive_router, compliance_router, pm_integrations_router,
+    speakers_router,
     # Admin routes
     admin_dashboard_router, admin_teams_router, admin_tickets_router,
     customer_tickets_router, admin_chat_router, customer_chat_router,
@@ -244,6 +245,7 @@ app.include_router(slack_commands_router, prefix=API_V1_PREFIX)  # Slack slash c
 app.include_router(slack_interactive_router, prefix=API_V1_PREFIX)  # Slack interactive components
 app.include_router(compliance_router, prefix=API_V1_PREFIX)  # SOC2/HIPAA/CCPA compliance
 app.include_router(pm_integrations_router, prefix=API_V1_PREFIX)  # Additional PM integrations
+app.include_router(speakers_router, prefix=API_V1_PREFIX)  # Speaker diarization and management
 
 # Admin dashboard routes
 app.include_router(admin_dashboard_router, prefix=API_V1_PREFIX)
