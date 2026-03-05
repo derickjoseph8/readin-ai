@@ -1399,7 +1399,7 @@ def get_app_version():
     return {
         "version": APP_VERSION,
         "download_url": "https://www.getreadin.us/download",
-        "changelog": "v1.6.0: AI Personas, Voice Commands, Privacy Mode, Semantic Search, Real-time Translation, Slack/PM Integrations, Offline Mode, Compliance APIs",
+        "changelog": "v1.5.0: Screen capture protection enabled by default, security improvements from comprehensive system audit",
         "required": False
     }
 
