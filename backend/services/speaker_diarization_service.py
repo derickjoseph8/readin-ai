@@ -88,7 +88,7 @@ class SpeakerDiarizationService:
                 "first_seen": s.first_seen.isoformat() if s.first_seen else None,
                 "last_seen": s.last_seen.isoformat() if s.last_seen else None,
                 "has_voice_profile": s.voice_embedding is not None,
-                "metadata": s.metadata or {}
+                "metadata": s.extra_data or {}
             }
             for s in speakers
         ]
@@ -138,9 +138,9 @@ class SpeakerDiarizationService:
             if meeting_id:
                 speaker.total_meetings = (speaker.total_meetings or 0) + 1
             if metadata:
-                existing_meta = speaker.metadata or {}
+                existing_meta = speaker.extra_data or {}
                 existing_meta.update(metadata)
-                speaker.metadata = existing_meta
+                speaker.extra_data = existing_meta
             speaker.last_seen = now
             speaker.updated_at = now
         else:

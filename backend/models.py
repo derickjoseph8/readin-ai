@@ -2814,8 +2814,8 @@ class Speaker(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Additional metadata
-    metadata = Column(JSON, default=dict)
+    # Additional data
+    extra_data = Column(JSON, default=dict)
 
     # Relationships
     user = relationship("User")
