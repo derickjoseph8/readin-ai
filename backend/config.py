@@ -140,6 +140,7 @@ REDIS_URL = os.getenv("REDIS_URL", "")
 SLACK_CLIENT_ID = os.getenv("SLACK_CLIENT_ID", "")
 SLACK_CLIENT_SECRET = os.getenv("SLACK_CLIENT_SECRET", "")
 SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET", "")
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
 
 # =============================================================================
 # MICROSOFT TEAMS INTEGRATION

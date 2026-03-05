@@ -10,7 +10,7 @@ import hashlib
 import time
 import logging
 from fastapi import APIRouter, Request, HTTPException, Form
-from config import settings
+from config import SLACK_SIGNING_SECRET, SLACK_BOT_TOKEN
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/slack", tags=["slack"])
 
 def verify_slack_signature(signature: str, timestamp: str, body: bytes) -> bool:
     """Verify Slack request signature."""
-    if not settings.SLACK_SIGNING_SECRET:
+    if not SLACK_SIGNING_SECRET:
         return True
 
     if abs(time.time() - int(timestamp)) > 60 * 5:
@@ -27,7 +27,7 @@ def verify_slack_signature(signature: str, timestamp: str, body: bytes) -> bool:
 
     sig_basestring = f"v0:{timestamp}:{body.decode('utf-8')}"
     my_signature = 'v0=' + hmac.new(
-        settings.SLACK_SIGNING_SECRET.encode(),
+        SLACK_SIGNING_SECRET.encode(),
         sig_basestring.encode(),
         hashlib.sha256
     ).hexdigest()
@@ -243,7 +243,7 @@ async def open_add_note_modal(trigger_id: str):
     async with httpx.AsyncClient() as client:
         await client.post(
             "https://slack.com/api/views.open",
-            headers={"Authorization": f"Bearer {settings.SLACK_BOT_TOKEN}"},
+            headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
             json={"trigger_id": trigger_id, "view": modal}
         )
 

@@ -10,7 +10,7 @@ import time
 import logging
 from fastapi import APIRouter, Request, HTTPException, Form
 from typing import Optional
-from config import settings
+from config import SLACK_SIGNING_SECRET, APP_URL
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ def verify_slack_signature(
     body: bytes
 ) -> bool:
     """Verify Slack request signature."""
-    if not settings.SLACK_SIGNING_SECRET:
+    if not SLACK_SIGNING_SECRET:
         logger.warning("SLACK_SIGNING_SECRET not configured")
         return True  # Allow in development
 
@@ -33,7 +33,7 @@ def verify_slack_signature(
 
     sig_basestring = f"v0:{timestamp}:{body.decode('utf-8')}"
     my_signature = 'v0=' + hmac.new(
-        settings.SLACK_SIGNING_SECRET.encode(),
+        SLACK_SIGNING_SECRET.encode(),
         sig_basestring.encode(),
         hashlib.sha256
     ).hexdigest()
@@ -189,7 +189,7 @@ async def _summary_command(slack_user_id: str, team_id: str):
                         {
                             "type": "button",
                             "text": {"type": "plain_text", "text": "View Full Details"},
-                            "url": f"{settings.FRONTEND_URL}/meetings/{meeting.id}",
+                            "url": f"{APP_URL}/meetings/{meeting.id}",
                             "action_id": "view_meeting"
                         }
                     ]
@@ -241,7 +241,7 @@ async def _meetings_command(slack_user_id: str, team_id: str):
                 "accessory": {
                     "type": "button",
                     "text": {"type": "plain_text", "text": "View"},
-                    "url": f"{settings.FRONTEND_URL}/meetings/{m.id}",
+                    "url": f"{APP_URL}/meetings/{m.id}",
                     "action_id": f"view_meeting_{m.id}"
                 }
             })
@@ -345,7 +345,7 @@ async def _search_command(slack_user_id: str, team_id: str, query: str):
                 "accessory": {
                     "type": "button",
                     "text": {"type": "plain_text", "text": "View"},
-                    "url": f"{settings.FRONTEND_URL}/meetings/{m.id}",
+                    "url": f"{APP_URL}/meetings/{m.id}",
                     "action_id": f"view_meeting_{m.id}"
                 }
             })
