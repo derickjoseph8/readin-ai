@@ -13,6 +13,7 @@ from .business_hours_service import (
     BusinessHoursConfig,
     create_business_hours_service,
 )
+from .transcript_service import TranscriptService
 
 __all__ = [
     "TopicExtractor",
@@ -26,4 +27,5 @@ __all__ = [
     "BusinessHoursService",
     "BusinessHoursConfig",
     "create_business_hours_service",
+    "TranscriptService",
 ]

@@ -113,15 +113,31 @@ def end_meeting(
             # Don't fail the request if async task fails to queue
             logger.error(f"Failed to queue summary generation: {e}")
 
-    # Generate embedding for semantic search
+    # Generate embeddings for semantic search (meeting and conversations)
     try:
         from services.embedding_service import EmbeddingService
         embedding_service = EmbeddingService(db)
-        asyncio.create_task(embedding_service.generate_meeting_embedding(meeting_id))
+
+        async def generate_all_embeddings():
+            try:
+                # Generate meeting embedding
+                await embedding_service.generate_meeting_embedding(meeting_id)
+                logger.info(f"Generated meeting embedding for meeting {meeting_id}")
+
+                # Generate embeddings for all conversations in this meeting
+                stats = await embedding_service.generate_embeddings_for_meeting_conversations(meeting_id)
+                logger.info(
+                    f"Generated conversation embeddings for meeting {meeting_id}: "
+                    f"{stats['processed']} processed, {stats['skipped']} skipped, {stats['failed']} failed"
+                )
+            except Exception as e:
+                logger.error(f"Embedding generation error for meeting {meeting_id}: {e}")
+
+        asyncio.create_task(generate_all_embeddings())
         logger.info(f"Triggered embedding generation for meeting {meeting_id}")
     except Exception as e:
         # Don't fail the request if embedding generation fails
-        logger.error(f"Failed to generate meeting embedding: {e}")
+        logger.error(f"Failed to trigger embedding generation: {e}")
 
     # Fire Zapier trigger for meeting_ended
     try:

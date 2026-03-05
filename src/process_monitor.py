@@ -1,5 +1,6 @@
 """Process monitor for detecting Teams/Zoom launches."""
 
+import logging
 import threading
 import time
 from typing import Callable, Optional, List, Set
@@ -8,6 +9,8 @@ import psutil
 
 from config import MONITORED_PROCESSES, PROCESS_CHECK_INTERVAL
 from settings_manager import settings
+
+logger = logging.getLogger(__name__)
 
 # Map process names to friendly app names (cross-platform)
 PROCESS_TO_APP = {
@@ -137,10 +140,18 @@ class ProcessMonitor(threading.Thread):
         """Find all running meeting processes and return unique app names.
 
         Respects Privacy Mode settings by filtering out excluded apps.
+        Uses the privacy_mode handler for centralized privacy management.
         """
         found_apps = set()
 
-        # Get excluded apps list for Privacy Mode filtering
+        # Get privacy handler for centralized privacy mode checking
+        try:
+            from privacy_mode import get_privacy_handler
+            privacy_handler = get_privacy_handler()
+        except ImportError:
+            privacy_handler = None
+
+        # Fallback: Get excluded apps list from settings
         excluded_apps = settings.get('excluded_apps', [])
         excluded_apps_lower = [app.lower() for app in excluded_apps]
         privacy_mode_enabled = settings.get('privacy_mode_enabled', True)
@@ -154,10 +165,16 @@ class ProcessMonitor(threading.Thread):
 
                     # Privacy Mode: Skip excluded apps
                     if privacy_mode_enabled:
-                        # Check both process name and friendly app name
-                        if (proc_name.lower() in excluded_apps_lower or
-                            app_name.lower() in excluded_apps_lower):
-                            continue  # Skip monitoring this app
+                        # Use privacy handler if available
+                        if privacy_handler:
+                            if privacy_handler.should_skip_app(app_name, proc_name):
+                                logger.debug(f"Privacy Mode: Skipping {app_name} (excluded)")
+                                continue
+                        else:
+                            # Fallback to direct settings check
+                            if (proc_name.lower() in excluded_apps_lower or
+                                app_name.lower() in excluded_apps_lower):
+                                continue  # Skip monitoring this app
 
                     found_apps.add(app_name)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -168,8 +185,16 @@ class ProcessMonitor(threading.Thread):
         """Check if any monitored process is running (returns first found).
 
         Respects Privacy Mode settings by filtering out excluded apps.
+        Uses the privacy_mode handler for centralized privacy management.
         """
-        # Get excluded apps list for Privacy Mode filtering
+        # Get privacy handler for centralized privacy mode checking
+        try:
+            from privacy_mode import get_privacy_handler
+            privacy_handler = get_privacy_handler()
+        except ImportError:
+            privacy_handler = None
+
+        # Fallback: Get excluded apps list from settings
         excluded_apps = settings.get('excluded_apps', [])
         excluded_apps_lower = [app.lower() for app in excluded_apps]
         privacy_mode_enabled = settings.get('privacy_mode_enabled', True)
@@ -181,9 +206,16 @@ class ProcessMonitor(threading.Thread):
                     # Privacy Mode: Skip excluded apps
                     if privacy_mode_enabled:
                         app_name = PROCESS_TO_APP.get(proc_name, proc_name)
-                        if (proc_name.lower() in excluded_apps_lower or
-                            app_name.lower() in excluded_apps_lower):
-                            continue  # Skip monitoring this app
+                        # Use privacy handler if available
+                        if privacy_handler:
+                            if privacy_handler.should_skip_app(app_name, proc_name):
+                                logger.debug(f"Privacy Mode: Skipping {app_name} (excluded)")
+                                continue
+                        else:
+                            # Fallback to direct settings check
+                            if (proc_name.lower() in excluded_apps_lower or
+                                app_name.lower() in excluded_apps_lower):
+                                continue  # Skip monitoring this app
 
                     return proc_name
             except (psutil.NoSuchProcess, psutil.AccessDenied):

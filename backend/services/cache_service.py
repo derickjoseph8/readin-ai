@@ -338,6 +338,23 @@ class CacheKeys:
     def topic_suggestions(user_id: int, meeting_type: str = "all") -> str:
         return f"recommendation:topics:{user_id}:{meeting_type}"
 
+    # Semantic search cache keys
+    @staticmethod
+    def semantic_search(user_id: int, query_hash: str) -> str:
+        return f"semantic:search:{user_id}:{query_hash}"
+
+    @staticmethod
+    def similar_meetings(meeting_id: int) -> str:
+        return f"semantic:similar_meetings:{meeting_id}"
+
+    @staticmethod
+    def similar_conversations(conversation_id: int) -> str:
+        return f"semantic:similar_conversations:{conversation_id}"
+
+    @staticmethod
+    def semantic_search_status(user_id: int) -> str:
+        return f"semantic:status:{user_id}"
+
 
 # =============================================================================
 # CACHE TTL CONSTANTS
@@ -369,6 +386,11 @@ class CacheTTL:
     MEETING_PREP = LONG           # 15 minutes for prep hints
     PARTICIPANT_INSIGHTS = LONG   # 15 minutes for participant insights
     TOPIC_SUGGESTIONS = VERY_LONG # 1 hour for topic suggestions
+
+    # Semantic search TTLs
+    SEMANTIC_SEARCH = SHORT       # 1 minute for search results
+    SIMILAR_ITEMS = MEDIUM        # 5 minutes for similar meetings/conversations
+    SEMANTIC_STATUS = MEDIUM      # 5 minutes for status info
 
 
 # =============================================================================

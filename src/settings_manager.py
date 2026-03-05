@@ -60,10 +60,13 @@ class SettingsManager:
         # Privacy Mode settings
         "privacy_mode_enabled": True,
         "excluded_apps": [],  # List of app names to exclude from monitoring
+        "_privacy_pause_history": [],  # Internal: Pause history for Privacy Mode
+        "_privacy_auto_detect": True,  # Internal: Auto-detect sensitive apps
 
         # Voice command settings
         "voice_commands_enabled": False,  # Disabled by default - requires speech_recognition
         "voice_command_device_index": None,  # None = use default microphone
+        "voice_command_tts_feedback": False,  # Speak confirmation of recognized commands
 
         # Speaker diarization settings
         "diarization_enabled": False,  # Disabled by default - requires pyannote.audio and HuggingFace token

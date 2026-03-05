@@ -361,6 +361,235 @@ async def generate_meeting_embedding(
         )
 
 
+class SimilarConversationResult(BaseModel):
+    """Similar conversation result."""
+    id: int
+    meeting_id: int
+    heard_text: Optional[str]
+    response_text: Optional[str]
+    timestamp: Optional[str]
+    speaker: Optional[str]
+    similarity_score: float
+
+
+class SimilarConversationsResponse(BaseModel):
+    """Response for similar conversations."""
+    reference_conversation_id: int
+    similar_conversations: List[SimilarConversationResult]
+
+
+@router.get("/conversations/{conversation_id}/similar", response_model=SimilarConversationsResponse)
+async def get_similar_conversations(
+    conversation_id: int,
+    limit: int = Query(default=10, ge=1, le=50, description="Maximum similar conversations"),
+    min_similarity: float = Query(default=0.3, ge=0.0, le=1.0, description="Minimum similarity score"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Find conversations similar to a given conversation.
+
+    Uses embedding similarity to find other conversations with similar content
+    or discussion topics across all user's meetings.
+    """
+    from services.embedding_service import EmbeddingService
+    from models import Conversation, Meeting
+
+    # Verify conversation exists and belongs to user
+    conversation = db.query(Conversation).join(Meeting).filter(
+        Conversation.id == conversation_id,
+        Meeting.user_id == user.id
+    ).first()
+
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if not conversation.embedding:
+        raise HTTPException(
+            status_code=400,
+            detail="Conversation has no embedding. Generate embeddings first using POST /search/semantic/embeddings/conversations/generate"
+        )
+
+    embedding_service = EmbeddingService(db)
+
+    try:
+        similar = await embedding_service.find_similar_conversations(
+            conversation_id=conversation_id,
+            user_id=user.id,
+            limit=limit,
+            min_similarity=min_similarity
+        )
+
+        return SimilarConversationsResponse(
+            reference_conversation_id=conversation_id,
+            similar_conversations=[SimilarConversationResult(**c) for c in similar]
+        )
+
+    except Exception as e:
+        logger.error(f"Similar conversations error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to find similar conversations"
+        )
+
+
+@router.post("/embeddings/conversations/generate", response_model=EmbeddingGenerationResponse)
+async def generate_conversation_embeddings(
+    background_tasks: BackgroundTasks,
+    meeting_id: Optional[int] = Query(default=None, description="Generate for specific meeting only"),
+    force_regenerate: bool = Query(default=False, description="Regenerate existing embeddings"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate embeddings for user's conversations.
+
+    This is typically run once to backfill embeddings for existing conversations.
+    New conversations automatically get embeddings when created.
+
+    Note: For large datasets, this runs in the background.
+    """
+    from services.embedding_service import EmbeddingService
+    from models import Meeting, Conversation
+
+    embedding_service = EmbeddingService(db)
+
+    # Count conversations needing embeddings
+    if meeting_id:
+        # Verify meeting belongs to user
+        meeting = db.query(Meeting).filter(
+            Meeting.id == meeting_id,
+            Meeting.user_id == user.id
+        ).first()
+
+        if not meeting:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+
+        query = db.query(Conversation).filter(Conversation.meeting_id == meeting_id)
+    else:
+        # Get all user's meetings
+        meeting_ids = [m.id for m in db.query(Meeting.id).filter(Meeting.user_id == user.id).all()]
+        if not meeting_ids:
+            return EmbeddingGenerationResponse(
+                processed=0,
+                skipped=0,
+                failed=0,
+                message="No meetings found"
+            )
+        query = db.query(Conversation).filter(Conversation.meeting_id.in_(meeting_ids))
+
+    if not force_regenerate:
+        query = query.filter(Conversation.embedding.is_(None))
+
+    count = query.count()
+
+    if count == 0:
+        return EmbeddingGenerationResponse(
+            processed=0,
+            skipped=0,
+            failed=0,
+            message="All conversations already have embeddings"
+        )
+
+    # For small number of conversations, process synchronously
+    if count <= 50:
+        try:
+            if meeting_id:
+                stats = await embedding_service.generate_embeddings_for_meeting_conversations(
+                    meeting_id=meeting_id,
+                    force_regenerate=force_regenerate
+                )
+            else:
+                stats = await embedding_service.generate_embeddings_for_user_conversations(
+                    user_id=user.id,
+                    force_regenerate=force_regenerate
+                )
+            return EmbeddingGenerationResponse(
+                processed=stats["processed"],
+                skipped=stats["skipped"],
+                failed=stats["failed"],
+                message=f"Generated embeddings for {stats['processed']} conversations"
+            )
+        except Exception as e:
+            logger.error(f"Conversation embedding generation error: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to generate conversation embeddings"
+            )
+    else:
+        # For larger datasets, run in background
+        async def generate_in_background():
+            try:
+                if meeting_id:
+                    await embedding_service.generate_embeddings_for_meeting_conversations(
+                        meeting_id=meeting_id,
+                        force_regenerate=force_regenerate
+                    )
+                else:
+                    await embedding_service.generate_embeddings_for_user_conversations(
+                        user_id=user.id,
+                        force_regenerate=force_regenerate
+                    )
+            except Exception as e:
+                logger.error(f"Background conversation embedding generation error: {e}")
+
+        background_tasks.add_task(generate_in_background)
+
+        return EmbeddingGenerationResponse(
+            processed=0,
+            skipped=0,
+            failed=0,
+            message=f"Generating embeddings for {count} conversations in background. This may take a few minutes."
+        )
+
+
+@router.post("/conversations/{conversation_id}/embedding", response_model=dict)
+async def generate_single_conversation_embedding(
+    conversation_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate or regenerate embedding for a specific conversation.
+    """
+    from services.embedding_service import EmbeddingService
+    from models import Conversation, Meeting
+
+    # Verify conversation belongs to user
+    conversation = db.query(Conversation).join(Meeting).filter(
+        Conversation.id == conversation_id,
+        Meeting.user_id == user.id
+    ).first()
+
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    embedding_service = EmbeddingService(db)
+
+    try:
+        embedding = await embedding_service.generate_conversation_embedding(conversation_id)
+
+        if embedding:
+            return {
+                "conversation_id": conversation_id,
+                "embedding_generated": True,
+                "embedding_dimension": len(embedding)
+            }
+        else:
+            return {
+                "conversation_id": conversation_id,
+                "embedding_generated": False,
+                "message": "No content to generate embedding from"
+            }
+
+    except Exception as e:
+        logger.error(f"Conversation embedding generation error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate conversation embedding"
+        )
+
+
 @router.get("/status")
 async def get_semantic_search_status(
     user: User = Depends(get_current_user),
@@ -374,6 +603,7 @@ async def get_semantic_search_status(
     - Number of meetings with/without embeddings
     - Embedding model info
     """
+    from models import Conversation
     from services.semantic_search_service import SemanticSearchService
     from services.embedding_service import get_embedding_dimension, EMBEDDING_MODEL_NAME
 
@@ -386,6 +616,20 @@ async def get_semantic_search_status(
         Meeting.embedding.isnot(None)
     ).count()
 
+    # Count conversations
+    meeting_ids = [m.id for m in db.query(Meeting.id).filter(Meeting.user_id == user.id).all()]
+    if meeting_ids:
+        total_conversations = db.query(Conversation).filter(
+            Conversation.meeting_id.in_(meeting_ids)
+        ).count()
+        conversations_with_embeddings = db.query(Conversation).filter(
+            Conversation.meeting_id.in_(meeting_ids),
+            Conversation.embedding.isnot(None)
+        ).count()
+    else:
+        total_conversations = 0
+        conversations_with_embeddings = 0
+
     try:
         embedding_dim = get_embedding_dimension()
     except Exception:
@@ -396,6 +640,23 @@ async def get_semantic_search_status(
         "search_mode": "pgvector" if search_service._is_pgvector_available() else "fallback",
         "embedding_model": EMBEDDING_MODEL_NAME,
         "embedding_dimension": embedding_dim,
+        "meetings": {
+            "total": total_meetings,
+            "with_embeddings": meetings_with_embeddings,
+            "without_embeddings": total_meetings - meetings_with_embeddings,
+            "coverage_percentage": round(
+                (meetings_with_embeddings / total_meetings * 100) if total_meetings > 0 else 0, 1
+            )
+        },
+        "conversations": {
+            "total": total_conversations,
+            "with_embeddings": conversations_with_embeddings,
+            "without_embeddings": total_conversations - conversations_with_embeddings,
+            "coverage_percentage": round(
+                (conversations_with_embeddings / total_conversations * 100) if total_conversations > 0 else 0, 1
+            )
+        },
+        # Backward compatibility
         "total_meetings": total_meetings,
         "meetings_with_embeddings": meetings_with_embeddings,
         "meetings_without_embeddings": total_meetings - meetings_with_embeddings,

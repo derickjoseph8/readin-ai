@@ -57,24 +57,37 @@ async def create_conversation(
     db.commit()
     db.refresh(conversation)
 
-    # Trigger async topic extraction in background
-    async def extract_topics_async(conv_id: int, uid: int):
+    # Trigger async topic extraction and embedding generation in background
+    async def process_conversation_async(conv_id: int, uid: int):
         try:
             from database import SessionLocal
             from services.topic_extractor import TopicExtractor
+            from services.embedding_service import EmbeddingService
             db_session = SessionLocal()
             try:
-                extractor = TopicExtractor(db_session)
                 conv = db_session.query(Conversation).filter(Conversation.id == conv_id).first()
                 if conv:
-                    await extractor.process_conversation(conv, uid)
-                    logger.info(f"Topic extraction completed for conversation {conv_id}")
+                    # Extract topics
+                    try:
+                        extractor = TopicExtractor(db_session)
+                        await extractor.process_conversation(conv, uid)
+                        logger.info(f"Topic extraction completed for conversation {conv_id}")
+                    except Exception as e:
+                        logger.error(f"Topic extraction failed for conversation {conv_id}: {e}")
+
+                    # Generate embedding for semantic search
+                    try:
+                        embedding_service = EmbeddingService(db_session)
+                        await embedding_service.generate_conversation_embedding(conv_id)
+                        logger.info(f"Embedding generation completed for conversation {conv_id}")
+                    except Exception as e:
+                        logger.error(f"Embedding generation failed for conversation {conv_id}: {e}")
             finally:
                 db_session.close()
         except Exception as e:
-            logger.error(f"Topic extraction failed for conversation {conv_id}: {e}")
+            logger.error(f"Conversation processing failed for conversation {conv_id}: {e}")
 
-    background_tasks.add_task(asyncio.create_task, extract_topics_async(conversation.id, user.id))
+    background_tasks.add_task(asyncio.create_task, process_conversation_async(conversation.id, user.id))
 
     return ConversationResponse.model_validate(conversation)
 

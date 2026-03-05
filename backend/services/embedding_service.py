@@ -5,6 +5,8 @@ import logging
 from typing import List, Optional, Dict, Any
 from functools import lru_cache
 
+from services.cache_service import cache, CacheKeys
+
 logger = logging.getLogger(__name__)
 
 # Model name - using all-MiniLM-L6-v2 for good balance of speed and quality
@@ -183,11 +185,181 @@ def prepare_meeting_text_for_embedding(
     return combined[:max_length] if len(combined) > max_length else combined
 
 
+def prepare_conversation_text_for_embedding(
+    heard_text: Optional[str] = None,
+    response_text: Optional[str] = None,
+    speaker: Optional[str] = None,
+    max_length: int = 2000
+) -> str:
+    """
+    Prepare conversation content for embedding.
+
+    Args:
+        heard_text: The transcribed text that was heard
+        response_text: The AI response text
+        speaker: The speaker identifier
+        max_length: Maximum character length for the combined text
+
+    Returns:
+        Combined text suitable for embedding
+    """
+    parts = []
+
+    if speaker and speaker.strip():
+        parts.append(f"Speaker: {speaker.strip()}")
+
+    if heard_text and heard_text.strip():
+        parts.append(f"Said: {heard_text.strip()}")
+
+    if response_text and response_text.strip():
+        parts.append(f"Response: {response_text.strip()[:500]}")
+
+    combined = " ".join(parts)
+    return combined[:max_length] if len(combined) > max_length else combined
+
+
 class EmbeddingService:
     """Service class for managing embeddings with database integration."""
 
     def __init__(self, db_session):
         self.db = db_session
+
+    async def generate_conversation_embedding(self, conversation_id: int) -> Optional[List[float]]:
+        """
+        Generate and store embedding for a single conversation.
+
+        Args:
+            conversation_id: ID of the conversation
+
+        Returns:
+            The generated embedding vector or None on error
+        """
+        from models import Conversation
+
+        conversation = self.db.query(Conversation).filter(
+            Conversation.id == conversation_id
+        ).first()
+
+        if not conversation:
+            logger.warning(f"Conversation {conversation_id} not found")
+            return None
+
+        # Prepare text for embedding
+        text = prepare_conversation_text_for_embedding(
+            heard_text=conversation.heard_text,
+            response_text=conversation.response_text,
+            speaker=conversation.speaker
+        )
+
+        if not text:
+            logger.warning(f"No text to embed for conversation {conversation_id}")
+            return None
+
+        # Generate embedding
+        embedding = generate_embedding(text)
+
+        if embedding:
+            # Store the embedding
+            conversation.embedding = embedding
+            self.db.commit()
+            logger.info(f"Generated and stored embedding for conversation {conversation_id}")
+
+            # Invalidate cached similar conversations for this conversation
+            cache.delete_pattern(f"semantic:similar_conversations:{conversation_id}:*")
+
+        return embedding
+
+    async def generate_conversation_embeddings_batch(
+        self,
+        conversation_ids: List[int]
+    ) -> Dict[str, int]:
+        """
+        Generate embeddings for multiple conversations efficiently.
+
+        Args:
+            conversation_ids: List of conversation IDs
+
+        Returns:
+            Dict with counts of processed, skipped, and failed conversations
+        """
+        from models import Conversation
+
+        conversations = self.db.query(Conversation).filter(
+            Conversation.id.in_(conversation_ids)
+        ).all()
+
+        stats = {"processed": 0, "skipped": 0, "failed": 0}
+
+        # Prepare texts for batch processing
+        texts = []
+        valid_conversations = []
+
+        for conv in conversations:
+            text = prepare_conversation_text_for_embedding(
+                heard_text=conv.heard_text,
+                response_text=conv.response_text,
+                speaker=conv.speaker
+            )
+            if text:
+                texts.append(text)
+                valid_conversations.append(conv)
+            else:
+                stats["skipped"] += 1
+
+        if not texts:
+            return stats
+
+        # Generate embeddings in batch
+        try:
+            embeddings = generate_embeddings_batch(texts)
+
+            for conv, embedding in zip(valid_conversations, embeddings):
+                if embedding:
+                    conv.embedding = embedding
+                    stats["processed"] += 1
+                else:
+                    stats["failed"] += 1
+
+            self.db.commit()
+            logger.info(f"Batch generated embeddings for {stats['processed']} conversations")
+
+        except Exception as e:
+            logger.error(f"Batch embedding generation failed: {e}")
+            stats["failed"] = len(valid_conversations)
+
+        return stats
+
+    async def generate_embeddings_for_meeting_conversations(
+        self,
+        meeting_id: int,
+        force_regenerate: bool = False
+    ) -> Dict[str, int]:
+        """
+        Generate embeddings for all conversations in a meeting.
+
+        Args:
+            meeting_id: Meeting ID
+            force_regenerate: If True, regenerate even if embedding exists
+
+        Returns:
+            Dict with counts of processed, skipped, and failed conversations
+        """
+        from models import Conversation
+
+        query = self.db.query(Conversation).filter(
+            Conversation.meeting_id == meeting_id
+        )
+
+        if not force_regenerate:
+            query = query.filter(Conversation.embedding.is_(None))
+
+        conversations = query.all()
+
+        if not conversations:
+            return {"processed": 0, "skipped": 0, "failed": 0}
+
+        conversation_ids = [c.id for c in conversations]
+        return await self.generate_conversation_embeddings_batch(conversation_ids)
 
     async def generate_meeting_embedding(self, meeting_id: int) -> Optional[List[float]]:
         """
@@ -233,6 +405,13 @@ class EmbeddingService:
             self.db.commit()
             logger.info(f"Generated and stored embedding for meeting {meeting_id}")
 
+            # Invalidate cached similar meetings for this meeting
+            cache.delete_pattern(f"semantic:similar_meetings:{meeting_id}:*")
+            # Invalidate user's semantic search cache
+            cache.delete_pattern(f"semantic:search:{meeting.user_id}:*")
+            # Invalidate semantic status cache
+            cache.delete(CacheKeys.semantic_search_status(meeting.user_id))
+
         return embedding
 
     async def generate_embeddings_for_user_meetings(
@@ -274,3 +453,124 @@ class EmbeddingService:
                 stats["failed"] += 1
 
         return stats
+
+    async def generate_embeddings_for_user_conversations(
+        self,
+        user_id: int,
+        force_regenerate: bool = False
+    ) -> Dict[str, int]:
+        """
+        Generate embeddings for all conversations of a user.
+
+        Args:
+            user_id: User ID
+            force_regenerate: If True, regenerate even if embedding exists
+
+        Returns:
+            Dict with counts of processed, skipped, and failed conversations
+        """
+        from models import Meeting, Conversation
+
+        # Get all meeting IDs for this user
+        meeting_ids = [
+            m.id for m in self.db.query(Meeting.id).filter(
+                Meeting.user_id == user_id
+            ).all()
+        ]
+
+        if not meeting_ids:
+            return {"processed": 0, "skipped": 0, "failed": 0}
+
+        # Get conversations
+        query = self.db.query(Conversation).filter(
+            Conversation.meeting_id.in_(meeting_ids)
+        )
+
+        if not force_regenerate:
+            query = query.filter(Conversation.embedding.is_(None))
+
+        conversations = query.all()
+
+        if not conversations:
+            return {"processed": 0, "skipped": 0, "failed": 0}
+
+        conversation_ids = [c.id for c in conversations]
+        return await self.generate_conversation_embeddings_batch(conversation_ids)
+
+    async def find_similar_conversations(
+        self,
+        conversation_id: int,
+        user_id: int,
+        limit: int = 10,
+        min_similarity: float = 0.3
+    ) -> List[Dict[str, Any]]:
+        """
+        Find conversations similar to a given conversation.
+
+        Args:
+            conversation_id: ID of the reference conversation
+            user_id: User ID for authorization
+            limit: Maximum number of similar conversations to return
+            min_similarity: Minimum similarity threshold (0-1)
+
+        Returns:
+            List of similar conversations with similarity scores
+        """
+        from models import Meeting, Conversation
+
+        # Get the reference conversation
+        reference = self.db.query(Conversation).filter(
+            Conversation.id == conversation_id
+        ).first()
+
+        if not reference:
+            logger.warning(f"Conversation {conversation_id} not found")
+            return []
+
+        if not reference.embedding:
+            logger.warning(f"Conversation {conversation_id} has no embedding")
+            return []
+
+        # Verify user owns the meeting containing this conversation
+        meeting = self.db.query(Meeting).filter(
+            Meeting.id == reference.meeting_id,
+            Meeting.user_id == user_id
+        ).first()
+
+        if not meeting:
+            logger.warning(f"Meeting not found or not owned by user {user_id}")
+            return []
+
+        # Get all user's meeting IDs
+        meeting_ids = [
+            m.id for m in self.db.query(Meeting.id).filter(
+                Meeting.user_id == user_id
+            ).all()
+        ]
+
+        # Get all conversations with embeddings (excluding reference)
+        conversations = self.db.query(Conversation).filter(
+            Conversation.meeting_id.in_(meeting_ids),
+            Conversation.id != conversation_id,
+            Conversation.embedding.isnot(None)
+        ).all()
+
+        # Compute similarities
+        results = []
+        for conv in conversations:
+            if conv.embedding:
+                similarity = compute_similarity(reference.embedding, conv.embedding)
+                if similarity >= min_similarity:
+                    results.append({
+                        "id": conv.id,
+                        "meeting_id": conv.meeting_id,
+                        "heard_text": conv.heard_text[:500] if conv.heard_text else None,
+                        "response_text": conv.response_text[:500] if conv.response_text else None,
+                        "timestamp": conv.timestamp.isoformat() if conv.timestamp else None,
+                        "speaker": conv.speaker,
+                        "similarity_score": round(similarity, 4)
+                    })
+
+        # Sort by similarity and limit
+        results.sort(key=lambda x: x["similarity_score"], reverse=True)
+        return results[:limit]

@@ -112,7 +112,8 @@ class SettingsWindow(QDialog):
         self.tabs.addTab(self.create_appearance_tab(), "Appearance")
         self.tabs.addTab(self.create_shortcuts_tab(), "Shortcuts")
         self.tabs.addTab(self.create_diarization_tab(), "Speakers")
-        self.tabs.addTab(self.create_voice_feedback_tab(), "Voice")
+        self.tabs.addTab(self.create_voice_commands_tab(), "Voice Commands")
+        self.tabs.addTab(self.create_voice_feedback_tab(), "Voice Output")
         self.tabs.addTab(self.create_privacy_tab(), "Privacy")
         self.tabs.addTab(self.create_offline_tab(), "Offline")
         self.tabs.addTab(self.create_advanced_tab(), "Advanced")
@@ -760,6 +761,247 @@ class SettingsWindow(QDialog):
                 f"Could not open speaker manager: {e}"
             )
 
+    def create_voice_commands_tab(self) -> QWidget:
+        """Create the Voice Commands settings tab."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Check if voice commands are available
+        try:
+            from voice_commands import is_voice_commands_available
+            voice_commands_available = is_voice_commands_available()
+        except ImportError:
+            voice_commands_available = False
+
+        # Enable/disable Voice Commands
+        self.voice_commands_check = QCheckBox("Enable Voice Commands")
+        self.voice_commands_check.setToolTip(
+            "Control ReadIn AI with your voice using wake words.\n"
+            "Say 'Hey ReadIn' followed by a command."
+        )
+        self.voice_commands_check.setStyleSheet("font-weight: bold; font-size: 13px;")
+        self.voice_commands_check.setEnabled(voice_commands_available)
+        layout.addWidget(self.voice_commands_check)
+
+        # Availability warning
+        if not voice_commands_available:
+            warning_label = QLabel(
+                "Voice commands are not available. Please install speech_recognition:\n"
+                "pip install SpeechRecognition pyaudio"
+            )
+            warning_label.setWordWrap(True)
+            warning_label.setStyleSheet("color: #f9e2af; font-size: 11px; margin-bottom: 10px;")
+            layout.addWidget(warning_label)
+
+        # Description
+        desc_label = QLabel(
+            "Voice commands allow you to control ReadIn AI hands-free. "
+            "Say the wake word ('Hey ReadIn' or 'ReadIn') followed by a command "
+            "like 'summarize', 'repeat', or 'action items'."
+        )
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("color: #888888; font-size: 11px; margin-bottom: 10px;")
+        layout.addWidget(desc_label)
+
+        # Wake Word Settings
+        wake_word_group = QGroupBox("Wake Word Settings")
+        wake_word_layout = QFormLayout(wake_word_group)
+
+        # Wake word info
+        wake_words_label = QLabel(
+            "Supported wake words: 'Hey ReadIn', 'ReadIn', 'OK ReadIn', 'Hi ReadIn'"
+        )
+        wake_words_label.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+        wake_word_layout.addRow("", wake_words_label)
+
+        # Microphone selection for voice commands
+        self.voice_cmd_device_combo = QComboBox()
+        self.voice_cmd_device_combo.setEnabled(voice_commands_available)
+        self._refresh_voice_command_devices()
+        wake_word_layout.addRow("Microphone:", self.voice_cmd_device_combo)
+
+        # Refresh button
+        refresh_voice_btn = QPushButton("Refresh Devices")
+        refresh_voice_btn.setEnabled(voice_commands_available)
+        refresh_voice_btn.clicked.connect(self._refresh_voice_command_devices)
+        wake_word_layout.addRow("", refresh_voice_btn)
+
+        layout.addWidget(wake_word_group)
+
+        # Available Commands
+        commands_group = QGroupBox("Available Voice Commands")
+        commands_layout = QVBoxLayout(commands_group)
+
+        commands_text = QLabel(
+            "After saying the wake word, you can use these commands:\n\n"
+            "  - 'Summarize' / 'Summary' - Summarize recent conversation\n"
+            "  - 'Repeat' / 'Say again' - Repeat the last AI response\n"
+            "  - 'Action items' / 'Tasks' - List action items from the meeting\n"
+            "  - 'What did they say' - Repeat the last transcription\n"
+            "  - 'Stop listening' / 'Pause' - Stop audio capture\n"
+            "  - 'Start listening' / 'Resume' - Start audio capture\n"
+            "  - 'Clear' / 'Reset' - Clear conversation context"
+        )
+        commands_text.setWordWrap(True)
+        commands_text.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+        commands_layout.addWidget(commands_text)
+
+        layout.addWidget(commands_group)
+
+        # TTS Feedback for voice commands
+        feedback_group = QGroupBox("Voice Command Feedback")
+        feedback_layout = QFormLayout(feedback_group)
+
+        self.voice_cmd_tts_check = QCheckBox("Speak command confirmations")
+        self.voice_cmd_tts_check.setToolTip(
+            "When enabled, ReadIn AI will speak a confirmation\n"
+            "after recognizing a voice command (e.g., 'Generating summary')."
+        )
+        self.voice_cmd_tts_check.setEnabled(voice_commands_available)
+        feedback_layout.addRow("", self.voice_cmd_tts_check)
+
+        layout.addWidget(feedback_group)
+
+        # Test voice commands button
+        test_layout = QHBoxLayout()
+        self.voice_cmd_test_btn = QPushButton("Test Voice Commands")
+        self.voice_cmd_test_btn.setToolTip("Test if your microphone can hear voice commands")
+        self.voice_cmd_test_btn.setEnabled(voice_commands_available)
+        self.voice_cmd_test_btn.clicked.connect(self._test_voice_commands)
+        test_layout.addWidget(self.voice_cmd_test_btn)
+        test_layout.addStretch()
+        layout.addLayout(test_layout)
+
+        # Tips
+        tips_group = QGroupBox("Tips")
+        tips_layout = QVBoxLayout(tips_group)
+        tips_text = QLabel(
+            "- Speak clearly and at a normal pace\n"
+            "- Wait for a brief pause after the wake word\n"
+            "- Use a headset microphone for best results\n"
+            "- Voice commands work alongside keyboard shortcuts\n"
+            "- Commands are processed using Google's speech recognition"
+        )
+        tips_text.setWordWrap(True)
+        tips_text.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+        tips_layout.addWidget(tips_text)
+        layout.addWidget(tips_group)
+
+        layout.addStretch()
+
+        return widget
+
+    def _refresh_voice_command_devices(self):
+        """Refresh the list of microphone devices for voice commands."""
+        self.voice_cmd_device_combo.clear()
+        self.voice_cmd_device_combo.addItem("Default Microphone", None)
+
+        try:
+            from voice_commands import VoiceCommandHandler
+            devices = VoiceCommandHandler.list_microphones()
+            for device in devices:
+                self.voice_cmd_device_combo.addItem(
+                    device.get('name', f"Device {device['index']}"),
+                    device['index']
+                )
+        except ImportError:
+            pass
+        except Exception as e:
+            import logging
+            logging.warning(f"Failed to list voice command devices: {e}")
+
+    def _test_voice_commands(self):
+        """Test voice command recognition."""
+        try:
+            from voice_commands import is_voice_commands_available, VoiceCommandHandler
+
+            if not is_voice_commands_available():
+                QMessageBox.warning(
+                    self,
+                    "Voice Commands Unavailable",
+                    "Voice commands are not available.\n"
+                    "Please install speech_recognition: pip install SpeechRecognition pyaudio"
+                )
+                return
+
+            # Get selected device
+            device_index = self.voice_cmd_device_combo.currentData()
+
+            # Show listening dialog
+            QMessageBox.information(
+                self,
+                "Voice Test",
+                "After clicking OK, speak into your microphone.\n"
+                "Say 'Hey ReadIn' followed by a command like 'summarize'.\n\n"
+                "The test will listen for 5 seconds."
+            )
+
+            # Create a simple test
+            import speech_recognition as sr
+            recognizer = sr.Recognizer()
+
+            try:
+                with sr.Microphone(device_index=device_index) as source:
+                    recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                    audio = recognizer.listen(source, timeout=5.0, phrase_time_limit=5.0)
+                    text = recognizer.recognize_google(audio)
+
+                    # Check if wake word was detected
+                    text_lower = text.lower()
+                    wake_words = ["hey readin", "hey read in", "readin", "read in", "ok readin", "hi readin"]
+                    wake_word_found = any(w in text_lower for w in wake_words)
+
+                    if wake_word_found:
+                        QMessageBox.information(
+                            self,
+                            "Voice Test Successful",
+                            f"Heard: '{text}'\n\n"
+                            "Wake word detected! Voice commands are working correctly."
+                        )
+                    else:
+                        QMessageBox.information(
+                            self,
+                            "Voice Test Result",
+                            f"Heard: '{text}'\n\n"
+                            "No wake word detected. Try saying 'Hey ReadIn' clearly."
+                        )
+
+            except sr.WaitTimeoutError:
+                QMessageBox.warning(
+                    self,
+                    "Voice Test",
+                    "No speech detected within 5 seconds.\n"
+                    "Please ensure your microphone is working and speak clearly."
+                )
+            except sr.UnknownValueError:
+                QMessageBox.warning(
+                    self,
+                    "Voice Test",
+                    "Could not understand the audio.\n"
+                    "Please speak more clearly and reduce background noise."
+                )
+            except sr.RequestError as e:
+                QMessageBox.warning(
+                    self,
+                    "Voice Test Error",
+                    f"Speech recognition service error:\n{e}\n\n"
+                    "Please check your internet connection."
+                )
+
+        except ImportError:
+            QMessageBox.warning(
+                self,
+                "Voice Commands Unavailable",
+                "Voice commands are not available.\n"
+                "Please install speech_recognition: pip install SpeechRecognition pyaudio"
+            )
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Voice Test Error",
+                f"Error testing voice commands: {e}"
+            )
+
     def create_voice_feedback_tab(self) -> QWidget:
         """Create the Voice Feedback settings tab."""
         widget = QWidget()
@@ -913,7 +1155,14 @@ class SettingsWindow(QDialog):
     def create_privacy_tab(self) -> QWidget:
         """Create the Privacy Mode settings tab."""
         widget = QWidget()
-        layout = QVBoxLayout(widget)
+
+        # Use scroll area for the tab content
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        scroll_content = QWidget()
+        layout = QVBoxLayout(scroll_content)
 
         # Enable/disable Privacy Mode
         self.privacy_mode_check = QCheckBox("Enable Privacy Mode")
@@ -932,6 +1181,40 @@ class SettingsWindow(QDialog):
         desc_label.setWordWrap(True)
         desc_label.setStyleSheet("color: #888888; font-size: 11px; margin-bottom: 10px;")
         layout.addWidget(desc_label)
+
+        # Auto-Detection Group
+        auto_detect_group = QGroupBox("Auto-Detection")
+        auto_detect_layout = QVBoxLayout(auto_detect_group)
+
+        self.auto_detect_check = QCheckBox("Auto-detect sensitive apps")
+        self.auto_detect_check.setToolTip(
+            "Automatically detect and pause monitoring when sensitive apps\n"
+            "(banking, password managers, medical, etc.) are running."
+        )
+        auto_detect_layout.addWidget(self.auto_detect_check)
+
+        # Scan button
+        scan_layout = QHBoxLayout()
+        self.scan_sensitive_btn = QPushButton("Scan for Sensitive Apps")
+        self.scan_sensitive_btn.setToolTip("Scan running processes for sensitive applications")
+        self.scan_sensitive_btn.clicked.connect(self._scan_sensitive_apps)
+        scan_layout.addWidget(self.scan_sensitive_btn)
+
+        self.auto_exclude_btn = QPushButton("Auto-Exclude Detected")
+        self.auto_exclude_btn.setToolTip("Automatically add all detected sensitive apps to exclusion list")
+        self.auto_exclude_btn.clicked.connect(self._auto_exclude_detected)
+        scan_layout.addWidget(self.auto_exclude_btn)
+        scan_layout.addStretch()
+
+        auto_detect_layout.addLayout(scan_layout)
+
+        # Detected apps label
+        self.detected_apps_label = QLabel("No scan performed yet.")
+        self.detected_apps_label.setWordWrap(True)
+        self.detected_apps_label.setStyleSheet("color: #a6adc8; font-size: 11px;")
+        auto_detect_layout.addWidget(self.detected_apps_label)
+
+        layout.addWidget(auto_detect_group)
 
         # Sensitive Categories Group
         categories_group = QGroupBox("Quick Add Sensitive Categories")
@@ -970,8 +1253,8 @@ class SettingsWindow(QDialog):
 
         # List of excluded apps
         self.excluded_apps_list = QListWidget()
-        self.excluded_apps_list.setMinimumHeight(120)
-        self.excluded_apps_list.setMaximumHeight(180)
+        self.excluded_apps_list.setMinimumHeight(100)
+        self.excluded_apps_list.setMaximumHeight(150)
         self.excluded_apps_list.setToolTip("Apps that will not be monitored by ReadIn AI")
         apps_layout.addWidget(self.excluded_apps_list)
 
@@ -1004,6 +1287,41 @@ class SettingsWindow(QDialog):
 
         layout.addWidget(apps_group)
 
+        # Pause History Group
+        history_group = QGroupBox("Pause History")
+        history_layout = QVBoxLayout(history_group)
+
+        history_desc = QLabel(
+            "View when monitoring was paused due to sensitive apps or manual actions."
+        )
+        history_desc.setWordWrap(True)
+        history_desc.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+        history_layout.addWidget(history_desc)
+
+        # History buttons
+        history_btn_layout = QHBoxLayout()
+
+        self.view_history_btn = QPushButton("View Pause History")
+        self.view_history_btn.setToolTip("View the history of monitoring pauses")
+        self.view_history_btn.clicked.connect(self._view_pause_history)
+        history_btn_layout.addWidget(self.view_history_btn)
+
+        self.clear_history_btn = QPushButton("Clear History")
+        self.clear_history_btn.setToolTip("Clear all pause history")
+        self.clear_history_btn.clicked.connect(self._clear_pause_history)
+        self.clear_history_btn.setStyleSheet("color: #f9e2af;")
+        history_btn_layout.addWidget(self.clear_history_btn)
+
+        history_btn_layout.addStretch()
+        history_layout.addLayout(history_btn_layout)
+
+        # History count label
+        self.history_count_label = QLabel("0 pause events recorded")
+        self.history_count_label.setStyleSheet("color: #6c7086; font-size: 11px;")
+        history_layout.addWidget(self.history_count_label)
+
+        layout.addWidget(history_group)
+
         # Help text
         help_label = QLabel(
             "Tip: App names should match the process name or friendly name. "
@@ -1015,7 +1333,178 @@ class SettingsWindow(QDialog):
 
         layout.addStretch()
 
+        scroll.setWidget(scroll_content)
+
+        # Main layout for widget
+        main_layout = QVBoxLayout(widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+
         return widget
+
+    def _scan_sensitive_apps(self):
+        """Scan for sensitive apps running on the system."""
+        try:
+            from privacy_mode import get_privacy_handler
+            handler = get_privacy_handler()
+            detected = handler.detect_sensitive_apps()
+
+            if detected:
+                app_list = []
+                for app in detected[:10]:  # Limit display
+                    category = app.get("category", "Unknown")
+                    app_list.append(f"  - {app['name']} ({category})")
+
+                more = len(detected) - 10 if len(detected) > 10 else 0
+                text = f"Found {len(detected)} sensitive app(s):\n" + "\n".join(app_list)
+                if more > 0:
+                    text += f"\n  ... and {more} more"
+
+                self.detected_apps_label.setText(text)
+                self.detected_apps_label.setStyleSheet("color: #f9e2af; font-size: 11px;")
+            else:
+                self.detected_apps_label.setText("No sensitive apps detected.")
+                self.detected_apps_label.setStyleSheet("color: #a6e3a1; font-size: 11px;")
+
+        except Exception as e:
+            self.detected_apps_label.setText(f"Scan failed: {e}")
+            self.detected_apps_label.setStyleSheet("color: #ef4444; font-size: 11px;")
+
+    def _auto_exclude_detected(self):
+        """Auto-exclude all detected sensitive apps."""
+        try:
+            from privacy_mode import get_privacy_handler
+            handler = get_privacy_handler()
+            added = handler.auto_exclude_detected()
+
+            if added > 0:
+                self._refresh_excluded_apps_list()
+                QMessageBox.information(
+                    self,
+                    "Apps Excluded",
+                    f"Added {added} sensitive app(s) to the exclusion list."
+                )
+            else:
+                QMessageBox.information(
+                    self,
+                    "No Apps Added",
+                    "No new sensitive apps were detected to add.\n"
+                    "Try scanning first or all detected apps are already excluded."
+                )
+
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Could not auto-exclude apps: {e}"
+            )
+
+    def _view_pause_history(self):
+        """View the pause history dialog."""
+        try:
+            from privacy_mode import get_privacy_handler
+            handler = get_privacy_handler()
+            history = handler.get_pause_history(limit=50)
+
+            if not history:
+                QMessageBox.information(
+                    self,
+                    "Pause History",
+                    "No pause events have been recorded yet.\n\n"
+                    "Pause events are recorded when:\n"
+                    "- A sensitive app is auto-detected\n"
+                    "- Monitoring is manually paused\n"
+                    "- An excluded app becomes active"
+                )
+                return
+
+            # Create history dialog
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Privacy Mode - Pause History")
+            dialog.setMinimumSize(500, 400)
+            dialog_layout = QVBoxLayout(dialog)
+
+            # Description
+            desc = QLabel(f"Showing {len(history)} most recent pause events:")
+            desc.setStyleSheet("font-weight: bold; margin-bottom: 10px;")
+            dialog_layout.addWidget(desc)
+
+            # History list
+            history_list = QListWidget()
+            history_list.setAlternatingRowColors(True)
+
+            for event in history:
+                # Format the event
+                timestamp = event.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                reason = event.reason.value.replace("_", " ").title()
+                duration = f"{event.duration_seconds:.1f}s" if event.duration_seconds else "ongoing"
+                app = event.app_name or "N/A"
+                category = event.category or ""
+
+                text = f"{timestamp} - {reason}"
+                if app != "N/A":
+                    text += f"\n    App: {app}"
+                    if category:
+                        text += f" ({category})"
+                text += f"\n    Duration: {duration}"
+
+                item = QListWidgetItem(text)
+                history_list.addItem(item)
+
+            dialog_layout.addWidget(history_list)
+
+            # Close button
+            close_btn = QPushButton("Close")
+            close_btn.clicked.connect(dialog.accept)
+            dialog_layout.addWidget(close_btn)
+
+            dialog.exec()
+
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Could not load pause history: {e}"
+            )
+
+    def _clear_pause_history(self):
+        """Clear all pause history."""
+        reply = QMessageBox.question(
+            self,
+            "Clear Pause History",
+            "Are you sure you want to clear all pause history?\n"
+            "This action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                from privacy_mode import get_privacy_handler
+                handler = get_privacy_handler()
+                handler.clear_pause_history()
+                self._update_history_count()
+                QMessageBox.information(
+                    self,
+                    "History Cleared",
+                    "Pause history has been cleared."
+                )
+            except Exception as e:
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    f"Could not clear history: {e}"
+                )
+
+    def _update_history_count(self):
+        """Update the history count label."""
+        try:
+            from privacy_mode import get_privacy_handler
+            handler = get_privacy_handler()
+            history = handler.get_pause_history()
+            count = len(history)
+            self.history_count_label.setText(f"{count} pause event(s) recorded")
+        except Exception:
+            self.history_count_label.setText("Unable to load history")
 
     def _on_category_toggled(self, state):
         """Handle category checkbox toggle."""
@@ -1717,6 +2206,15 @@ class SettingsWindow(QDialog):
         )
         self._refresh_excluded_apps_list()
 
+        # Auto-detect sensitive apps
+        try:
+            from privacy_mode import get_privacy_handler
+            handler = get_privacy_handler()
+            self.auto_detect_check.setChecked(handler.is_auto_detect_enabled())
+            self._update_history_count()
+        except Exception:
+            self.auto_detect_check.setChecked(True)
+
         # Speaker Diarization
         self.diarization_check.setChecked(
             self.settings.get("diarization_enabled", False)
@@ -1741,6 +2239,20 @@ class SettingsWindow(QDialog):
         else:
             self.token_status_label.setText("No token configured")
             self.token_status_label.setStyleSheet("color: #f9e2af; font-size: 11px;")
+
+        # Voice Commands
+        self.voice_commands_check.setChecked(
+            self.settings.get("voice_commands_enabled", False)
+        )
+        # Load voice command microphone device
+        voice_cmd_device = self.settings.get("voice_command_device_index")
+        for i in range(self.voice_cmd_device_combo.count()):
+            if self.voice_cmd_device_combo.itemData(i) == voice_cmd_device:
+                self.voice_cmd_device_combo.setCurrentIndex(i)
+                break
+        self.voice_cmd_tts_check.setChecked(
+            self.settings.get("voice_command_tts_feedback", False)
+        )
 
         # Voice Feedback
         self.voice_feedback_check.setChecked(
@@ -1917,6 +2429,14 @@ class SettingsWindow(QDialog):
         if old_privacy_mode != new_privacy_mode:
             self.setting_changed.emit("privacy_mode_enabled", new_privacy_mode)
 
+        # Auto-detect sensitive apps setting
+        try:
+            from privacy_mode import get_privacy_handler
+            handler = get_privacy_handler()
+            handler.set_auto_detect(self.auto_detect_check.isChecked())
+        except Exception:
+            pass
+
         # Note: excluded_apps are saved immediately when modified through the UI
 
         # Speaker Diarization - emit signals for changes
@@ -1937,6 +2457,25 @@ class SettingsWindow(QDialog):
             os.environ["HUGGINGFACE_TOKEN"] = hf_token
             self.token_status_label.setText("Token saved to session")
             self.token_status_label.setStyleSheet("color: #a6e3a1; font-size: 11px;")
+
+        # Voice Commands - emit signals for changes
+        old_voice_commands_enabled = self.settings.get("voice_commands_enabled")
+        new_voice_commands_enabled = self.voice_commands_check.isChecked()
+        self.settings.set("voice_commands_enabled", new_voice_commands_enabled)
+        if old_voice_commands_enabled != new_voice_commands_enabled:
+            self.setting_changed.emit("voice_commands_enabled", new_voice_commands_enabled)
+
+        old_voice_cmd_device = self.settings.get("voice_command_device_index")
+        new_voice_cmd_device = self.voice_cmd_device_combo.currentData()
+        self.settings.set("voice_command_device_index", new_voice_cmd_device)
+        if old_voice_cmd_device != new_voice_cmd_device:
+            self.setting_changed.emit("voice_command_device_index", new_voice_cmd_device)
+
+        old_voice_cmd_tts = self.settings.get("voice_command_tts_feedback")
+        new_voice_cmd_tts = self.voice_cmd_tts_check.isChecked()
+        self.settings.set("voice_command_tts_feedback", new_voice_cmd_tts)
+        if old_voice_cmd_tts != new_voice_cmd_tts:
+            self.setting_changed.emit("voice_command_tts_feedback", new_voice_cmd_tts)
 
         # Voice Feedback - emit signals for changes
         old_voice_feedback_enabled = self.settings.get("voice_feedback_enabled")

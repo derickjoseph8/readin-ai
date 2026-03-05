@@ -1,6 +1,7 @@
 """Semantic Search Service using pgvector for similarity search."""
 
 import logging
+import hashlib
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date
 
@@ -8,8 +9,15 @@ from sqlalchemy import text, and_, or_
 from sqlalchemy.orm import Session
 
 from services.embedding_service import generate_embedding, compute_similarity
+from services.cache_service import cache, CacheKeys, CacheTTL
 
 logger = logging.getLogger(__name__)
+
+
+def _hash_search_params(query: str, **kwargs) -> str:
+    """Generate a hash for search parameters for caching."""
+    params_str = f"{query}:{sorted(kwargs.items())}"
+    return hashlib.md5(params_str.encode(), usedforsecurity=False).hexdigest()[:16]
 
 
 class SemanticSearchService:
@@ -45,6 +53,21 @@ class SemanticSearchService:
         """
         from models import Meeting, Conversation
 
+        # Check cache first
+        query_hash = _hash_search_params(
+            query,
+            limit=limit,
+            meeting_type=meeting_type,
+            date_from=str(date_from) if date_from else None,
+            date_to=str(date_to) if date_to else None,
+            min_similarity=min_similarity
+        )
+        cache_key = CacheKeys.semantic_search(user_id, query_hash)
+        cached_results = cache.get(cache_key)
+        if cached_results is not None:
+            logger.debug(f"Semantic search cache hit for user {user_id}")
+            return cached_results
+
         # Generate embedding for the query
         query_embedding = generate_embedding(query)
 
@@ -54,7 +77,7 @@ class SemanticSearchService:
 
         # Check if pgvector is available
         if self._is_pgvector_available():
-            return await self._pgvector_search(
+            results = await self._pgvector_search(
                 query_embedding=query_embedding,
                 user_id=user_id,
                 limit=limit,
@@ -65,7 +88,7 @@ class SemanticSearchService:
             )
         else:
             # Fallback to in-memory similarity search
-            return await self._fallback_search(
+            results = await self._fallback_search(
                 query_embedding=query_embedding,
                 user_id=user_id,
                 limit=limit,
@@ -74,6 +97,11 @@ class SemanticSearchService:
                 date_to=date_to,
                 min_similarity=min_similarity
             )
+
+        # Cache results
+        cache.set(cache_key, results, CacheTTL.SEMANTIC_SEARCH)
+
+        return results
 
     def _is_pgvector_available(self) -> bool:
         """Check if pgvector extension is available in the database."""
@@ -256,6 +284,13 @@ class SemanticSearchService:
         """
         from models import Meeting
 
+        # Check cache first
+        cache_key = f"{CacheKeys.similar_meetings(meeting_id)}:{limit}:{exclude_same_type}"
+        cached_results = cache.get(cache_key)
+        if cached_results is not None:
+            logger.debug(f"Similar meetings cache hit for meeting {meeting_id}")
+            return cached_results
+
         # Get the reference meeting
         reference = self.db.query(Meeting).filter(
             Meeting.id == meeting_id,
@@ -272,7 +307,7 @@ class SemanticSearchService:
 
         # Search for similar meetings
         if self._is_pgvector_available():
-            return await self._pgvector_similar_meetings(
+            results = await self._pgvector_similar_meetings(
                 reference_embedding=reference.embedding,
                 reference_id=meeting_id,
                 reference_type=reference.meeting_type if exclude_same_type else None,
@@ -280,13 +315,18 @@ class SemanticSearchService:
                 limit=limit
             )
         else:
-            return await self._fallback_similar_meetings(
+            results = await self._fallback_similar_meetings(
                 reference_embedding=reference.embedding,
                 reference_id=meeting_id,
                 reference_type=reference.meeting_type if exclude_same_type else None,
                 user_id=user_id,
                 limit=limit
             )
+
+        # Cache results
+        cache.set(cache_key, results, CacheTTL.SIMILAR_ITEMS)
+
+        return results
 
     async def _pgvector_similar_meetings(
         self,

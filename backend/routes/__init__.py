@@ -23,6 +23,11 @@ from .recommendations import meetings_recommendations_router
 from .slack import router as slack_router
 from .email_integration import router as email_integration_router
 from .zapier import router as zapier_router
+from .translation import router as translation_router
+from .transcript_editing import router as transcript_editing_router
+
+# Mobile routes
+from .mobile import router as mobile_router
 
 # New feature routes
 from .personas import router as personas_router
@@ -65,6 +70,10 @@ __all__ = [
     "slack_router",
     "email_integration_router",
     "zapier_router",
+    "translation_router",
+    "transcript_editing_router",
+    # Mobile routes
+    "mobile_router",
     # New feature routes
     "personas_router",
     "collaboration_router",

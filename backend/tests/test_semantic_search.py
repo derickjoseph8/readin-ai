@@ -236,3 +236,95 @@ class TestEmbeddingService:
         # Empty vectors
         assert compute_similarity([], []) == 0.0
         assert compute_similarity(v1, []) == 0.0
+
+    def test_prepare_conversation_text(self):
+        """Test preparing conversation text for embedding."""
+        from services.embedding_service import prepare_conversation_text_for_embedding
+
+        # Test with all fields
+        text = prepare_conversation_text_for_embedding(
+            heard_text="What is the project status?",
+            response_text="The project is on track",
+            speaker="John"
+        )
+        assert "Speaker: John" in text
+        assert "Said: What is the project status?" in text
+        assert "Response: The project is on track" in text
+
+        # Test with only heard_text
+        text = prepare_conversation_text_for_embedding(heard_text="Just heard text")
+        assert "Said: Just heard text" in text
+
+        # Test with no content
+        text = prepare_conversation_text_for_embedding()
+        assert text == ""
+
+
+class TestConversationEmbeddings:
+    """Test conversation embedding functionality."""
+
+    def test_generate_conversation_embeddings_unauthenticated(self, client):
+        """Test that conversation embedding generation requires authentication."""
+        response = client.post("/api/v1/search/semantic/embeddings/conversations/generate")
+        assert response.status_code == 401
+
+    def test_generate_conversation_embeddings(self, client, auth_headers):
+        """Test conversation embedding generation endpoint."""
+        response = client.post(
+            "/api/v1/search/semantic/embeddings/conversations/generate",
+            headers=auth_headers
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "processed" in data
+        assert "skipped" in data
+        assert "failed" in data
+        assert "message" in data
+
+    def test_generate_single_conversation_embedding_not_found(self, client, auth_headers):
+        """Test generating embedding for non-existent conversation."""
+        response = client.post(
+            "/api/v1/search/semantic/conversations/99999/embedding",
+            headers=auth_headers
+        )
+        assert response.status_code == 404
+
+    def test_similar_conversations_unauthenticated(self, client):
+        """Test that similar conversations requires authentication."""
+        response = client.get("/api/v1/search/semantic/conversations/1/similar")
+        assert response.status_code == 401
+
+    def test_similar_conversations_not_found(self, client, auth_headers):
+        """Test similar conversations for non-existent conversation."""
+        response = client.get(
+            "/api/v1/search/semantic/conversations/99999/similar",
+            headers=auth_headers
+        )
+        assert response.status_code == 404
+
+
+class TestSemanticSearchStatus:
+    """Test semantic search status endpoint."""
+
+    def test_status_includes_conversation_stats(self, client, auth_headers):
+        """Test that status endpoint includes conversation statistics."""
+        response = client.get("/api/v1/search/semantic/status", headers=auth_headers)
+        assert response.status_code == 200
+
+        data = response.json()
+        # Check for new conversation stats
+        assert "conversations" in data
+        assert "total" in data["conversations"]
+        assert "with_embeddings" in data["conversations"]
+        assert "without_embeddings" in data["conversations"]
+        assert "coverage_percentage" in data["conversations"]
+
+        # Check for meeting stats
+        assert "meetings" in data
+        assert "total" in data["meetings"]
+        assert "with_embeddings" in data["meetings"]
+
+        # Check backward compatibility
+        assert "total_meetings" in data
+        assert "meetings_with_embeddings" in data

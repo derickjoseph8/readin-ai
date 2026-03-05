@@ -46,7 +46,10 @@ from routes import (
     sso_router, api_keys_router, webhooks_router, white_label_router,
     two_factor_router, webauthn_router, devices_router,
     recommendations_router, meetings_recommendations_router,
-    slack_router, email_integration_router, zapier_router,
+    slack_router, email_integration_router, zapier_router, translation_router,
+    transcript_editing_router,
+    # Mobile routes
+    mobile_router,
     # New feature routes
     personas_router, collaboration_router, slack_commands_router,
     slack_interactive_router, compliance_router, pm_integrations_router,
@@ -228,6 +231,9 @@ app.include_router(meetings_recommendations_router, prefix=API_V1_PREFIX)
 app.include_router(slack_router, prefix=API_V1_PREFIX)  # Slack slash commands and events
 app.include_router(email_integration_router, prefix=API_V1_PREFIX)  # Deep email integration
 app.include_router(zapier_router, prefix=API_V1_PREFIX)  # Zapier REST hooks integration
+app.include_router(translation_router, prefix=API_V1_PREFIX)  # Real-time translation support
+app.include_router(mobile_router, prefix=API_V1_PREFIX)  # Mobile-optimized endpoints for React Native
+app.include_router(transcript_editing_router, prefix=API_V1_PREFIX)  # Transcript editing and AI corrections
 app.include_router(payments_router)  # Already has /api/v1 prefix
 app.include_router(contact_router)
 
