@@ -51,9 +51,11 @@ class HealthChecker:
         # Run all checks
         self._check_database()
         self._check_redis()
+        self._check_celery()
         self._check_stripe()
         self._check_sendgrid()
         self._check_memory()
+        self._check_disk()
 
         # Calculate overall status
         overall_status = self._calculate_overall_status()
@@ -203,6 +205,72 @@ class HealthChecker:
             self.checks["system"] = {
                 "status": HealthStatus.DEGRADED,
                 "error": str(e)[:100],
+            }
+
+    def _check_disk(self):
+        """Check disk usage with alerts at 70% and 85%."""
+        try:
+            disk = psutil.disk_usage('/')
+
+            status = HealthStatus.HEALTHY
+            if disk.percent > 85:
+                status = HealthStatus.UNHEALTHY
+            elif disk.percent > 70:
+                status = HealthStatus.DEGRADED
+
+            self.checks["disk"] = {
+                "status": status,
+                "total_gb": round(disk.total / (1024**3), 2),
+                "used_gb": round(disk.used / (1024**3), 2),
+                "free_gb": round(disk.free / (1024**3), 2),
+                "percent_used": disk.percent,
+            }
+
+            # Add warning message if disk is getting full
+            if disk.percent > 70:
+                self.checks["disk"]["warning"] = f"Disk usage at {disk.percent}% - consider cleanup"
+        except Exception as e:
+            self.checks["disk"] = {
+                "status": HealthStatus.DEGRADED,
+                "error": str(e)[:100],
+            }
+
+    def _check_celery(self):
+        """Check Celery worker status if Redis is configured."""
+        if not REDIS_URL:
+            self.checks["celery"] = {
+                "status": HealthStatus.NOT_CONFIGURED,
+                "note": "Redis not configured for Celery",
+            }
+            return
+
+        start = time.perf_counter()
+        try:
+            import redis
+            client = redis.from_url(REDIS_URL, socket_timeout=2)
+
+            # Check Celery-related keys
+            celery_keys = list(client.scan_iter(match="celery*", count=100))
+
+            # Try to get active worker info from Celery's reserved keys
+            active_queues = client.llen("celery")
+
+            self.checks["celery"] = {
+                "status": HealthStatus.HEALTHY,
+                "response_time_ms": round((time.perf_counter() - start) * 1000, 2),
+                "queue_length": active_queues,
+                "celery_keys": len(celery_keys),
+            }
+        except ImportError:
+            self.checks["celery"] = {
+                "status": HealthStatus.NOT_CONFIGURED,
+                "error": "redis package not installed",
+            }
+        except Exception as e:
+            self.checks["celery"] = {
+                "status": HealthStatus.DEGRADED,
+                "error": str(e)[:100],
+                "response_time_ms": round((time.perf_counter() - start) * 1000, 2),
             }
 
     def _calculate_overall_status(self) -> str:

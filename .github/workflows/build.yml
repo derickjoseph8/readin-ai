@@ -221,3 +221,24 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create download symlinks on server
+        if: success()
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          if [ -n "$SSH_PRIVATE_KEY" ] && [ -n "$SERVER_HOST" ]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            mkdir -p ~/.ssh
+            echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+            ssh ubuntu@"$SERVER_HOST" "cd /home/ubuntu/readin-ai/downloads && \
+              ln -sf ReadInAI-Windows-${VERSION}.exe ReadIn-AI-Setup.exe && \
+              ln -sf ReadInAI-macOS-${VERSION}.dmg ReadIn-AI.dmg && \
+              ln -sf ReadInAI-Linux-${VERSION}.AppImage ReadIn-AI.AppImage"
+            echo "Download symlinks updated for version $VERSION"
+          else
+            echo "Server deployment secrets not configured, skipping symlink creation"
+          fi
