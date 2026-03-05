@@ -22,7 +22,7 @@ from models import (
     DeviceToken, Conversation
 )
 from auth import get_current_user
-from schemas.pagination import create_pagination_meta, PaginationMeta
+from schemas import create_pagination_meta, PaginationMeta
 
 logger = logging.getLogger(__name__)
 
