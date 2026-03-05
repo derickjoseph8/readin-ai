@@ -7,6 +7,9 @@ import sys
 import os
 import threading
 
+# Add src directory to path for module imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
 # Enable line buffering for better logging (may not work on all platforms)
 try:
     sys.stdout.reconfigure(line_buffering=True)
