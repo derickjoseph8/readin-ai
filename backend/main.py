@@ -47,6 +47,9 @@ from routes import (
     two_factor_router, webauthn_router, devices_router,
     recommendations_router, meetings_recommendations_router,
     slack_router, email_integration_router, zapier_router,
+    # New feature routes
+    personas_router, collaboration_router, slack_commands_router,
+    slack_interactive_router, compliance_router, pm_integrations_router,
     # Admin routes
     admin_dashboard_router, admin_teams_router, admin_tickets_router,
     customer_tickets_router, admin_chat_router, customer_chat_router,
@@ -227,6 +230,14 @@ app.include_router(email_integration_router, prefix=API_V1_PREFIX)  # Deep email
 app.include_router(zapier_router, prefix=API_V1_PREFIX)  # Zapier REST hooks integration
 app.include_router(payments_router)  # Already has /api/v1 prefix
 app.include_router(contact_router)
+
+# New feature routes
+app.include_router(personas_router, prefix=API_V1_PREFIX)  # AI Personas
+app.include_router(collaboration_router, prefix=API_V1_PREFIX)  # Collaboration features
+app.include_router(slack_commands_router, prefix=API_V1_PREFIX)  # Slack slash commands
+app.include_router(slack_interactive_router, prefix=API_V1_PREFIX)  # Slack interactive components
+app.include_router(compliance_router, prefix=API_V1_PREFIX)  # SOC2/HIPAA/CCPA compliance
+app.include_router(pm_integrations_router, prefix=API_V1_PREFIX)  # Additional PM integrations
 
 # Admin dashboard routes
 app.include_router(admin_dashboard_router, prefix=API_V1_PREFIX)

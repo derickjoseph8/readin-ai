@@ -202,6 +202,12 @@ class User(Base):
     preferred_language = Column(String, default="en")  # en, es, sw (Swahili)
     trial_start = Column(DateTime, default=datetime.utcnow)
 
+    # AI Persona preference
+    ai_persona = Column(String(50), default="professional")  # professional, casual, technical, etc.
+
+    # CCPA data sale opt-out
+    data_sale_opt_out = Column(Boolean, default=False)
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -2599,3 +2605,171 @@ class ZapierSubscription(Base):
 
     # Relationships
     user = relationship("User", backref="zapier_subscriptions")
+
+
+# =============================================================================
+# COLLABORATION FEATURES
+# =============================================================================
+
+class SharedNote(Base):
+    """Shared meeting notes for collaboration."""
+    __tablename__ = "shared_notes"
+    __table_args__ = (
+        Index("ix_shared_note_meeting", "meeting_id"),
+        Index("ix_shared_note_user", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Content
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=True)
+
+    # Sharing
+    is_shared = Column(Boolean, default=False)
+    shared_with = Column(JSON, default=list)  # List of user IDs
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    meeting = relationship("Meeting")
+    user = relationship("User")
+    comments = relationship("NoteComment", back_populates="note", cascade="all, delete-orphan")
+
+
+class NoteComment(Base):
+    """Comments on shared notes with @mention support."""
+    __tablename__ = "note_comments"
+    __table_args__ = (
+        Index("ix_note_comment_note", "note_id"),
+        Index("ix_note_comment_user", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    note_id = Column(Integer, ForeignKey("shared_notes.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Content
+    content = Column(Text, nullable=False)
+    mentions = Column(JSON, default=list)  # List of mentioned user IDs
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    note = relationship("SharedNote", back_populates="comments")
+    user = relationship("User")
+
+
+class MeetingHandoff(Base):
+    """Meeting handoff/transfer between team members."""
+    __tablename__ = "meeting_handoffs"
+    __table_args__ = (
+        Index("ix_handoff_meeting", "meeting_id"),
+        Index("ix_handoff_from_user", "from_user_id"),
+        Index("ix_handoff_to_user", "to_user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False)
+    from_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    to_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Handoff details
+    reason = Column(Text, nullable=True)
+    context_notes = Column(Text, nullable=True)
+    status = Column(String(20), default="pending")  # pending, accepted, declined
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    responded_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    meeting = relationship("Meeting")
+    from_user = relationship("User", foreign_keys=[from_user_id])
+    to_user = relationship("User", foreign_keys=[to_user_id])
+
+
+# =============================================================================
+# COMPLIANCE FEATURES (SOC2, HIPAA, CCPA)
+# =============================================================================
+
+class ComplianceLog(Base):
+    """Compliance event logging for audit trails."""
+    __tablename__ = "compliance_logs"
+    __table_args__ = (
+        Index("ix_compliance_log_user", "user_id"),
+        Index("ix_compliance_log_event_type", "event_type"),
+        Index("ix_compliance_log_created", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # Event details
+    event_type = Column(String(100), nullable=False)
+    details = Column(JSON, default=dict)
+    ip_address = Column(String(45), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User")
+
+
+class ConsentRecord(Base):
+    """User consent records for GDPR/CCPA compliance."""
+    __tablename__ = "consent_records"
+    __table_args__ = (
+        Index("ix_consent_user", "user_id"),
+        Index("ix_consent_type", "consent_type"),
+        UniqueConstraint("user_id", "consent_type", name="uq_user_consent_type"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Consent details
+    consent_type = Column(String(50), nullable=False)  # marketing, analytics, data_sharing, ai_processing
+    granted = Column(Boolean, default=False)
+
+    # Timestamps
+    granted_at = Column(DateTime, nullable=True)
+    withdrawn_at = Column(DateTime, nullable=True)
+    ip_address = Column(String(45), nullable=True)
+
+    # Relationships
+    user = relationship("User")
+
+
+class DataProcessingAgreement(Base):
+    """Data Processing Agreements for organizations."""
+    __tablename__ = "data_processing_agreements"
+    __table_args__ = (
+        Index("ix_dpa_organization", "organization_id"),
+        Index("ix_dpa_type", "agreement_type"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+
+    # Agreement details
+    agreement_type = Column(String(50), nullable=False)  # dpa, baa (Business Associate Agreement for HIPAA)
+    document_url = Column(String(500), nullable=True)
+    signed_by = Column(String(255), nullable=True)
+
+    # Validity
+    signed_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    organization = relationship("Organization")

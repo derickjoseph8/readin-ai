@@ -24,6 +24,14 @@ from .slack import router as slack_router
 from .email_integration import router as email_integration_router
 from .zapier import router as zapier_router
 
+# New feature routes
+from .personas import router as personas_router
+from .collaboration import router as collaboration_router
+from .slack_commands import router as slack_commands_router
+from .slack_interactive import router as slack_interactive_router
+from .compliance import router as compliance_router
+from .integrations.pm_integrations import router as pm_integrations_router
+
 # Admin routes
 from .admin.dashboard import router as admin_dashboard_router
 from .admin.teams import router as admin_teams_router
@@ -57,6 +65,13 @@ __all__ = [
     "slack_router",
     "email_integration_router",
     "zapier_router",
+    # New feature routes
+    "personas_router",
+    "collaboration_router",
+    "slack_commands_router",
+    "slack_interactive_router",
+    "compliance_router",
+    "pm_integrations_router",
     # Admin routes
     "admin_dashboard_router",
     "admin_teams_router",
