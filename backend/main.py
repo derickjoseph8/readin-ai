@@ -1401,7 +1401,7 @@ def get_app_version():
     return {
         "version": APP_VERSION,
         "download_url": "https://www.getreadin.us/download",
-        "changelog": "v1.6.0: Speaker diarization, AI personas, mobile app API, semantic search, real-time translation, Slack deep integration, team collaboration, SOC2/HIPAA/CCPA compliance features",
+        "changelog": "v1.6.1: Code quality improvements, thread-safe connectivity handling, improved error logging, cleaner application exit",
         "required": False
     }
 

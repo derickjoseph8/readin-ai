@@ -1567,9 +1567,10 @@ class ReadInApp:
         # Quit the Qt application
         self.app.quit()
 
-        # Force exit to ensure all threads are terminated
-        import os
-        os._exit(0)
+        # Exit cleanly - use sys.exit for proper Python cleanup
+        # This runs after app.quit() has processed pending events
+        import sys
+        sys.exit(0)
 
     def run(self):
         if not ANTHROPIC_API_KEY:

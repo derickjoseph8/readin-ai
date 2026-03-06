@@ -126,18 +126,25 @@ def _set_file_permissions(file_path: Path):
         if sys.platform == 'win32':
             # On Windows, use icacls to set permissions
             import subprocess
+            username = os.environ.get("USERNAME", "SYSTEM")
+            # Validate username to prevent command injection
+            if not username.replace("_", "").replace("-", "").isalnum():
+                logger.warning(f"Invalid username format, skipping permission set: {username[:20]}")
+                return
             # Remove inherited permissions and set owner full control only
-            subprocess.run(
-                ['icacls', str(file_path), '/inheritance:r', '/grant:r', f'{os.environ.get("USERNAME", "SYSTEM")}:F'],
+            result = subprocess.run(
+                ['icacls', str(file_path), '/inheritance:r', '/grant:r', f'{username}:F'],
                 capture_output=True,
                 check=False
             )
+            if result.returncode != 0:
+                logger.debug(f"Could not set file permissions: {result.stderr.decode()[:100]}")
         else:
             # On Unix-like systems, use chmod
             os.chmod(file_path, 0o600)
-    except Exception:
+    except Exception as e:
         # Best effort - don't fail if permissions can't be set
-        pass
+        logger.debug(f"Could not set file permissions for {file_path}: {e}")
 
 
 def _get_machine_key() -> bytes:
@@ -184,8 +191,8 @@ def _get_machine_key() -> bytes:
                     break
                 except FileNotFoundError:
                     continue
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Could not read machine ID from system paths: {e}")
 
     # 2. Fallback to platform node (hostname-based, less stable but available)
     identifiers.append(platform.node())
@@ -274,6 +281,7 @@ class APIClient:
     """Client for ReadIn AI backend API with offline support."""
 
     def __init__(self):
+        import threading
         self._token: Optional[str] = None
         self._user_status: Optional[Dict] = None
         self._request_signing_key: Optional[bytes] = None
@@ -281,6 +289,7 @@ class APIClient:
         self._offline_storage = None
         self._sync_manager = None
         self._connectivity_listeners: List[callable] = []
+        self._listeners_lock = threading.Lock()
         self._load_token()
 
     def enable_offline_mode(self, offline_storage=None, sync_manager=None):
@@ -304,20 +313,26 @@ class APIClient:
         from services.sync_manager import ConnectivityStatus
         self._is_offline = status != ConnectivityStatus.ONLINE
 
-        for listener in self._connectivity_listeners:
+        # Thread-safe iteration over listeners
+        with self._listeners_lock:
+            listeners = list(self._connectivity_listeners)
+
+        for listener in listeners:
             try:
                 listener(not self._is_offline)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Connectivity listener error: {e}")
 
     def add_connectivity_listener(self, callback: callable):
-        """Add listener for connectivity changes."""
-        self._connectivity_listeners.append(callback)
+        """Add listener for connectivity changes (thread-safe)."""
+        with self._listeners_lock:
+            self._connectivity_listeners.append(callback)
 
     def remove_connectivity_listener(self, callback: callable):
-        """Remove connectivity listener."""
-        if callback in self._connectivity_listeners:
-            self._connectivity_listeners.remove(callback)
+        """Remove connectivity listener (thread-safe)."""
+        with self._listeners_lock:
+            if callback in self._connectivity_listeners:
+                self._connectivity_listeners.remove(callback)
 
     @property
     def is_offline(self) -> bool:
